@@ -28,8 +28,8 @@
 **Purpose**: Project initialization and basic structure
 
 - [x] T001 Create Angular project with `ng new personal-fitness-tracker --standalone --routing --style=css --ssr=false`
-- [ ] T002 Verify TypeScript strict mode is enabled in tsconfig.json
-- [ ] T003 Create directory structure: `src/app/models/`, `src/app/services/`, `src/app/features/`, `src/app/shared/`
+- [x] T002 Verify TypeScript strict mode is enabled in tsconfig.json
+- [x] T003 Create directory structure: `src/app/models/`, `src/app/services/`, `src/app/features/`, `src/app/shared/`
 - [ ] T004 [P] Configure app.config.ts with provideRouter and provideHttpClient
 
 ---
