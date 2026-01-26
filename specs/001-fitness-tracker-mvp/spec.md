@@ -68,7 +68,7 @@ As a fitness tracker user, I want to log my health readings (blood pressure, blo
 ### Functional Requirements
 
 - **FR-001**: System MUST allow users to add cardio sessions with: date/time (required), type (required), duration in minutes (required), distance in km (optional), and notes (optional).
-- **FR-002**: System MUST allow users to add weight entries with: date/time (required), weight in kg (required), and notes (optional).
+- **FR-002**: System MUST allow users to add weight entries with: date/time (required), weight in lbs (required), and notes (optional).
 - **FR-003**: System MUST allow users to add blood pressure readings with: date/time (required), systolic in mmHg (required), diastolic in mmHg (required), and notes (optional).
 - **FR-004**: System MUST allow users to add blood glucose readings with: date/time (required), glucose level in mmol/L (required), and notes (optional).
 - **FR-005**: System MUST allow users to add ketone readings with: date/time (required), ketone level in mmol/L (required), and notes (optional).
@@ -84,7 +84,7 @@ As a fitness tracker user, I want to log my health readings (blood pressure, blo
 |-------|-------------|------|
 | Duration | 1 - 1440 | minutes |
 | Distance | 0.01 - 1000 | km |
-| Weight | 20 - 500 | kg |
+| Weight | 50 - 1000 | lbs |
 | Blood Pressure (systolic) | 60 - 250 | mmHg |
 | Blood Pressure (diastolic) | 40 - 150 | mmHg |
 | Blood Glucose | 1.0 - 35.0 | mmol/L |
@@ -106,7 +106,7 @@ Additional validation:
 ### Key Entities *(include if feature involves data)*
 
 - **CardioSession**: Represents a single cardio workout (date, type, durationMinutes, distanceKm, notes, timestamps)
-- **WeightEntry**: Represents a single weight measurement (date, weightKg, notes, timestamps)
+- **WeightEntry**: Represents a single weight measurement (date, weightLbs, notes, timestamps)
 - **HealthReading**: Represents a health metric reading with discriminated union:
   - BloodPressure: systolic (mmHg), diastolic (mmHg)
   - BloodGlucose: glucoseMmol (mmol/L)
@@ -129,7 +129,7 @@ Additional validation:
 - **Single user**: No authentication or multi-user support needed.
 - **Local only**: No network connectivity, cloud sync, or data export required for MVP.
 - **Modern browser**: App targets modern browsers with LocalStorage support (Chrome, Firefox, Safari, Edge).
-- **Metric units only for MVP**: Weight in kg, distance in km, glucose in mmol/L. No unit conversion.
+- **Imperial weight, metric distance**: Weight in lbs, distance in km, glucose in mmol/L. No unit conversion.
 - **No historical imports**: Users enter data manually; no bulk import functionality for MVP.
 - **No data visualization**: MVP focuses on data entry and list views; charts/graphs are future enhancements.
 - **No goals/targets**: Goal setting and progress tracking are future enhancements.
@@ -139,7 +139,7 @@ Additional validation:
 
 - Edit/delete existing entries
 - Combined/unified history view across all data types
-- Unit conversions (mg/dL for glucose, lbs for weight, miles for distance)
+- Unit conversions (mg/dL for glucose, kg for weight, miles for distance)
 - Data export/import
 - Charts and visualizations
 - Goal tracking and progress indicators

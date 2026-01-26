@@ -30,7 +30,7 @@
 - [x] T001 Create Angular project with `ng new personal-fitness-tracker --standalone --routing --style=css --ssr=false`
 - [x] T002 Verify TypeScript strict mode is enabled in tsconfig.json
 - [x] T003 Create directory structure: `src/app/models/`, `src/app/services/`, `src/app/features/`, `src/app/shared/`
-- [ ] T004 [P] Configure app.config.ts with provideRouter and provideHttpClient
+- [x] T004 [P] Configure app.config.ts with provideRouter and provideHttpClient
 
 ---
 
@@ -42,10 +42,10 @@
 
 ### Models (All Stories Depend On These)
 
-- [ ] T005 [P] Create AppData interface in src/app/models/app-data.model.ts (schemaVersion, arrays, lastModified)
-- [ ] T006 [P] Create CardioSession interface and CardioType in src/app/models/cardio-session.model.ts
-- [ ] T007 [P] Create WeightEntry interface in src/app/models/weight-entry.model.ts
-- [ ] T008 [P] Create HealthReading discriminated union (BloodPressure, BloodGlucose, Ketone) in src/app/models/health-reading.model.ts
+- [x] T005 [P] Create AppData interface in src/app/models/app-data.model.ts (schemaVersion, arrays, lastModified)
+- [x] T006 [P] Create CardioSession interface and CardioType in src/app/models/cardio-session.model.ts
+- [x] T007 [P] Create WeightEntry interface in src/app/models/weight-entry.model.ts
+- [x] T008 [P] Create HealthReading discriminated union (BloodPressure, BloodGlucose, Ketone) in src/app/models/health-reading.model.ts
 
 ### Storage Service (Foundation for All Data Operations)
 
@@ -111,7 +111,7 @@
 - [ ] T027 [US2] Create WeightPageComponent in src/app/features/weight/weight-page.component.ts with reactive form and history list
 - [ ] T028 [US2] Add weight form fields: date/time picker, weight input (kg), notes textarea
 - [ ] T029 [US2] Add weight history list displaying entries sorted by date (newest first)
-- [ ] T030 [US2] Wire up form validation with error messages showing valid range (20-500 kg)
+- [ ] T030 [US2] Wire up form validation with error messages showing valid range (50-1000 lbs)
 - [ ] T031 [US2] Add route for /weight in src/app/app.routes.ts pointing to WeightPageComponent
 
 **Checkpoint**: User Story 2 fully functional - can add and view weight entries independently

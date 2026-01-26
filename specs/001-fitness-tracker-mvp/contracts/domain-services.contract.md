@@ -70,7 +70,7 @@ interface IWeightService {
 
 interface CreateWeightEntry {
   date: string;
-  weightKg: number;
+  weightLbs: number;
   notes?: string;
 }
 ```
@@ -182,7 +182,7 @@ class ValidationError extends Error {
 | Field | Rule | Error Message |
 |-------|------|---------------|
 | date | Must be valid ISO date | "Invalid date format" |
-| weightKg | 20-500 | "Weight must be between 20 and 500 kg" |
+| weightLbs | 50-1000 | "Weight must be between 50 and 1000 lbs" |
 | notes | <= 500 chars | "Notes must be 500 characters or less" |
 
 ### Blood Pressure Validation

@@ -11,7 +11,7 @@ This document defines the TypeScript interfaces for the Personal Fitness Tracker
 - LocalStorage serialization (JSON-compatible)
 - Future extensibility (optional fields, schema versioning)
 
-**MVP Unit Constraints**: All values use metric units only (kg, km, mmol/L). No unit conversion for MVP.
+**MVP Unit Constraints**: Weight in lbs (imperial), distance in km, glucose/ketones in mmol/L. No unit conversion for MVP.
 
 ## Core Entities
 
@@ -73,7 +73,7 @@ Represents a single weight measurement.
 interface WeightEntry {
   id: string;                      // UUID v4
   date: string;                    // ISO 8601 date-time
-  weightKg: number;                // Required, 20-500
+  weightLbs: number;               // Required, 50-1000
   notes?: string;                  // Optional, max 500 chars
   createdAt: string;               // ISO 8601 timestamp
   updatedAt: string;               // ISO 8601 timestamp
@@ -84,7 +84,7 @@ interface WeightEntry {
 
 | Field | Valid Range | Required |
 |-------|-------------|----------|
-| weightKg | 20 - 500 | Yes |
+| weightLbs | 50 - 1000 | Yes |
 | notes | max 500 chars | No |
 
 ### HealthReading
