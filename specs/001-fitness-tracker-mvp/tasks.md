@@ -49,9 +49,9 @@
 
 ### Storage Service (Foundation for All Data Operations)
 
-- [ ] T009 Create StorageService in src/app/services/storage.service.ts with initialize(), getData(), saveData(), clearData()
-- [ ] T010 Add schema migration hook to StorageService for future version upgrades
-- [ ] T011 Create StorageService unit tests in src/app/services/storage.service.spec.ts covering: initialize, getData, saveData, clearData, migration
+- [x] T009 Create StorageService in src/app/services/storage.service.ts with initialize(), getData(), saveData(), clearData()
+- [x] T010 Add schema migration hook to StorageService for future version upgrades
+- [x] T011 Create StorageService unit tests in src/app/services/storage.service.spec.ts covering: initialize, getData, saveData, clearData, migration
 
 ### Validation Utilities
 
