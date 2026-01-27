@@ -55,8 +55,8 @@
 
 ### Validation Utilities
 
-- [ ] T012 [P] Create validation utility functions in src/app/services/validators.ts (validateCardio, validateWeight, validateBloodPressure, validateGlucose, validateKetone)
-- [ ] T013 [P] Create validator unit tests in src/app/services/validators.spec.ts covering all validation rules and edge cases
+- [x] T012 [P] Create validation utility functions in src/app/services/validators.ts (validateCardio, validateWeight, validateBloodPressure, validateGlucose, validateKetone)
+- [x] T013 [P] Create validator unit tests in src/app/services/validators.spec.ts covering all validation rules and edge cases
 
 ### Shared Components
 
