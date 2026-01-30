@@ -119,7 +119,19 @@ import { VALIDATION_LIMITS } from '../../services/validators';
               <li class="history-item">
                 <div class="history-item-main">
                   <span class="history-item-value">{{ entry.weightLbs }} lbs</span>
-                  <span class="history-item-date">{{ formatDate(entry.date) }}</span>
+                  <div class="history-item-actions">
+                    <span class="history-item-date">{{ formatDate(entry.date) }}</span>
+                    <button
+                      type="button"
+                      class="btn btn-danger btn-sm"
+                      (click)="onDeleteEntry(entry)"
+                      [disabled]="isDeleting"
+                      [attr.aria-busy]="isDeleting"
+                      [attr.aria-label]="'Delete weight entry on ' + formatDate(entry.date)"
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
                 @if (entry.notes) {
                   <div class="history-item-notes">{{ entry.notes }}</div>
@@ -246,6 +258,7 @@ import { VALIDATION_LIMITS } from '../../services/validators';
       align-items: center;
     }
 
+
     .history-item-value {
       font-size: 1.25rem;
       font-weight: 600;
@@ -278,6 +291,7 @@ export class WeightPageComponent implements OnInit {
   entries: WeightEntry[] = [];
   limits = VALIDATION_LIMITS;
   isSubmitting = false;
+  isDeleting = false;
   submitError: string | null = null;
 
   constructor(
@@ -308,6 +322,23 @@ export class WeightPageComponent implements OnInit {
     this.weightService.getEntries().subscribe({
       next: (entries) => this.entries = entries,
       error: (err) => console.error('Failed to load entries:', err)
+    });
+  }
+
+  onDeleteEntry(entry: WeightEntry): void {
+    const ok = window.confirm('Delete this weight entry? This cannot be undone.');
+    if (!ok) return;
+
+    this.isDeleting = true;
+    this.weightService.deleteEntry(entry.id).subscribe({
+      next: () => {
+        this.loadEntries();
+        this.isDeleting = false;
+      },
+      error: () => {
+        this.isDeleting = false;
+        this.submitError = 'Failed to delete entry. Please try again.';
+      }
     });
   }
 

@@ -412,4 +412,34 @@ describe('ReadingsService', () => {
       });
     });
   });
+
+  describe('deleteReading', () => {
+    it('should delete an existing reading and persist', (done) => {
+      mockAppData.healthReadings = [
+        createStoredBP({ id: 'id-1' }),
+        createStoredGlucose({ id: 'id-2' })
+      ];
+      storageServiceSpy.getData.and.returnValue(of(mockAppData));
+
+      service.deleteReading('id-1').subscribe(result => {
+        expect(result).toBeTrue();
+        expect(storageServiceSpy.saveData).toHaveBeenCalled();
+
+        const savedData = storageServiceSpy.saveData.calls.mostRecent().args[0];
+        expect(savedData.healthReadings.map(r => r.id)).toEqual(['id-2']);
+        done();
+      });
+    });
+
+    it('should return false and not persist when ID does not exist', (done) => {
+      mockAppData.healthReadings = [createStoredKetone({ id: 'id-1' })];
+      storageServiceSpy.getData.and.returnValue(of(mockAppData));
+
+      service.deleteReading('missing-id').subscribe(result => {
+        expect(result).toBeFalse();
+        expect(storageServiceSpy.saveData).not.toHaveBeenCalled();
+        done();
+      });
+    });
+  });
 });

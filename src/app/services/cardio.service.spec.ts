@@ -387,4 +387,34 @@ describe('CardioService', () => {
       });
     });
   });
+
+  describe('deleteSession', () => {
+    it('should delete an existing session and persist', (done) => {
+      mockAppData.cardioSessions = [
+        createStoredSession({ id: 'id-1' }),
+        createStoredSession({ id: 'id-2' })
+      ];
+      storageServiceSpy.getData.and.returnValue(of(mockAppData));
+
+      service.deleteSession('id-1').subscribe(result => {
+        expect(result).toBeTrue();
+        expect(storageServiceSpy.saveData).toHaveBeenCalled();
+
+        const savedData = storageServiceSpy.saveData.calls.mostRecent().args[0];
+        expect(savedData.cardioSessions.map(s => s.id)).toEqual(['id-2']);
+        done();
+      });
+    });
+
+    it('should return false and not persist when ID does not exist', (done) => {
+      mockAppData.cardioSessions = [createStoredSession({ id: 'id-1' })];
+      storageServiceSpy.getData.and.returnValue(of(mockAppData));
+
+      service.deleteSession('missing-id').subscribe(result => {
+        expect(result).toBeFalse();
+        expect(storageServiceSpy.saveData).not.toHaveBeenCalled();
+        done();
+      });
+    });
+  });
 });

@@ -224,7 +224,19 @@ import { VALIDATION_LIMITS } from '../../services/validators';
                   <span class="history-item-type" [class]="'type-' + reading.type">
                     {{ getTypeLabel(reading.type) }}
                   </span>
-                  <span class="history-item-value">{{ formatReadingValue(reading) }}</span>
+                  <div class="history-item-actions">
+                    <span class="history-item-value">{{ formatReadingValue(reading) }}</span>
+                    <button
+                      type="button"
+                      class="btn btn-danger btn-sm"
+                      (click)="onDeleteReading(reading)"
+                      [disabled]="isDeleting"
+                      [attr.aria-busy]="isDeleting"
+                      [attr.aria-label]="'Delete ' + getTypeLabel(reading.type) + ' reading on ' + formatDate(reading.date)"
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
                 <div class="history-item-meta">
                   <span class="history-item-date">{{ formatDate(reading.date) }}</span>
@@ -357,6 +369,7 @@ import { VALIDATION_LIMITS } from '../../services/validators';
       align-items: center;
     }
 
+
     .history-item-type {
       font-weight: 600;
       padding: 0.25rem 0.75rem;
@@ -419,6 +432,7 @@ export class ReadingsPageComponent implements OnInit {
   limits = VALIDATION_LIMITS;
   selectedType: HealthReadingType | '' = '';
   isSubmitting = false;
+  isDeleting = false;
   submitError: string | null = null;
 
   constructor(
@@ -452,6 +466,23 @@ export class ReadingsPageComponent implements OnInit {
     this.readingsService.getReadings().subscribe({
       next: (readings) => this.readings = readings,
       error: (err) => console.error('Failed to load readings:', err)
+    });
+  }
+
+  onDeleteReading(reading: HealthReading): void {
+    const ok = window.confirm('Delete this reading? This cannot be undone.');
+    if (!ok) return;
+
+    this.isDeleting = true;
+    this.readingsService.deleteReading(reading.id).subscribe({
+      next: () => {
+        this.loadReadings();
+        this.isDeleting = false;
+      },
+      error: () => {
+        this.isDeleting = false;
+        this.submitError = 'Failed to delete reading. Please try again.';
+      }
     });
   }
 

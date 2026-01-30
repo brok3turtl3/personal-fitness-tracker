@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { Observable, map, switchMap, throwError } from 'rxjs';
+import { Observable, map, of, switchMap, throwError } from 'rxjs';
 import { StorageService } from './storage.service';
 import { 
   HealthReading, 
@@ -161,6 +161,32 @@ export class ReadingsService {
       map(data => {
         if (!data) return null;
         return data.healthReadings.find(reading => reading.id === id) ?? null;
+      })
+    );
+  }
+
+  /**
+   * Delete a health reading by ID.
+   * Returns true if a reading was removed.
+   */
+  deleteReading(id: string): Observable<boolean> {
+    return this.storageService.getData().pipe(
+      switchMap(data => {
+        if (!data) {
+          return throwError(() => new Error('Storage not initialized'));
+        }
+
+        const exists = data.healthReadings.some(reading => reading.id === id);
+        if (!exists) {
+          return of(false);
+        }
+
+        const updatedData = {
+          ...data,
+          healthReadings: data.healthReadings.filter(reading => reading.id !== id)
+        };
+
+        return this.storageService.saveData(updatedData).pipe(map(() => true));
       })
     );
   }

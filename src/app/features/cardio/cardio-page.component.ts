@@ -188,15 +188,27 @@ import { VALIDATION_LIMITS } from '../../services/validators';
               <li class="history-item">
                 <div class="history-item-main">
                   <span class="history-item-type">{{ getTypeLabel(session.type) }}</span>
-                  <span class="history-item-value">
-                    {{ session.durationMinutes }} min
-                    @if (session.distanceKm) {
-                      &middot; {{ session.distanceKm }} km
-                    }
-                    @if (session.caloriesBurned !== undefined && session.caloriesBurned !== null) {
-                      &middot; {{ session.caloriesBurned }} kcal
-                    }
-                  </span>
+                  <div class="history-item-actions">
+                    <span class="history-item-value">
+                      {{ session.durationMinutes }} min
+                      @if (session.distanceKm) {
+                        &middot; {{ session.distanceKm }} km
+                      }
+                      @if (session.caloriesBurned !== undefined && session.caloriesBurned !== null) {
+                        &middot; {{ session.caloriesBurned }} kcal
+                      }
+                    </span>
+                    <button
+                      type="button"
+                      class="btn btn-danger btn-sm"
+                      (click)="onDeleteSession(session)"
+                      [disabled]="isDeleting"
+                      [attr.aria-busy]="isDeleting"
+                      [attr.aria-label]="'Delete cardio session on ' + formatDate(session.date)"
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
                 <div class="history-item-meta">
                   <span class="history-item-date">{{ formatDate(session.date) }}</span>
@@ -329,6 +341,7 @@ import { VALIDATION_LIMITS } from '../../services/validators';
       align-items: center;
     }
 
+
     .history-item-type {
       font-weight: 600;
       color: #2c3e50;
@@ -375,6 +388,7 @@ export class CardioPageComponent implements OnInit {
   cardioTypes = CARDIO_TYPES;
   limits = VALIDATION_LIMITS;
   isSubmitting = false;
+  isDeleting = false;
   submitError: string | null = null;
 
   constructor(
@@ -414,6 +428,23 @@ export class CardioPageComponent implements OnInit {
     this.cardioService.getSessions().subscribe({
       next: (sessions) => this.sessions = sessions,
       error: (err) => console.error('Failed to load sessions:', err)
+    });
+  }
+
+  onDeleteSession(session: CardioSession): void {
+    const ok = window.confirm('Delete this cardio session? This cannot be undone.');
+    if (!ok) return;
+
+    this.isDeleting = true;
+    this.cardioService.deleteSession(session.id).subscribe({
+      next: () => {
+        this.loadSessions();
+        this.isDeleting = false;
+      },
+      error: () => {
+        this.isDeleting = false;
+        this.submitError = 'Failed to delete session. Please try again.';
+      }
     });
   }
 

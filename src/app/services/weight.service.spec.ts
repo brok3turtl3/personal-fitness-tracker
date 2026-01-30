@@ -305,4 +305,34 @@ describe('WeightService', () => {
       });
     });
   });
+
+  describe('deleteEntry', () => {
+    it('should delete an existing entry and persist', (done) => {
+      mockAppData.weightEntries = [
+        createStoredEntry({ id: 'id-1', weightLbs: 160 }),
+        createStoredEntry({ id: 'id-2', weightLbs: 165 })
+      ];
+      storageServiceSpy.getData.and.returnValue(of(mockAppData));
+
+      service.deleteEntry('id-1').subscribe(result => {
+        expect(result).toBeTrue();
+        expect(storageServiceSpy.saveData).toHaveBeenCalled();
+
+        const savedData = storageServiceSpy.saveData.calls.mostRecent().args[0];
+        expect(savedData.weightEntries.map(e => e.id)).toEqual(['id-2']);
+        done();
+      });
+    });
+
+    it('should return false and not persist when ID does not exist', (done) => {
+      mockAppData.weightEntries = [createStoredEntry({ id: 'id-1' })];
+      storageServiceSpy.getData.and.returnValue(of(mockAppData));
+
+      service.deleteEntry('missing-id').subscribe(result => {
+        expect(result).toBeFalse();
+        expect(storageServiceSpy.saveData).not.toHaveBeenCalled();
+        done();
+      });
+    });
+  });
 });

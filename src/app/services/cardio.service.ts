@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { Observable, map, switchMap, throwError } from 'rxjs';
+import { Observable, map, of, switchMap, throwError } from 'rxjs';
 import { StorageService } from './storage.service';
 import { CardioSession, CreateCardioSession } from '../models/cardio-session.model';
 import { validateCardio, ValidationError } from './validators';
@@ -116,6 +116,32 @@ export class CardioService {
       map(data => {
         if (!data) return null;
         return data.cardioSessions.find(session => session.id === id) ?? null;
+      })
+    );
+  }
+
+  /**
+   * Delete a cardio session by ID.
+   * Returns true if a session was removed.
+   */
+  deleteSession(id: string): Observable<boolean> {
+    return this.storageService.getData().pipe(
+      switchMap(data => {
+        if (!data) {
+          return throwError(() => new Error('Storage not initialized'));
+        }
+
+        const exists = data.cardioSessions.some(session => session.id === id);
+        if (!exists) {
+          return of(false);
+        }
+
+        const updatedData = {
+          ...data,
+          cardioSessions: data.cardioSessions.filter(session => session.id !== id)
+        };
+
+        return this.storageService.saveData(updatedData).pipe(map(() => true));
       })
     );
   }

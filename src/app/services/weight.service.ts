@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { Observable, map, switchMap, throwError } from 'rxjs';
+import { Observable, map, of, switchMap, throwError } from 'rxjs';
 import { StorageService } from './storage.service';
 import { WeightEntry, CreateWeightEntry } from '../models/weight-entry.model';
 import { validateWeight, ValidationError } from './validators';
@@ -113,6 +113,32 @@ export class WeightService {
       map(data => {
         if (!data) return null;
         return data.weightEntries.find(entry => entry.id === id) ?? null;
+      })
+    );
+  }
+
+  /**
+   * Delete a weight entry by ID.
+   * Returns true if an entry was removed.
+   */
+  deleteEntry(id: string): Observable<boolean> {
+    return this.storageService.getData().pipe(
+      switchMap(data => {
+        if (!data) {
+          return throwError(() => new Error('Storage not initialized'));
+        }
+
+        const exists = data.weightEntries.some(entry => entry.id === id);
+        if (!exists) {
+          return of(false);
+        }
+
+        const updatedData = {
+          ...data,
+          weightEntries: data.weightEntries.filter(entry => entry.id !== id)
+        };
+
+        return this.storageService.saveData(updatedData).pipe(map(() => true));
       })
     );
   }
