@@ -59,6 +59,8 @@ export const VALIDATION_LIMITS = {
   DURATION_MAX: 1440,
   DISTANCE_MIN: 0.01,
   DISTANCE_MAX: 1000,
+  CALORIES_MIN: 0,
+  CALORIES_MAX: 20000,
   
   // Weight (in lbs)
   WEIGHT_MIN: 50,
@@ -130,6 +132,26 @@ export function validateCardio(data: CreateCardioSession): ValidationResult {
         field: 'distanceKm', 
         message: `Distance must be between ${VALIDATION_LIMITS.DISTANCE_MIN} and ${VALIDATION_LIMITS.DISTANCE_MAX} km`,
         value: data.distanceKm
+      });
+    }
+  }
+
+  // Calories validation (optional)
+  if (data.caloriesBurned !== undefined && data.caloriesBurned !== null) {
+    if (!Number.isFinite(data.caloriesBurned)) {
+      errors.push({
+        field: 'caloriesBurned',
+        message: 'Calories must be a finite number',
+        value: data.caloriesBurned
+      });
+    } else if (
+      data.caloriesBurned < VALIDATION_LIMITS.CALORIES_MIN ||
+      data.caloriesBurned > VALIDATION_LIMITS.CALORIES_MAX
+    ) {
+      errors.push({
+        field: 'caloriesBurned',
+        message: `Calories must be between ${VALIDATION_LIMITS.CALORIES_MIN} and ${VALIDATION_LIMITS.CALORIES_MAX} kcal`,
+        value: data.caloriesBurned
       });
     }
   }

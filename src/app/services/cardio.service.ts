@@ -80,6 +80,7 @@ export class CardioService {
       type: sessionData.type,
       durationMinutes: sessionData.durationMinutes,
       distanceKm: sessionData.distanceKm,
+      caloriesBurned: sessionData.caloriesBurned,
       notes: sessionData.notes,
       createdAt: now,
       updatedAt: now

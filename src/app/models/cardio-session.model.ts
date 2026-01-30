@@ -28,6 +28,9 @@ export interface CardioSession {
   
   /** Distance in kilometers (0.01-1000), optional */
   distanceKm?: number;
+
+  /** Calories burned (0-20000 kcal), optional */
+  caloriesBurned?: number;
   
   /** Optional notes (max 500 chars) */
   notes?: string;
@@ -48,6 +51,7 @@ export interface CreateCardioSession {
   type: CardioType;
   durationMinutes: number;
   distanceKm?: number;
+  caloriesBurned?: number;
   notes?: string;
 }
 

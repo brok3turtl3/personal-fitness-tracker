@@ -23,6 +23,7 @@ describe('Validators', () => {
       type: 'running',
       durationMinutes: 30,
       distanceKm: 5,
+      caloriesBurned: 450,
       notes: 'Great run!'
     };
 
@@ -39,6 +40,29 @@ describe('Validators', () => {
         durationMinutes: 60
       });
       expect(result.valid).toBe(true);
+    });
+
+    it('should pass for calories at boundaries', () => {
+      expect(validateCardio({ ...validCardio, caloriesBurned: VALIDATION_LIMITS.CALORIES_MIN }).valid).toBe(true);
+      expect(validateCardio({ ...validCardio, caloriesBurned: VALIDATION_LIMITS.CALORIES_MAX }).valid).toBe(true);
+    });
+
+    it('should fail for calories below minimum', () => {
+      const result = validateCardio({ ...validCardio, caloriesBurned: -1 });
+      expect(result.valid).toBe(false);
+      expect(result.errors.some(e => e.field === 'caloriesBurned')).toBe(true);
+    });
+
+    it('should fail for calories above maximum', () => {
+      const result = validateCardio({ ...validCardio, caloriesBurned: VALIDATION_LIMITS.CALORIES_MAX + 1 });
+      expect(result.valid).toBe(false);
+      expect(result.errors.some(e => e.field === 'caloriesBurned')).toBe(true);
+    });
+
+    it('should fail for calories that are not finite numbers', () => {
+      const result = validateCardio({ ...validCardio, caloriesBurned: NaN as any });
+      expect(result.valid).toBe(false);
+      expect(result.errors.some(e => e.field === 'caloriesBurned')).toBe(true);
     });
 
     it('should fail for missing date', () => {

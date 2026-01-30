@@ -111,6 +111,28 @@ import { VALIDATION_LIMITS } from '../../services/validators';
         </div>
 
         <div class="form-group">
+          <label for="caloriesBurned">Calories burned (kcal)</label>
+          <input
+            type="number"
+            id="caloriesBurned"
+            formControlName="caloriesBurned"
+            [min]="limits.CALORIES_MIN"
+            [max]="limits.CALORIES_MAX"
+            step="1"
+            aria-label="Calories burned in kilocalories (optional)"
+            [attr.aria-invalid]="isFieldInvalid('caloriesBurned')"
+            [class.invalid]="isFieldInvalid('caloriesBurned')"
+          >
+          @if (isFieldInvalid('caloriesBurned')) {
+            <span class="error-message">
+              @if (sessionForm.get('caloriesBurned')?.errors?.['min'] || sessionForm.get('caloriesBurned')?.errors?.['max']) {
+                Calories must be between {{ limits.CALORIES_MIN }} and {{ limits.CALORIES_MAX }} kcal
+              }
+            </span>
+          }
+        </div>
+
+        <div class="form-group">
           <label for="notes">Notes</label>
           <textarea 
             id="notes" 
@@ -170,6 +192,9 @@ import { VALIDATION_LIMITS } from '../../services/validators';
                     {{ session.durationMinutes }} min
                     @if (session.distanceKm) {
                       &middot; {{ session.distanceKm }} km
+                    }
+                    @if (session.caloriesBurned !== undefined && session.caloriesBurned !== null) {
+                      &middot; {{ session.caloriesBurned }} kcal
                     }
                   </span>
                 </div>
@@ -369,6 +394,10 @@ export class CardioPageComponent implements OnInit {
         Validators.min(VALIDATION_LIMITS.DISTANCE_MIN),
         Validators.max(VALIDATION_LIMITS.DISTANCE_MAX)
       ]],
+      caloriesBurned: ['', [
+        Validators.min(VALIDATION_LIMITS.CALORIES_MIN),
+        Validators.max(VALIDATION_LIMITS.CALORIES_MAX)
+      ]],
       notes: ['', Validators.maxLength(VALIDATION_LIMITS.NOTES_MAX_LENGTH)]
     });
   }
@@ -401,6 +430,11 @@ export class CardioPageComponent implements OnInit {
     this.submitError = null;
 
     const formValue = this.sessionForm.value;
+
+    const caloriesBurned =
+      formValue.caloriesBurned === '' || formValue.caloriesBurned === null || formValue.caloriesBurned === undefined
+        ? undefined
+        : Number(formValue.caloriesBurned);
     
     // Convert local datetime to ISO string
     const sessionData: CreateCardioSession = {
@@ -408,6 +442,7 @@ export class CardioPageComponent implements OnInit {
       type: formValue.type,
       durationMinutes: Number(formValue.durationMinutes),
       distanceKm: formValue.distanceKm ? Number(formValue.distanceKm) : undefined,
+      caloriesBurned,
       notes: formValue.notes || undefined
     };
 

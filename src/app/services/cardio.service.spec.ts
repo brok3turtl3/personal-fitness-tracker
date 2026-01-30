@@ -117,12 +117,26 @@ describe('CardioService', () => {
     it('should add a session with all fields including optional', (done) => {
       const input = createValidSession({
         distanceKm: 10.5,
+        caloriesBurned: 450,
         notes: 'Great workout!'
       });
 
       service.addSession(input).subscribe(session => {
         expect(session.distanceKm).toBe(10.5);
+        expect(session.caloriesBurned).toBe(450);
         expect(session.notes).toBe('Great workout!');
+        done();
+      });
+    });
+
+    it('should preserve zero calories when provided', (done) => {
+      const input = createValidSession({ caloriesBurned: 0 });
+
+      service.addSession(input).subscribe(session => {
+        expect(session.caloriesBurned).toBe(0);
+
+        const savedData = storageServiceSpy.saveData.calls.mostRecent().args[0];
+        expect(savedData.cardioSessions[0].caloriesBurned).toBe(0);
         done();
       });
     });
