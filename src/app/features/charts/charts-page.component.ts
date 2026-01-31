@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { Router } from '@angular/router';
 import { ChartConfiguration, ChartData } from 'chart.js';
 import { BaseChartDirective } from 'ng2-charts';
 import { forkJoin } from 'rxjs';
@@ -32,6 +33,18 @@ import { DateRangePreset, filterByRange, resolveDateRange } from '../../shared/d
 
       <section class="controls" aria-label="Charts controls">
         <form [formGroup]="controlsForm" class="controls-form">
+          <div class="controls-actions">
+            <button
+              type="button"
+              class="btn btn-secondary"
+              (click)="onPrintExport()"
+              [disabled]="!!rangeError"
+              aria-label="Print or export charts report"
+            >
+              Print / Export
+            </button>
+          </div>
+
           <div class="form-row">
             <div class="form-group">
               <label for="rangePreset">Date range</label>
@@ -155,6 +168,12 @@ import { DateRangePreset, filterByRange, resolveDateRange } from '../../shared/d
       margin-bottom: 1.5rem;
     }
 
+    .controls-actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 0.75rem;
+    }
+
     .controls-form {
       display: flex;
       flex-direction: column;
@@ -269,6 +288,7 @@ export class ChartsPageComponent implements OnInit {
 
   constructor(
     private fb: FormBuilder,
+    private router: Router,
     private storageService: StorageService,
     private cardioService: CardioService,
     private weightService: WeightService,
@@ -296,6 +316,32 @@ export class ChartsPageComponent implements OnInit {
 
   onControlsChanged(): void {
     this.rebuildCharts();
+  }
+
+  onPrintExport(): void {
+    const preset = this.controlsForm.get('rangePreset')?.value as DateRangePreset;
+    const customStart = this.parseLocalDateTime(this.controlsForm.get('customStart')?.value);
+    const customEnd = this.parseLocalDateTime(this.controlsForm.get('customEnd')?.value);
+
+    const now = new Date();
+    const { range, error } = resolveDateRange(preset, now, customStart ?? undefined, customEnd ?? undefined);
+    this.rangeError = error;
+    if (error) return;
+
+    const queryParams: Record<string, string> = {
+      generatedAt: now.toISOString(),
+      readingType: String(this.controlsForm.get('readingType')?.value ?? 'blood_pressure'),
+      cardioShowDistance: String(!!this.controlsForm.get('cardioShowDistance')?.value),
+      cardioShowCalories: String(!!this.controlsForm.get('cardioShowCalories')?.value)
+    };
+
+    if (range.startMs !== undefined && range.endMs !== undefined) {
+      queryParams['startMs'] = String(range.startMs);
+      queryParams['endMs'] = String(range.endMs);
+    }
+
+    const url = this.router.serializeUrl(this.router.createUrlTree(['/report'], { queryParams }));
+    window.open(url, '_blank', 'noopener');
   }
 
   isCustomRangeInvalid(): boolean {

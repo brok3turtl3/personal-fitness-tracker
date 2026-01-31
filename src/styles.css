@@ -212,3 +212,33 @@ app-root {
     padding: 1rem;
   }
 }
+
+@media print {
+  body {
+    background: #ffffff;
+  }
+
+  .main-nav {
+    display: none !important;
+  }
+
+  .main-content {
+    padding: 0 !important;
+    max-width: none !important;
+  }
+
+  .page-container {
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-block {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}
