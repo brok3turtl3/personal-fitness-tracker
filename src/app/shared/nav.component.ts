@@ -18,6 +18,9 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
         <li>
           <a routerLink="/readings" routerLinkActive="active">Readings</a>
         </li>
+        <li>
+          <a routerLink="/charts" routerLinkActive="active">Charts</a>
+        </li>
       </ul>
     </nav>
   `,
