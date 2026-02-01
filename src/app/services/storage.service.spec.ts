@@ -39,6 +39,8 @@ describe('StorageService', () => {
       expect(data?.cardioSessions).toEqual([]);
       expect(data?.weightEntries).toEqual([]);
       expect(data?.healthReadings).toEqual([]);
+      expect(data?.savedFoods).toEqual([]);
+      expect(data?.mealEntries).toEqual([]);
     });
 
     it('should load existing data', async () => {
@@ -53,6 +55,8 @@ describe('StorageService', () => {
           updatedAt: '2025-01-25T10:00:00Z' 
         }],
         healthReadings: [],
+        savedFoods: [],
+        mealEntries: [],
         lastModified: '2025-01-25T10:00:00Z'
       };
       localStorageMock[STORAGE_KEY] = JSON.stringify(existingData);
@@ -115,6 +119,8 @@ describe('StorageService', () => {
         cardioSessions: [],
         weightEntries: [],
         healthReadings: [],
+        savedFoods: [],
+        mealEntries: [],
         lastModified: new Date().toISOString()
       };
 
@@ -225,6 +231,8 @@ describe('StorageService', () => {
       
       expect(data?.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
       expect(data?.weightEntries.length).toBe(1);
+      expect(data?.savedFoods).toEqual([]);
+      expect(data?.mealEntries).toEqual([]);
     });
 
     it('should preserve data during migration', async () => {
@@ -251,6 +259,71 @@ describe('StorageService', () => {
       expect(data?.cardioSessions.length).toBe(1);
       expect(data?.cardioSessions[0].type).toBe('running');
       expect(data?.cardioSessions[0].durationMinutes).toBe(30);
+      expect(data?.savedFoods).toEqual([]);
+      expect(data?.mealEntries).toEqual([]);
+    });
+
+    it('should migrate v1 data to v3 by adding diet containers', async () => {
+      const v1Data = {
+        schemaVersion: 1,
+        cardioSessions: [],
+        weightEntries: [],
+        healthReadings: [],
+        lastModified: '2025-01-25T08:00:00Z'
+      };
+      localStorageMock[STORAGE_KEY] = JSON.stringify(v1Data);
+
+      await firstValueFrom(service.initialize());
+      const data = await firstValueFrom(service.getData());
+
+      expect(data?.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+      expect(data?.savedFoods).toEqual([]);
+      expect(data?.mealEntries).toEqual([]);
+    });
+
+    it('should migrate v2 saved foods to v3 (per100g -> perUnit)', async () => {
+      const v2Data = {
+        schemaVersion: 2,
+        cardioSessions: [],
+        weightEntries: [],
+        healthReadings: [],
+        savedFoods: [
+          {
+            id: 'food-1',
+            fdcId: 999,
+            name: 'Legacy Food',
+            nutrientsPer100g: {
+              caloriesKcal: 200,
+              proteinG: 10,
+              fatG: 12,
+              carbsG: 5,
+              fiberG: 2,
+              sugarG: 1,
+              sodiumMg: 300,
+              netCarbsG: 3
+            },
+            servings: [{ id: 's1', label: '50 g', grams: 50 }],
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z'
+          }
+        ],
+        mealEntries: [],
+        lastModified: '2026-01-01T00:00:00.000Z'
+      };
+
+      localStorageMock[STORAGE_KEY] = JSON.stringify(v2Data);
+
+      await firstValueFrom(service.initialize());
+      const data = await firstValueFrom(service.getData());
+
+      expect(data?.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+      expect(data?.savedFoods.length).toBe(1);
+
+      const food = data!.savedFoods[0] as any;
+      expect(food.baseUnit).toBe('g');
+      expect(food.nutrientsPerUnit.caloriesKcal).toBeCloseTo(2, 6);
+      expect(food.servings[0].unit).toBe('g');
+      expect(food.servings[0].amount).toBeCloseTo(50, 6);
     });
   });
 });

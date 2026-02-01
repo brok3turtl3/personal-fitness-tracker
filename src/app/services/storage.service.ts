@@ -241,6 +241,12 @@ export class StorageService {
     if (version < 1) {
       migrated = this.migrateV0ToV1(data);
     }
+    if (version < 2) {
+      migrated = this.migrateV1ToV2(migrated);
+    }
+    if (version < 3) {
+      migrated = this.migrateV2ToV3(migrated);
+    }
     // Future migrations:
     // if (version < 2) { migrated = this.migrateV1ToV2(migrated); }
 
@@ -256,11 +262,94 @@ export class StorageService {
     const oldData = data as Partial<AppData>;
     
     return {
-      schemaVersion: CURRENT_SCHEMA_VERSION,
+      schemaVersion: 1,
       cardioSessions: oldData.cardioSessions ?? [],
       weightEntries: oldData.weightEntries ?? [],
       healthReadings: oldData.healthReadings ?? [],
+      savedFoods: [],
+      mealEntries: [],
       lastModified: oldData.lastModified ?? new Date().toISOString()
     };
   }
+
+  /**
+   * Migration from version 1 to version 2.
+   * Adds diet containers (savedFoods, mealEntries).
+   */
+  private migrateV1ToV2(data: AppData): AppData {
+    return {
+      ...data,
+      schemaVersion: 2,
+      savedFoods: (data as Partial<AppData>).savedFoods ?? [],
+      mealEntries: (data as Partial<AppData>).mealEntries ?? []
+    };
+  }
+
+  /**
+   * Migration from version 2 to version 3.
+   * Converts saved foods from nutrients-per-100g to nutrients-per-1g (baseUnit: 'g')
+   * and converts servings from {grams} to {unit:'g', amount}.
+   */
+  private migrateV2ToV3(data: AppData): AppData {
+    const savedFoods = (data as any).savedFoods ?? [];
+    const migratedFoods = Array.isArray(savedFoods)
+      ? savedFoods.map((f: any) => migrateSavedFoodV2ToV3(f))
+      : [];
+
+    // Meals already store snapshots; we leave them unchanged.
+    return {
+      ...data,
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      savedFoods: migratedFoods,
+      mealEntries: (data as any).mealEntries ?? []
+    };
+  }
+}
+
+function migrateSavedFoodV2ToV3(food: any): any {
+  const per100g = food?.nutrientsPer100g;
+
+  const nutrientsPerUnit = per100g
+    ? {
+        caloriesKcal: safeNumber(per100g.caloriesKcal) / 100,
+        proteinG: safeNumber(per100g.proteinG) / 100,
+        fatG: safeNumber(per100g.fatG) / 100,
+        carbsG: safeNumber(per100g.carbsG) / 100,
+        fiberG: safeNumber(per100g.fiberG) / 100,
+        sugarG: safeNumber(per100g.sugarG) / 100,
+        sodiumMg: safeNumber(per100g.sodiumMg) / 100,
+        netCarbsG: Math.max(0, (safeNumber(per100g.carbsG) - safeNumber(per100g.fiberG)) / 100)
+      }
+    : {
+        caloriesKcal: 0,
+        proteinG: 0,
+        fatG: 0,
+        carbsG: 0,
+        fiberG: 0,
+        sugarG: 0,
+        sodiumMg: 0,
+        netCarbsG: 0
+      };
+
+  const servings = Array.isArray(food?.servings)
+    ? food.servings.map((s: any) => ({
+        id: s.id,
+        label: s.label,
+        unit: 'g',
+        amount: safeNumber(s.grams)
+      }))
+    : [{ id: 'default', label: '100 g', unit: 'g', amount: 100 }];
+
+  return {
+    ...food,
+    baseUnit: 'g',
+    nutrientsPerUnit,
+    servings,
+    // remove legacy fields
+    nutrientsPer100g: undefined
+  };
+}
+
+function safeNumber(n: unknown): number {
+  return Number.isFinite(n as number) ? (n as number) : 0;
 }

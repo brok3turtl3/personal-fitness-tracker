@@ -19,6 +19,10 @@ export const routes: Routes = [
     loadComponent: () => import('./features/charts/charts-page.component').then(m => m.ChartsPageComponent)
   },
   {
+    path: 'diet',
+    loadComponent: () => import('./features/diet/diet-page.component').then(m => m.DietPageComponent)
+  },
+  {
     path: 'report',
     loadComponent: () => import('./features/reports/report-page.component').then(m => m.ReportPageComponent)
   },
