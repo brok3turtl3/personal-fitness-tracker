@@ -1,6 +1,6 @@
 {
   "name": "personal-fitness-tracker",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "main": "electron/main.js",
   "scripts": {
     "ng": "ng",
@@ -9,7 +9,8 @@
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
     "electron:dev": "ng build --configuration=production && electron .",
-    "electron:build": "ng build --configuration=production && electron-builder"
+    "electron:build": "ng build --configuration=production && electron-builder",
+    "electron:publish": "ng build --configuration=production && electron-builder --publish always"
   },
   "private": true,
   "dependencies": {
@@ -26,6 +27,7 @@
     "ng2-charts": "^7.0.0",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0",
+    "electron-updater": "^6.1.0",
     "zone.js": "~0.14.10"
   },
   "devDependencies": {
@@ -60,6 +62,11 @@
     },
     "mac": {
       "target": "dmg"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "brok3turtl3",
+      "repo": "personal-fitness-tracker"
     }
   }
 }

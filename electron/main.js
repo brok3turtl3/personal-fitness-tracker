@@ -1,4 +1,5 @@
 const { app, BrowserWindow, shell } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const path = require('path');
 
 let mainWindow;
@@ -26,7 +27,10 @@ function createWindow() {
   });
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  createWindow();
+  autoUpdater.checkForUpdatesAndNotify();
+});
 
 // macOS: quit when all windows are closed
 app.on('window-all-closed', () => {
