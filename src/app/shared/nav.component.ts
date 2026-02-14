@@ -7,7 +7,7 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
   imports: [RouterLink, RouterLinkActive],
   template: `
     <nav class="main-nav">
-      <div class="nav-brand">Fitness Tracker</div>
+      <div class="nav-brand">Fitness Tracker <span class="version">v1.1.0</span></div>
       <ul class="nav-links">
         <li>
           <a routerLink="/cardio" routerLinkActive="active">Cardio</a>
@@ -46,6 +46,12 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
     .nav-brand {
       font-size: 1.25rem;
       font-weight: bold;
+    }
+
+    .version {
+      font-size: 0.75rem;
+      font-weight: normal;
+      opacity: 0.7;
     }
 
     .nav-links {
