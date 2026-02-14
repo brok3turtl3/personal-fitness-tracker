@@ -340,8 +340,7 @@ export class ChartsPageComponent implements OnInit {
       queryParams['endMs'] = String(range.endMs);
     }
 
-    const url = this.router.serializeUrl(this.router.createUrlTree(['/report'], { queryParams }));
-    window.open(url, '_blank', 'noopener');
+    this.router.navigate(['/report'], { queryParams });
   }
 
   isCustomRangeInvalid(): boolean {

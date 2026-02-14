@@ -20,8 +20,11 @@ function createWindow() {
     path.join(__dirname, '..', 'dist', 'personal-fitness-tracker', 'browser', 'index.html')
   );
 
-  // Open external links in the system browser
+  // Open external links in the system browser, but allow internal app routes
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('file://')) {
+      return { action: 'allow' };
+    }
     shell.openExternal(url);
     return { action: 'deny' };
   });
