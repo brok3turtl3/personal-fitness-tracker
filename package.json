@@ -66,7 +66,8 @@
     "publish": {
       "provider": "github",
       "owner": "brok3turtl3",
-      "repo": "personal-fitness-tracker"
+      "repo": "personal-fitness-tracker",
+      "releaseType": "release"
     }
   }
 }
