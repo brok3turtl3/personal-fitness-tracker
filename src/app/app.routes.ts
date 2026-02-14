@@ -26,4 +26,12 @@ export const routes: Routes = [
     path: 'report',
     loadComponent: () => import('./features/reports/report-page.component').then(m => m.ReportPageComponent)
   },
+  {
+    path: 'chat',
+    loadComponent: () => import('./features/chat/chat-page.component').then(m => m.ChatPageComponent)
+  },
+  {
+    path: 'settings',
+    loadComponent: () => import('./features/settings/settings-page.component').then(m => m.SettingsPageComponent)
+  },
 ];

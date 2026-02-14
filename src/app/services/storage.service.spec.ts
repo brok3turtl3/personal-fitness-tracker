@@ -47,16 +47,17 @@ describe('StorageService', () => {
       const existingData: AppData = {
         schemaVersion: CURRENT_SCHEMA_VERSION,
         cardioSessions: [],
-        weightEntries: [{ 
-          id: '123', 
-          date: '2025-01-25T10:00:00Z', 
-          weightLbs: 150, 
-          createdAt: '2025-01-25T10:00:00Z', 
-          updatedAt: '2025-01-25T10:00:00Z' 
+        weightEntries: [{
+          id: '123',
+          date: '2025-01-25T10:00:00Z',
+          weightLbs: 150,
+          createdAt: '2025-01-25T10:00:00Z',
+          updatedAt: '2025-01-25T10:00:00Z'
         }],
         healthReadings: [],
         savedFoods: [],
         mealEntries: [],
+        chatConversations: [],
         lastModified: '2025-01-25T10:00:00Z'
       };
       localStorageMock[STORAGE_KEY] = JSON.stringify(existingData);
@@ -121,6 +122,7 @@ describe('StorageService', () => {
         healthReadings: [],
         savedFoods: [],
         mealEntries: [],
+        chatConversations: [],
         lastModified: new Date().toISOString()
       };
 
@@ -279,6 +281,26 @@ describe('StorageService', () => {
       expect(data?.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
       expect(data?.savedFoods).toEqual([]);
       expect(data?.mealEntries).toEqual([]);
+    });
+
+    it('should migrate v3 data to v4 by adding AI chat fields', async () => {
+      const v3Data = {
+        schemaVersion: 3,
+        cardioSessions: [],
+        weightEntries: [],
+        healthReadings: [],
+        savedFoods: [],
+        mealEntries: [],
+        lastModified: '2026-02-14T00:00:00.000Z'
+      };
+      localStorageMock[STORAGE_KEY] = JSON.stringify(v3Data);
+
+      await firstValueFrom(service.initialize());
+      const data = await firstValueFrom(service.getData());
+
+      expect(data?.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+      expect(data?.chatConversations).toEqual([]);
+      expect(data?.aiSettings).toBeUndefined();
     });
 
     it('should migrate v2 saved foods to v3 (per100g -> perUnit)', async () => {

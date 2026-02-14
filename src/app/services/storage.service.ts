@@ -247,8 +247,9 @@ export class StorageService {
     if (version < 3) {
       migrated = this.migrateV2ToV3(migrated);
     }
-    // Future migrations:
-    // if (version < 2) { migrated = this.migrateV1ToV2(migrated); }
+    if (version < 4) {
+      migrated = this.migrateV3ToV4(migrated);
+    }
 
     return migrated;
   }
@@ -268,6 +269,7 @@ export class StorageService {
       healthReadings: oldData.healthReadings ?? [],
       savedFoods: [],
       mealEntries: [],
+      chatConversations: [],
       lastModified: oldData.lastModified ?? new Date().toISOString()
     };
   }
@@ -299,9 +301,22 @@ export class StorageService {
     // Meals already store snapshots; we leave them unchanged.
     return {
       ...data,
-      schemaVersion: CURRENT_SCHEMA_VERSION,
+      schemaVersion: 3,
       savedFoods: migratedFoods,
       mealEntries: (data as any).mealEntries ?? []
+    };
+  }
+
+  /**
+   * Migration from version 3 to version 4.
+   * Adds AI chat fields (chatConversations, aiSettings).
+   */
+  private migrateV3ToV4(data: AppData): AppData {
+    return {
+      ...data,
+      schemaVersion: 4,
+      chatConversations: (data as Partial<AppData>).chatConversations ?? [],
+      aiSettings: (data as Partial<AppData>).aiSettings,
     };
   }
 }
