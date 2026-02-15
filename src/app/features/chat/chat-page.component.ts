@@ -92,6 +92,7 @@ import { ChatInputComponent } from './chat-input.component';
       display: flex;
       flex-direction: column;
       min-width: 0;
+      overflow: hidden;
     }
 
     .chat-header {
