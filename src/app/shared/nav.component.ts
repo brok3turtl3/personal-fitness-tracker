@@ -1,5 +1,6 @@
 import { Component } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
+import packageJson from '../../../package.json';
 
 @Component({
   selector: 'app-nav',
@@ -7,7 +8,7 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
   imports: [RouterLink, RouterLinkActive],
   template: `
     <nav class="main-nav">
-      <div class="nav-brand">Fitness Tracker <span class="version">v1.1.0</span></div>
+      <div class="nav-brand">Fitness Tracker <span class="version">v{{ version }}</span></div>
       <ul class="nav-links">
         <li>
           <a routerLink="/cardio" routerLinkActive="active">Cardio</a>
@@ -79,4 +80,6 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
     }
   `]
 })
-export class NavComponent {}
+export class NavComponent {
+  version = packageJson.version;
+}
