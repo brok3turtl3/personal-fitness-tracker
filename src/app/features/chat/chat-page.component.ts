@@ -73,8 +73,7 @@ import { ChatInputComponent } from './chat-input.component';
   styles: [`
     .chat-layout {
       display: flex;
-      height: calc(100vh - 60px);
-      overflow: hidden;
+      height: calc(100vh - 120px);
     }
 
     .sidebar {
@@ -92,6 +91,7 @@ import { ChatInputComponent } from './chat-input.component';
       display: flex;
       flex-direction: column;
       min-width: 0;
+      min-height: 0;
       overflow: hidden;
     }
 
