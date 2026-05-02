@@ -40,9 +40,9 @@
 **Wave 2** *(blocked on Wave 1 completion)*
 - [x] 01-foundations/01-05-PLAN.md — Puppeteer + axe-core e2e harness scaffold (FOUND-05) — completed 2026-05-02 (3 commits: 2dcd7d6, e1edd59, 2ea790a; SUMMARY: 01-05-SUMMARY.md). 5 new files in `e2e/` (run.mjs, smoke.spec.mjs, a11y.spec.mjs, fixtures/seed-data.json, README.md) + 1 line in `package.json` (`scripts.e2e: "node e2e/run.mjs"`). Two-terminal flow (no concurrently/wait-on). 8 routes covered in BOTH spec files; D-08 severity gate (serious|critical) wired. FOUND-05 NOT yet marked complete in REQUIREMENTS.md — gate on plan 08 characterization specs consuming a11y-test-helpers. Wave 2 now 1/3 complete.
 - [x] 01-foundations/01-06-PLAN.md — id.ts + chart-grouping consumer retrofit across services + chart pages (FOUND-02) — completed 2026-05-02 (3 commits: a8b752a, 6801180, cc64149; SUMMARY: 01-06-SUMMARY.md). 8 files modified: 5 services (cardio/weight/readings/diet/chat) + 3 feature pages (diet-page, charts-page, report-page). 6 generateUUID copies deleted (~70 lines) and 6 chart-grouping copies deleted (~96 lines). Full suite regression: 219/219 SUCCESS. **FOUND-02 marked complete in REQUIREMENTS.md** — both shared utilities (`id.ts`, `chart-grouping.ts`) now have all consumers retrofitted. Wave 2 now 2/3 complete.
-- [ ] 01-foundations/01-09-PLAN.md — Storage migration refactor: typed chain + backup-before-migrate + fixture-driven spec (FOUND-07) — depends on Plan 04
+- [x] 01-foundations/01-09-PLAN.md — Storage migration refactor: typed chain + backup-before-migrate + fixture-driven spec (FOUND-07) — completed 2026-05-02 (3 commits: c0fce5a, 512afb5, c11904c; SUMMARY: 01-09-SUMMARY.md). 3 files: storage.service.ts (typed chain + backup/prune/throw), storage.service.spec.ts (3 new describe blocks, 8 scenarios), storage.service.migration-fixtures.spec.ts (NEW — 9 specs, V0..V3 chain + 4-case malformed-input matrix). 5 `as any` casts eliminated; **zero `any` keyword in storage.service.ts**. Full Karma: 236/236 SUCCESS. FOUND-07 NOT yet marked complete in REQUIREMENTS.md — gate on Wave 3 plan 10 recovery banner UX. **Wave 2 of Phase 1 now complete (3/3).**
 
-**Wave 3** *(blocked on Wave 2 completion)*
+**Wave 3** *(unblocked — Wave 2 complete)*
 - [ ] 01-foundations/01-07-PLAN.md — Empty/error retrofit + subscription hygiene across 8 feature pages (FOUND-03, FOUND-06) — depends on Plans 03, 06
 - [ ] 01-foundations/01-10-PLAN.md — Recovery banner + AppComponent integration (FOUND-07) — depends on Plans 03, 09
 
@@ -116,7 +116,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundations | 6/10 | In progress (Wave 1 complete; Wave 2 2/3 complete — plans 05 + 06 done, plan 09 remains) | - |
+| 1. Foundations | 7/10 | In progress (Waves 1 + 2 complete; Wave 3 next — plans 07 + 10) | - |
 | 2. Diet UX Overhaul | 0/? | Not started | - |
 | 3. AI Memory + Tool Plumbing | 0/? | Not started | - |
 | 4. Agentic Loop + Citation UI | 0/? | Not started | - |
