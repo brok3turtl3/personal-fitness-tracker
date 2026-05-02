@@ -38,7 +38,7 @@
 - [x] 01-foundations/01-04-PLAN.md — Typed legacy schemas + V0..V3 fixtures + malformed-input fixtures (FOUND-07 — building blocks) — completed 2026-05-02 (3 commits: 694b914, afa9eee, cb2e002; SUMMARY: 01-04-SUMMARY.md). 13 new files: legacy-schemas.ts (5 type-only interfaces) + 12 JSON fixtures (4 input v0..v3, 4 expected v1..v4, 4 malformed). FOUND-07 NOT yet marked complete in REQUIREMENTS.md (gate on Wave 2 plan 09 storage.service.ts refactor + Wave 3 plan 10 recovery banner). Wave 1 of Phase 1 now complete.
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 01-foundations/01-05-PLAN.md — Puppeteer + axe-core e2e harness scaffold (FOUND-05) — depends on Plan 01
+- [x] 01-foundations/01-05-PLAN.md — Puppeteer + axe-core e2e harness scaffold (FOUND-05) — completed 2026-05-02 (3 commits: 2dcd7d6, e1edd59, 2ea790a; SUMMARY: 01-05-SUMMARY.md). 5 new files in `e2e/` (run.mjs, smoke.spec.mjs, a11y.spec.mjs, fixtures/seed-data.json, README.md) + 1 line in `package.json` (`scripts.e2e: "node e2e/run.mjs"`). Two-terminal flow (no concurrently/wait-on). 8 routes covered in BOTH spec files; D-08 severity gate (serious|critical) wired. FOUND-05 NOT yet marked complete in REQUIREMENTS.md — gate on plan 08 characterization specs consuming a11y-test-helpers. Wave 2 now 1/3 complete.
 - [ ] 01-foundations/01-06-PLAN.md — id.ts + chart-grouping consumer retrofit across services + chart pages (FOUND-02) — depends on Plan 02
 - [ ] 01-foundations/01-09-PLAN.md — Storage migration refactor: typed chain + backup-before-migrate + fixture-driven spec (FOUND-07) — depends on Plan 04
 
@@ -116,7 +116,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundations | 4/10 | In progress (Wave 1 complete; Wave 2 unblocked) | - |
+| 1. Foundations | 5/10 | In progress (Wave 1 complete; Wave 2 1/3 complete — plan 05 done, plans 06 + 09 remain) | - |
 | 2. Diet UX Overhaul | 0/? | Not started | - |
 | 3. AI Memory + Tool Plumbing | 0/? | Not started | - |
 | 4. Agentic Loop + Citation UI | 0/? | Not started | - |
