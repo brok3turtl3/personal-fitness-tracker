@@ -12,7 +12,7 @@ Requirements for the refinement milestone. Each maps to roadmap phases (filled i
 ### FOUND — Foundations (test scaffolding, shared utilities, refactor safety)
 
 - [x] **FOUND-01**: Test coverage baseline is measured and thresholds are enforced via `karma.conf.js` (so refactors can't silently regress coverage) — completed in plan 01-01 (2026-05-02)
-- [ ] **FOUND-02**: Shared utilities extracted to `src/app/shared/` — single `id` helper replacing 5× duplicated UUID generators; single `groupByDay` / `toDateKey` helper (fixes the existing chart-vs-report day-grouping drift)
+- [x] **FOUND-02**: Shared utilities extracted to `src/app/shared/` — single `id` helper replacing 5× duplicated UUID generators; single `groupByDay` / `toDateKey` helper (fixes the existing chart-vs-report day-grouping drift) — completed in plans 01-02 (utility creation) + 01-06 (consumer retrofit, 2026-05-02)
 - [ ] **FOUND-03**: Subscription hygiene — `takeUntilDestroyed(this.destroyRef)` applied to every component that subscribes to RxJS streams
 - [ ] **FOUND-04**: Characterization tests (DOM snapshots + key user flows) in place for `diet-page`, `chat-page`, `charts-page`, `reports-page` BEFORE any refactor touches them
 - [ ] **FOUND-05**: Puppeteer e2e and `axe-core` per-route a11y scaffolds wired so later phases extend rather than invent
@@ -122,7 +122,7 @@ Mapped by the roadmapper.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | FOUND-01 | Phase 1 | Complete (plan 01-01, 2026-05-02) |
-| FOUND-02 | Phase 1 | Pending |
+| FOUND-02 | Phase 1 | Complete (plans 01-02 + 01-06, 2026-05-02) |
 | FOUND-03 | Phase 1 | Pending |
 | FOUND-04 | Phase 1 | Pending |
 | FOUND-05 | Phase 1 | Pending |
@@ -171,4 +171,4 @@ Mapped by the roadmapper.
 
 ---
 *Requirements defined: 2026-05-02*
-*Last updated: 2026-05-02 after roadmap creation (traceability filled in)*
+*Last updated: 2026-05-02 — FOUND-02 marked complete after plan 01-06 (consumer retrofit of shared id.ts + chart-grouping)*
