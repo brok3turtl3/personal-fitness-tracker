@@ -13,10 +13,10 @@ Requirements for the refinement milestone. Each maps to roadmap phases (filled i
 
 - [x] **FOUND-01**: Test coverage baseline is measured and thresholds are enforced via `karma.conf.js` (so refactors can't silently regress coverage) — completed in plan 01-01 (2026-05-02)
 - [x] **FOUND-02**: Shared utilities extracted to `src/app/shared/` — single `id` helper replacing 5× duplicated UUID generators; single `groupByDay` / `toDateKey` helper (fixes the existing chart-vs-report day-grouping drift) — completed in plans 01-02 (utility creation) + 01-06 (consumer retrofit, 2026-05-02)
-- [ ] **FOUND-03**: Subscription hygiene — `takeUntilDestroyed(this.destroyRef)` applied to every component that subscribes to RxJS streams
+- [x] **FOUND-03**: Subscription hygiene — `takeUntilDestroyed(this.destroyRef)` applied to every component that subscribes to RxJS streams
 - [ ] **FOUND-04**: Characterization tests (DOM snapshots + key user flows) in place for `diet-page`, `chat-page`, `charts-page`, `reports-page` BEFORE any refactor touches them
 - [ ] **FOUND-05**: Puppeteer e2e and `axe-core` per-route a11y scaffolds wired so later phases extend rather than invent
-- [ ] **FOUND-06**: Shared empty-state + error-state component pattern available for reuse across feature pages
+- [x] **FOUND-06**: Shared empty-state + error-state component pattern available for reuse across feature pages
 - [ ] **FOUND-07**: Schema-migration discipline established — typed `LegacyAppDataVN` interfaces (no `as any` reads), backup-before-migrate recovery key, fixture-driven characterization tests — applies to V5/V6 migrations to follow
 
 ### DIET — Diet UX overhaul
@@ -123,10 +123,10 @@ Mapped by the roadmapper.
 |-------------|-------|--------|
 | FOUND-01 | Phase 1 | Complete (plan 01-01, 2026-05-02) |
 | FOUND-02 | Phase 1 | Complete (plans 01-02 + 01-06, 2026-05-02) |
-| FOUND-03 | Phase 1 | Pending |
+| FOUND-03 | Phase 1 | Complete |
 | FOUND-04 | Phase 1 | Pending |
 | FOUND-05 | Phase 1 | Pending |
-| FOUND-06 | Phase 1 | Pending |
+| FOUND-06 | Phase 1 | Complete |
 | FOUND-07 | Phase 1 | Pending |
 | DIET-01 | Phase 2 | Pending |
 | DIET-02 | Phase 2 | Pending |

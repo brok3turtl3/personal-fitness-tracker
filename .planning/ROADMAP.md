@@ -43,7 +43,7 @@
 - [x] 01-foundations/01-09-PLAN.md — Storage migration refactor: typed chain + backup-before-migrate + fixture-driven spec (FOUND-07) — completed 2026-05-02 (3 commits: c0fce5a, 512afb5, c11904c; SUMMARY: 01-09-SUMMARY.md). 3 files: storage.service.ts (typed chain + backup/prune/throw), storage.service.spec.ts (3 new describe blocks, 8 scenarios), storage.service.migration-fixtures.spec.ts (NEW — 9 specs, V0..V3 chain + 4-case malformed-input matrix). 5 `as any` casts eliminated; **zero `any` keyword in storage.service.ts**. Full Karma: 236/236 SUCCESS. FOUND-07 NOT yet marked complete in REQUIREMENTS.md — gate on Wave 3 plan 10 recovery banner UX. **Wave 2 of Phase 1 now complete (3/3).**
 
 **Wave 3** *(unblocked — Wave 2 complete)*
-- [ ] 01-foundations/01-07-PLAN.md — Empty/error retrofit + subscription hygiene across 8 feature pages (FOUND-03, FOUND-06) — depends on Plans 03, 06
+- [x] 01-foundations/01-07-PLAN.md — Empty/error retrofit + subscription hygiene across 8 feature pages (FOUND-03, FOUND-06) — completed 2026-05-02 (2 commits: 84c76c7, f1bda40; SUMMARY: 01-07-SUMMARY.md). 8 feature page components modified: every `.subscribe(...)` (40 sites total) now pipes through `takeUntilDestroyed(this.destroyRef)`; every page declares `private destroyRef = inject(DestroyRef)` field; 7 list/data pages render BOTH `<app-empty-state>` AND `<app-error-state>`; settings has `<app-error-state>` only (RESEARCH §Open Q 2). Storage failures now visible to user (CONCERNS.md "Console-only error reporting" CLOSED). 5 cross-page invariant gates PASS. 236/236 Karma SUCCESS; production build green. **FOUND-03 + FOUND-06 marked complete in REQUIREMENTS.md.** Wave 3 now 1/2 complete.
 - [ ] 01-foundations/01-10-PLAN.md — Recovery banner + AppComponent integration (FOUND-07) — depends on Plans 03, 09
 
 **Wave 4** *(blocked on Wave 3 completion)*
@@ -116,7 +116,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundations | 7/10 | In progress (Waves 1 + 2 complete; Wave 3 next — plans 07 + 10) | - |
+| 1. Foundations | 8/10 | In Progress|  |
 | 2. Diet UX Overhaul | 0/? | Not started | - |
 | 3. AI Memory + Tool Plumbing | 0/? | Not started | - |
 | 4. Agentic Loop + Citation UI | 0/? | Not started | - |
