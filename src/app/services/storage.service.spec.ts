@@ -491,6 +491,27 @@ describe('StorageService', () => {
     });
   });
 
+  describe('getBackup', () => {
+    it('returns the stored value when the key exists', () => {
+      const key = 'fitness_tracker_data.backup.v3.2026-05-02T14-30-12-123Z';
+      const payload = '{"schemaVersion":3,"data":{}}';
+      // Seed the mock directly — getItem is spied via callFake at top of file.
+      localStorageMock[key] = payload;
+      expect(service.getBackup(key)).toBe(payload);
+    });
+
+    it('returns null when the key is absent', () => {
+      expect(service.getBackup('absent_key')).toBeNull();
+    });
+
+    it('returns null (does not throw) when underlying localStorage.getItem throws', () => {
+      // The outer beforeEach already spied getItem with callFake. Replace the
+      // call-fake with a throw to simulate SecurityError / private-browsing.
+      (localStorage.getItem as jasmine.Spy).and.throwError(new Error('SecurityError'));
+      expect(service.getBackup('any_key')).toBeNull();
+    });
+  });
+
   describe('pruneOldBackups', () => {
     const BACKUP_PREFIX = 'fitness_tracker_data.backup.';
 

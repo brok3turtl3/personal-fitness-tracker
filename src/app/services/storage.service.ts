@@ -178,6 +178,31 @@ export class StorageService {
   }
 
   /**
+   * Reads a previously written backup payload from LocalStorage.
+   *
+   * This is the ONLY sanctioned path for callers outside StorageService to
+   * obtain backup JSON (e.g., AppComponent feeding the recovery banner in
+   * plan 10). Per CLAUDE.md "Storage chokepoint" rule, components MUST NOT
+   * call `localStorage.*` directly — they go through this method instead.
+   *
+   * Returns null if the key is absent OR if the underlying read throws
+   * (e.g., LocalStorage disabled, SecurityError in private browsing).
+   * Never throws — failure is signalled by `null`.
+   *
+   * Synchronous (not Observable) by design: it's called inside the
+   * recovery-banner construction path in AppComponent's error handler,
+   * where async would force the banner to render with an empty payload
+   * and only fill it on a later tick.
+   */
+  getBackup(key: string): string | null {
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Prune backup keys, keeping only the most recent MAX_BACKUPS_TO_KEEP.
    *
    * Security gate (T-09-02): filters STRICTLY on BACKUP_KEY_PREFIX so it
