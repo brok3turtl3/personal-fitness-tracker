@@ -10,7 +10,8 @@
     "test": "ng test",
     "electron:dev": "ng build --configuration=production && electron .",
     "electron:build": "ng build --configuration=production && electron-builder",
-    "electron:publish": "ng build --configuration=production && electron-builder --publish always"
+    "electron:publish": "ng build --configuration=production && electron-builder --publish always",
+    "e2e": "node e2e/run.mjs"
   },
   "private": true,
   "dependencies": {
