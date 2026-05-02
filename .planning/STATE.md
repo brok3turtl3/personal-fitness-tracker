@@ -3,17 +3,17 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-05-02T19:08:14Z"
+last_updated: "2026-05-02T19:16:02Z"
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 10
-  completed_plans: 1
+  completed_plans: 2
 ---
 
 # State: Personal Fitness Tracker — Refinement Milestone (v2)
 
-**Last Updated:** 2026-05-02 (Phase 1 plan 01-01 complete — coverage config, axe-core install, tsconfig.spec patch landed)
+**Last Updated:** 2026-05-02 (Phase 1 plan 01-02 complete — shared utilities id.ts, chart-grouping.ts, a11y-test-helpers.ts landed)
 
 ---
 
@@ -30,10 +30,10 @@ progress:
 ## Current Position
 
 **Phase:** 1 — Foundations
-**Plan:** 10 plans across 4 waves; Plan 01-01 complete
-**Status:** Executing (Wave 1 in progress; remaining Wave 1 plans 02/03/04 are parallelizable)
-**Resume file:** `.planning/phases/01-foundations/01-02-PLAN.md` (next action: continue Wave 1)
-**Progress:** [█░░░░░░░░░] 0/5 phases complete; Phase 1 1/10 plans complete
+**Plan:** 10 plans across 4 waves; Plans 01-01, 01-02 complete
+**Status:** Executing (Wave 1 in progress; remaining Wave 1 plans 03/04 are parallelizable)
+**Resume file:** `.planning/phases/01-foundations/01-03-PLAN.md` (next action: continue Wave 1 — empty/error-state components)
+**Progress:** [██░░░░░░░░] 0/5 phases complete; Phase 1 2/10 plans complete
 
 **Wave structure:**
 - Wave 1: Plans 01, 02, 03, 04 (no dependencies — Karma config, shared utilities, empty/error components, typed schemas + fixtures)
@@ -51,7 +51,7 @@ progress:
 | Phases completed | 0 |
 | Requirements mapped | 42/42 |
 | Plans drafted | 10 |
-| Plans completed | 1 |
+| Plans completed | 2 |
 | Verifier passes | 0 |
 | Plan-checker iterations | 3 (PASS on iteration 3) |
 
@@ -60,6 +60,7 @@ progress:
 | Plan | Name | Duration | Tasks | Files | Commits | Completed |
 |------|------|----------|-------|-------|---------|-----------|
 | 01-01 | Coverage config + axe-core install + tsconfig.spec patch | 3m 13s | 3/3 | 4 | a638189, e56e818, aef83cb | 2026-05-02 |
+| 01-02 | Shared utilities create: id.ts, chart-grouping.ts, a11y-test-helpers.ts | 3m 38s | 3/3 | 5 | fd0a850, 9bc9680, 7190fba | 2026-05-02 |
 
 ---
 
@@ -87,12 +88,14 @@ progress:
 
 ### Open Todos
 
-- Continue Wave 1 of Phase 1: plans 01-02 (id.ts + replace generateUUID copies), 01-03 (chart-grouping extraction), 01-04 (typed legacy-schemas.ts) are parallelizable.
-- Plan 01-01 landed `karma.conf.js`, `axe-core@^4`, `resolveJsonModule` in `tsconfig.spec.json`, and `karmaConfig` wiring in `angular.json`. All Wave 1 dependencies are now in place.
+- Continue Wave 1 of Phase 1: plan 01-03 (empty-state + error-state components) and plan 01-04 (typed legacy-schemas.ts + V0..V3 fixtures + malformed-input fixtures) are parallelizable.
+- Plan 01-02 landed `id.ts` (`generateId()` with crypto+fallback), `chart-grouping.ts` (`groupByDay`/`toDateKey`/`round2` lifted from charts-page), and `a11y-test-helpers.ts` (`expectNoSeriousA11yViolations`) plus 13 new specs. The 6 existing `generateUUID` copies and the in-file `charts-page.component.ts:594-646` block stay UNCHANGED until Wave 2 plan 06.
+- FOUND-02, FOUND-04, FOUND-05 are NOT yet marked complete in REQUIREMENTS.md — they require consumer retrofit (plan 06) and characterization specs (plan 08) to land first.
 
 ### Recent Sessions
 
 - **2026-05-02T19:05Z–19:08Z** — Executed plan 01-01. 3 commits on `gsd/phase-1-foundations`. Smoke-verified `ng test` (190 SUCCESS, exit 0) and `ng test --code-coverage` (190 SUCCESS + 27 threshold warnings, exit 1; expected). `ng build --configuration=production` exit 0. No deviations from plan.
+- **2026-05-02T19:12Z–19:16Z** — Executed plan 01-02. 3 commits on `gsd/phase-1-foundations` (fd0a850, 9bc9680, 7190fba). Created 5 new files in `src/app/shared/`. `ng test --no-watch --browsers=ChromeHeadless` (full suite): **203 of 203 SUCCESS** (190 pre-existing + 13 new), exit 0. `ng build --configuration=production`: exit 0. No deviations. Threat-model compliance: T-02-01 accept disposition documented in JSDoc, T-02-02 b6149d2 regression spec present, T-02-03 zero production importers of a11y-test-helpers.
 
 ### Blockers
 
