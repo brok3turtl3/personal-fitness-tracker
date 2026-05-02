@@ -1,11 +1,19 @@
 import { Injectable } from '@angular/core';
 import { Observable, of, throwError } from 'rxjs';
-import { 
-  AppData, 
-  CURRENT_SCHEMA_VERSION, 
-  STORAGE_KEY, 
-  createEmptyAppData 
+import {
+  AppData,
+  CURRENT_SCHEMA_VERSION,
+  STORAGE_KEY,
+  createEmptyAppData
 } from '../models/app-data.model';
+import { SavedFood } from '../models/diet.model';
+import {
+  LegacyAppDataV0,
+  LegacyAppDataV1,
+  LegacyAppDataV2,
+  LegacyAppDataV3,
+  LegacySavedFoodV2,
+} from './legacy-schemas';
 
 /**
  * Storage usage information.
@@ -229,48 +237,44 @@ export class StorageService {
 
   /**
    * Migrate data from older schema versions.
-   * This is a hook for future migrations.
+   *
+   * Typed chain (D-16, RESEARCH §Pattern 6): each hop accepts and returns the
+   * concrete `LegacyAppDataVN` shape. Strict TS now catches typos in legacy
+   * field names — replaces the prior unsafe casts at lines 296/298/306.
    */
   private migrateData(data: unknown): AppData {
-    const parsed = data as { schemaVersion?: number };
-    const version = parsed.schemaVersion ?? 0;
+    const fromVersion = (data as { schemaVersion?: number }).schemaVersion ?? 0;
 
-    let migrated = data as AppData;
+    const v1: LegacyAppDataV1 = (fromVersion < 1)
+      ? this.migrateV0ToV1(data as LegacyAppDataV0)
+      : (data as LegacyAppDataV1);
 
-    // Apply migrations in sequence
-    if (version < 1) {
-      migrated = this.migrateV0ToV1(data);
-    }
-    if (version < 2) {
-      migrated = this.migrateV1ToV2(migrated);
-    }
-    if (version < 3) {
-      migrated = this.migrateV2ToV3(migrated);
-    }
-    if (version < 4) {
-      migrated = this.migrateV3ToV4(migrated);
-    }
+    const v2: LegacyAppDataV2 = (fromVersion < 2)
+      ? this.migrateV1ToV2(v1)
+      : (data as LegacyAppDataV2);
 
-    return migrated;
+    const v3: LegacyAppDataV3 = (fromVersion < 3)
+      ? this.migrateV2ToV3(v2)
+      : (data as LegacyAppDataV3);
+
+    const v4: AppData = (fromVersion < 4)
+      ? this.migrateV3ToV4(v3)
+      : (data as AppData);
+
+    return v4;
   }
 
   /**
    * Migration from version 0 (no version) to version 1.
+   * Defaults missing optional arrays/timestamp.
    */
-  private migrateV0ToV1(data: unknown): AppData {
-    // For v0 -> v1, we assume any existing data without schemaVersion
-    // is from before versioning was added. Create proper structure.
-    const oldData = data as Partial<AppData>;
-    
+  private migrateV0ToV1(data: LegacyAppDataV0): LegacyAppDataV1 {
     return {
       schemaVersion: 1,
-      cardioSessions: oldData.cardioSessions ?? [],
-      weightEntries: oldData.weightEntries ?? [],
-      healthReadings: oldData.healthReadings ?? [],
-      savedFoods: [],
-      mealEntries: [],
-      chatConversations: [],
-      lastModified: oldData.lastModified ?? new Date().toISOString()
+      cardioSessions: data.cardioSessions ?? [],
+      weightEntries: data.weightEntries ?? [],
+      healthReadings: data.healthReadings ?? [],
+      lastModified: data.lastModified ?? new Date().toISOString()
     };
   }
 
@@ -278,12 +282,15 @@ export class StorageService {
    * Migration from version 1 to version 2.
    * Adds diet containers (savedFoods, mealEntries).
    */
-  private migrateV1ToV2(data: AppData): AppData {
+  private migrateV1ToV2(data: LegacyAppDataV1): LegacyAppDataV2 {
     return {
-      ...data,
       schemaVersion: 2,
-      savedFoods: (data as Partial<AppData>).savedFoods ?? [],
-      mealEntries: (data as Partial<AppData>).mealEntries ?? []
+      cardioSessions: data.cardioSessions,
+      weightEntries: data.weightEntries,
+      healthReadings: data.healthReadings,
+      savedFoods: [],
+      mealEntries: [],
+      lastModified: data.lastModified
     };
   }
 
@@ -292,37 +299,51 @@ export class StorageService {
    * Converts saved foods from nutrients-per-100g to nutrients-per-1g (baseUnit: 'g')
    * and converts servings from {grams} to {unit:'g', amount}.
    */
-  private migrateV2ToV3(data: AppData): AppData {
-    const savedFoods = (data as any).savedFoods ?? [];
-    const migratedFoods = Array.isArray(savedFoods)
-      ? savedFoods.map((f: any) => migrateSavedFoodV2ToV3(f))
-      : [];
+  private migrateV2ToV3(data: LegacyAppDataV2): LegacyAppDataV3 {
+    const savedFoods = Array.isArray(data.savedFoods) ? data.savedFoods : [];
+    const migratedFoods: SavedFood[] = savedFoods.map(
+      (f: LegacySavedFoodV2) => migrateSavedFoodV2ToV3(f)
+    );
 
-    // Meals already store snapshots; we leave them unchanged.
+    // Meals already store snapshots; we leave them unchanged. mealEntries is
+    // typed `unknown[]` in V2 because meals existed but their pre-V3 shape was
+    // already snapshot-based; the V3 type narrows them to `MealEntry[]`.
     return {
-      ...data,
       schemaVersion: 3,
+      cardioSessions: data.cardioSessions,
+      weightEntries: data.weightEntries,
+      healthReadings: data.healthReadings,
       savedFoods: migratedFoods,
-      mealEntries: (data as any).mealEntries ?? []
+      mealEntries: (Array.isArray(data.mealEntries) ? data.mealEntries : []) as LegacyAppDataV3['mealEntries'],
+      lastModified: data.lastModified
     };
   }
 
   /**
    * Migration from version 3 to version 4.
-   * Adds AI chat fields (chatConversations, aiSettings).
+   * Adds AI chat fields (chatConversations defaults to []; aiSettings stays
+   * undefined per CLAUDE.md "no null for absent optional fields").
    */
-  private migrateV3ToV4(data: AppData): AppData {
+  private migrateV3ToV4(data: LegacyAppDataV3): AppData {
     return {
-      ...data,
       schemaVersion: 4,
-      chatConversations: (data as Partial<AppData>).chatConversations ?? [],
-      aiSettings: (data as Partial<AppData>).aiSettings,
+      cardioSessions: data.cardioSessions,
+      weightEntries: data.weightEntries,
+      healthReadings: data.healthReadings,
+      savedFoods: data.savedFoods,
+      mealEntries: data.mealEntries,
+      chatConversations: [],
+      lastModified: data.lastModified
     };
   }
 }
 
-function migrateSavedFoodV2ToV3(food: any): any {
-  const per100g = food?.nutrientsPer100g;
+/**
+ * V2 → V3 saved-food shape migration.
+ * Reads the typed `LegacySavedFoodV2` (replaces the previous unsafe cast).
+ */
+function migrateSavedFoodV2ToV3(food: LegacySavedFoodV2): SavedFood {
+  const per100g = food.nutrientsPer100g;
 
   const nutrientsPerUnit = per100g
     ? {
@@ -346,23 +367,30 @@ function migrateSavedFoodV2ToV3(food: any): any {
         netCarbsG: 0
       };
 
-  const servings = Array.isArray(food?.servings)
-    ? food.servings.map((s: any) => ({
+  const servings = Array.isArray(food.servings)
+    ? food.servings.map((s) => ({
         id: s.id,
         label: s.label,
-        unit: 'g',
+        unit: 'g' as const,
         amount: safeNumber(s.grams)
       }))
-    : [{ id: 'default', label: '100 g', unit: 'g', amount: 100 }];
+    : [{ id: 'default', label: '100 g', unit: 'g' as const, amount: 100 }];
 
-  return {
-    ...food,
+  // Preserve fdcId as a runtime extra (not part of the SavedFood type but
+  // present on some legacy V2 entries). Spread-from-source keeps that field
+  // intact without re-introducing an unsafe cast.
+  const base: SavedFood = {
+    id: food.id,
+    name: food.name,
     baseUnit: 'g',
     nutrientsPerUnit,
     servings,
-    // remove legacy fields
-    nutrientsPer100g: undefined
+    createdAt: food.createdAt,
+    updatedAt: food.updatedAt
   };
+  return food.fdcId !== undefined
+    ? { ...base, fdcId: food.fdcId } as SavedFood
+    : base;
 }
 
 function safeNumber(n: unknown): number {
