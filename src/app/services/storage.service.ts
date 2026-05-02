@@ -62,12 +62,35 @@ export class StorageError extends Error {
   providedIn: 'root'
 })
 export class StorageService {
+  /**
+   * LocalStorage key prefix for pre-migration backups (D-14).
+   * Format: `fitness_tracker_data.backup.v{N}.{ISO-timestamp}`. The trailing
+   * dot is significant — pruneOldBackups() filters strictly on this prefix
+   * so it can never delete the active STORAGE_KEY (security: T-09-02).
+   */
+  private static readonly BACKUP_KEY_PREFIX = 'fitness_tracker_data.backup.';
+
+  /**
+   * Maximum number of pre-migration backups to keep. Older backups are
+   * pruned during initialize() to stay under the 5 MB quota (D-14, Pitfall 4).
+   */
+  private static readonly MAX_BACKUPS_TO_KEEP = 3;
+
   private initialized = false;
   private cachedData: AppData | null = null;
 
   /**
    * Initialize storage and run migrations if needed.
    * Must be called before other operations.
+   *
+   * Migration flow (D-14, D-15, RESEARCH §Pattern 5):
+   *   1. Parse stored JSON.
+   *   2. Read fromVersion (defaults to 0 if missing).
+   *   3. If fromVersion < CURRENT: prune old backups, write new backup,
+   *      then run migrate chain inside a try/catch.
+   *   4. On migration failure: throw StorageError(MIGRATION_FAILED) carrying
+   *      the recovery backup key in the message. Plan 10's recovery banner
+   *      reads this error.
    */
   initialize(): Observable<void> {
     if (this.initialized) {
@@ -83,27 +106,44 @@ export class StorageService {
       }
 
       const rawData = localStorage.getItem(STORAGE_KEY);
-      
+
       if (rawData === null) {
         // First run - create empty data
         this.cachedData = createEmptyAppData();
         this.persistToStorage(this.cachedData);
       } else {
         // Parse existing data
+        let parsed: unknown;
         try {
-          const parsed = JSON.parse(rawData);
-          this.cachedData = this.migrateData(parsed);
-          
-          // Save if migration occurred
-          if (this.cachedData.schemaVersion !== parsed.schemaVersion) {
-            this.persistToStorage(this.cachedData);
-          }
+          parsed = JSON.parse(rawData);
         } catch (e) {
           return throwError(() => new StorageError(
             'Failed to parse stored data',
             'PARSE_ERROR',
             e instanceof Error ? e : undefined
           ));
+        }
+
+        const fromVersion = (parsed as { schemaVersion?: number } | null)?.schemaVersion ?? 0;
+
+        if (fromVersion < CURRENT_SCHEMA_VERSION) {
+          // D-14: write a backup snapshot BEFORE the migration runs.
+          // Pitfall 4: prune older backups first so the new write has room.
+          this.pruneOldBackups();
+          const backupKey = this.writeBackup(rawData, fromVersion);
+
+          try {
+            this.cachedData = this.migrateData(parsed);
+            this.persistToStorage(this.cachedData);
+          } catch (e) {
+            return throwError(() => new StorageError(
+              `Migration failed (v${fromVersion} → v${CURRENT_SCHEMA_VERSION}). Backup at ${backupKey}.`,
+              'MIGRATION_FAILED',
+              e instanceof Error ? e : undefined,
+            ));
+          }
+        } else {
+          this.cachedData = parsed as AppData;
         }
       }
 
@@ -115,6 +155,54 @@ export class StorageService {
         'NOT_AVAILABLE',
         e instanceof Error ? e : undefined
       ));
+    }
+  }
+
+  /**
+   * Write a pre-migration backup of the raw stored JSON to a timestamped
+   * key under BACKUP_KEY_PREFIX. Best-effort (Pitfall 4): if the backup
+   * write itself overflows quota we swallow the error and continue — failing
+   * the migration because the backup couldn't be written would lose data.
+   * Returns the backup key (used in MIGRATION_FAILED error message for
+   * downstream recovery UI in plan 10).
+   */
+  private writeBackup(rawData: string, fromVersion: number): string {
+    const ts = new Date().toISOString().replace(/:/g, '-');
+    const key = `${StorageService.BACKUP_KEY_PREFIX}v${fromVersion}.${ts}`;
+    try {
+      localStorage.setItem(key, rawData);
+    } catch {
+      /* swallow — best-effort backup, see Pitfall 4 */
+    }
+    return key;
+  }
+
+  /**
+   * Prune backup keys, keeping only the most recent MAX_BACKUPS_TO_KEEP.
+   *
+   * Security gate (T-09-02): filters STRICTLY on BACKUP_KEY_PREFIX so it
+   * can never delete STORAGE_KEY itself or any unrelated key. The trailing
+   * dot in the prefix is what makes this safe — `fitness_tracker_data` (the
+   * live key) does NOT start with `fitness_tracker_data.backup.`.
+   */
+  private pruneOldBackups(): void {
+    const keys: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(StorageService.BACKUP_KEY_PREFIX)) {
+        keys.push(k);
+      }
+    }
+    // Lexicographic sort works because the timestamp suffix is fixed-width
+    // ISO-8601. Reverse so newest is first; slice off the head we want to
+    // keep, leaving older keys to remove.
+    keys.sort().reverse();
+    for (const k of keys.slice(StorageService.MAX_BACKUPS_TO_KEEP)) {
+      try {
+        localStorage.removeItem(k);
+      } catch {
+        /* ignore — best-effort prune */
+      }
     }
   }
 
