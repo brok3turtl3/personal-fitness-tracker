@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: planning
-last_updated: "2026-05-02T17:31:36.079Z"
+status: ready_to_execute
+last_updated: "2026-05-02T18:35:00.000Z"
 progress:
   total_phases: 5
   completed_phases: 0
-  total_plans: 0
+  total_plans: 10
   completed_plans: 0
 ---
 
 # State: Personal Fitness Tracker — Refinement Milestone (v2)
 
-**Last Updated:** 2026-05-02 (Phase 1 context gathered)
+**Last Updated:** 2026-05-02 (Phase 1 planned — 10 plans across 4 waves)
 
 ---
 
@@ -30,10 +30,16 @@ progress:
 ## Current Position
 
 **Phase:** 1 — Foundations
-**Plan:** None yet (run `/gsd-plan-phase 1`)
-**Status:** Phase 1 context gathered; ready for planning
-**Resume file:** `.planning/phases/01-foundations/01-CONTEXT.md`
-**Progress:** [░░░░░░░░░░] 0/5 phases complete
+**Plan:** 10 plans across 4 waves
+**Status:** Ready to execute (planning complete; verification passed iteration 3/3)
+**Resume file:** `.planning/phases/01-foundations/01-01-PLAN.md` (next action: `/gsd-execute-phase 1`)
+**Progress:** [░░░░░░░░░░] 0/5 phases complete; Phase 1 0/10 plans complete
+
+**Wave structure:**
+- Wave 1: Plans 01, 02, 03, 04 (no dependencies — Karma config, shared utilities, empty/error components, typed schemas + fixtures)
+- Wave 2: Plans 05, 06, 09 (e2e harness, utility consumers, storage refactor)
+- Wave 3: Plans 07, 10 (page retrofit, recovery banner)
+- Wave 4: Plan 08 (characterization specs — depends on retrofitted pages)
 
 ---
 
@@ -44,9 +50,10 @@ progress:
 | Phases planned | 5 |
 | Phases completed | 0 |
 | Requirements mapped | 42/42 |
-| Plans drafted | 0 |
+| Plans drafted | 10 |
 | Plans completed | 0 |
 | Verifier passes | 0 |
+| Plan-checker iterations | 3 (PASS on iteration 3) |
 
 ---
 
@@ -74,7 +81,7 @@ progress:
 
 ### Open Todos
 
-- Run `/gsd-plan-phase 1` to start Phase 1 (Foundations) planning.
+- Run `/gsd-execute-phase 1` to begin Phase 1 (Foundations) execution. 10 plans across 4 waves; Wave 1 has 4 parallelizable plans.
 
 ### Blockers
 

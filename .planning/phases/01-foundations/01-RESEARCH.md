@@ -1007,7 +1007,7 @@ See Pattern 3 above.
 
 **If this table is empty:** Not empty — these are open implementation-time decisions, all manageable with cheap one-step verification. None are blockers.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should `chart-grouping.ts` merge into `date-range.ts`, or live as a separate module?**
    - What we know: CONTEXT.md `<code_context>` says "likely extending `date-range.ts` or a new `chart-grouping.ts`" — leaves it open.

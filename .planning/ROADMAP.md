@@ -29,17 +29,31 @@
   3. A user navigating between pages produces no leaked subscriptions (verifiable in Angular DevTools), and an empty- or error-state on any feature page renders consistently across the app.
   4. A user whose stored `AppData` shape is malformed sees an explicit migration-failure UI with a recovery key pointing at their pre-migration backup, instead of silently losing data.
   5. A user (or CI) can run a Puppeteer smoke test and an `axe-core` per-route a11y audit without inventing the harness — both extend the scaffolds shipped in this phase.
-**Plans**: 10 plans
-- [ ] 01-foundations/01-01-PLAN.md — Coverage config + axe-core install + tsconfig.spec patch (Wave 1; FOUND-01)
-- [ ] 01-foundations/01-02-PLAN.md — Shared utilities create: id.ts, chart-grouping.ts, a11y-test-helpers.ts (Wave 1; FOUND-02, FOUND-04, FOUND-05)
-- [ ] 01-foundations/01-03-PLAN.md — Empty-state + error-state standalone components (Wave 1; FOUND-06)
-- [ ] 01-foundations/01-04-PLAN.md — Typed legacy schemas + V0..V3 fixtures + malformed-input fixtures (Wave 1; FOUND-07)
-- [ ] 01-foundations/01-05-PLAN.md — Puppeteer + axe-core e2e harness scaffold (Wave 2; FOUND-05)
-- [ ] 01-foundations/01-06-PLAN.md — id.ts + chart-grouping consumer retrofit across services + chart pages (Wave 2; FOUND-02)
-- [ ] 01-foundations/01-07-PLAN.md — Empty/error retrofit + subscription hygiene across 8 feature pages (Wave 2; FOUND-03, FOUND-06)
-- [ ] 01-foundations/01-08-PLAN.md — Characterization specs for diet/chat/charts/reports (Wave 2; FOUND-04, FOUND-05)
-- [ ] 01-foundations/01-09-PLAN.md — Storage migration refactor: typed chain + backup-before-migrate + fixture-driven spec (Wave 2; FOUND-07)
-- [ ] 01-foundations/01-10-PLAN.md — Recovery banner + AppComponent integration (Wave 3; FOUND-07)
+**Plans**: 10 plans across 4 waves
+
+**Wave 1** *(no dependencies — runs first)*
+- [ ] 01-foundations/01-01-PLAN.md — Coverage config + axe-core install + tsconfig.spec patch (FOUND-01)
+- [ ] 01-foundations/01-02-PLAN.md — Shared utilities create: id.ts, chart-grouping.ts, a11y-test-helpers.ts (FOUND-02, FOUND-04, FOUND-05)
+- [ ] 01-foundations/01-03-PLAN.md — Empty-state + error-state standalone components (FOUND-06)
+- [ ] 01-foundations/01-04-PLAN.md — Typed legacy schemas + V0..V3 fixtures + malformed-input fixtures (FOUND-07)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 01-foundations/01-05-PLAN.md — Puppeteer + axe-core e2e harness scaffold (FOUND-05) — depends on Plan 01
+- [ ] 01-foundations/01-06-PLAN.md — id.ts + chart-grouping consumer retrofit across services + chart pages (FOUND-02) — depends on Plan 02
+- [ ] 01-foundations/01-09-PLAN.md — Storage migration refactor: typed chain + backup-before-migrate + fixture-driven spec (FOUND-07) — depends on Plan 04
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 01-foundations/01-07-PLAN.md — Empty/error retrofit + subscription hygiene across 8 feature pages (FOUND-03, FOUND-06) — depends on Plans 03, 06
+- [ ] 01-foundations/01-10-PLAN.md — Recovery banner + AppComponent integration (FOUND-07) — depends on Plans 03, 09
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 01-foundations/01-08-PLAN.md — Characterization specs for diet/chat/charts/reports (FOUND-04, FOUND-05) — depends on Plans 02, 03, 07
+
+**Cross-cutting constraints** *(must_haves shared across plans):*
+- Storage chokepoint: `StorageService` is the sole LocalStorage access path (Plans 09, 10 add tree-wide grep gate)
+- Standalone components only — no NgModules introduced (Plans 03, 10)
+- No `any` in production paths — typed legacy interfaces replace existing `as any` casts (Plans 04, 09)
+- axe-core severity threshold: serious/critical only fail Phase 1 specs (Plans 02, 05, 08)
 
 ### Phase 2: Diet UX Overhaul
 **Goal**: The user's daily diet-logging friction is gone — adding new foods, picking the right unit, copying yesterday's meal, and seeing accurate daily totals all happen without leaving the meal-log flow.
