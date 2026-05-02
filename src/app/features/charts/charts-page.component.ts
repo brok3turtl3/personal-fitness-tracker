@@ -1,5 +1,6 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, DestroyRef, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { ChartConfiguration, ChartData } from 'chart.js';
@@ -22,12 +23,14 @@ import { StorageService } from '../../services/storage.service';
 import { WeightService } from '../../services/weight.service';
 import { groupByDay, toDateKey, round2 } from '../../shared/chart-grouping';
 import { DateRangePreset, filterByRange, resolveDateRange } from '../../shared/date-range';
+import { EmptyStateComponent } from '../../shared/empty-state.component';
+import { ErrorStateComponent } from '../../shared/error-state.component';
 
 
 @Component({
   selector: 'app-charts-page',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, BaseChartDirective],
+  imports: [CommonModule, ReactiveFormsModule, BaseChartDirective, EmptyStateComponent, ErrorStateComponent],
   template: `
     <div class="page-container">
       <h1>Charts</h1>
@@ -88,7 +91,10 @@ import { DateRangePreset, filterByRange, resolveDateRange } from '../../shared/d
           </div>
 
           @if (rangeError) {
-            <div class="form-error" role="alert">{{ rangeError }}</div>
+            <app-error-state
+              title="Couldn't build charts"
+              [message]="rangeError"
+            ></app-error-state>
           }
 
           <div class="form-row">
@@ -134,7 +140,10 @@ import { DateRangePreset, filterByRange, resolveDateRange } from '../../shared/d
             <canvas baseChart [type]="'line'" [data]="weightChartData" [options]="lineOptions"></canvas>
           </div>
         } @else {
-          <div class="empty-state">No weight entries in this range.</div>
+          <app-empty-state
+            title="No weight entries in this range"
+            message="Try a wider range or add more entries."
+          ></app-empty-state>
         }
       </section>
 
@@ -145,7 +154,10 @@ import { DateRangePreset, filterByRange, resolveDateRange } from '../../shared/d
             <canvas baseChart [type]="'line'" [data]="cardioChartData" [options]="cardioOptions"></canvas>
           </div>
         } @else {
-          <div class="empty-state">No cardio sessions in this range.</div>
+          <app-empty-state
+            title="No cardio sessions in this range"
+            message="Try a wider range or add more entries."
+          ></app-empty-state>
         }
       </section>
 
@@ -156,7 +168,10 @@ import { DateRangePreset, filterByRange, resolveDateRange } from '../../shared/d
             <canvas baseChart [type]="'line'" [data]="readingsChartData" [options]="lineOptions"></canvas>
           </div>
         } @else {
-          <div class="empty-state">No readings in this range.</div>
+          <app-empty-state
+            title="No readings in this range"
+            message="Try a wider range or add more entries."
+          ></app-empty-state>
         }
       </section>
     </div>
@@ -247,6 +262,8 @@ import { DateRangePreset, filterByRange, resolveDateRange } from '../../shared/d
   `]
 })
 export class ChartsPageComponent implements OnInit {
+  private destroyRef = inject(DestroyRef);
+
   controlsForm: FormGroup;
   rangeError: string | null = null;
 
@@ -306,13 +323,14 @@ export class ChartsPageComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    this.storageService.initialize().subscribe({
-      next: () => this.loadAllData(),
-      error: (err) => {
-        console.error('Failed to initialize storage:', err);
-        this.rangeError = 'Failed to load charts data.';
-      }
-    });
+    this.storageService.initialize()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => this.loadAllData(),
+        error: () => {
+          this.rangeError = 'Failed to load charts data.';
+        }
+      });
   }
 
   onControlsChanged(): void {
@@ -353,18 +371,19 @@ export class ChartsPageComponent implements OnInit {
       cardio: this.cardioService.getSessions(),
       weight: this.weightService.getEntries(),
       readings: this.readingsService.getReadings()
-    }).subscribe({
-      next: ({ cardio, weight, readings }) => {
-        this.cardioSessions = cardio;
-        this.weightEntries = weight;
-        this.healthReadings = readings;
-        this.rebuildCharts();
-      },
-      error: (err) => {
-        console.error('Failed to load charts data:', err);
-        this.rangeError = 'Failed to load charts data.';
-      }
-    });
+    })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: ({ cardio, weight, readings }) => {
+          this.cardioSessions = cardio;
+          this.weightEntries = weight;
+          this.healthReadings = readings;
+          this.rebuildCharts();
+        },
+        error: () => {
+          this.rangeError = 'Failed to load charts data.';
+        }
+      });
   }
 
   private rebuildCharts(): void {

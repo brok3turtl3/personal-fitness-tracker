@@ -1,17 +1,27 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, DestroyRef, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { AISettingsService } from '../../services/ai-settings.service';
 import { StorageService } from '../../services/storage.service';
 import { AISettings, CLAUDE_MODELS } from '../../models/ai-chat.model';
+import { ErrorStateComponent } from '../../shared/error-state.component';
 
 @Component({
   selector: 'app-settings-page',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule],
+  imports: [CommonModule, ReactiveFormsModule, ErrorStateComponent],
   template: `
     <div class="page-container">
       <h1>Settings</h1>
+
+      @if (loadError) {
+        <app-error-state
+          title="Couldn't load settings"
+          [error]="loadError"
+          (retry)="reloadData()"
+        ></app-error-state>
+      }
 
       <form [formGroup]="settingsForm" (ngSubmit)="onSave()" class="settings-form" aria-label="AI settings form">
         <section class="settings-section">
@@ -205,12 +215,15 @@ import { AISettings, CLAUDE_MODELS } from '../../models/ai-chat.model';
   `]
 })
 export class SettingsPageComponent implements OnInit {
+  private destroyRef = inject(DestroyRef);
+
   settingsForm!: FormGroup;
   models = CLAUDE_MODELS;
   showKey = false;
   saving = false;
   statusMessage = '';
   statusIsError = false;
+  loadError: Error | null = null;
 
   constructor(
     private fb: FormBuilder,
@@ -225,15 +238,34 @@ export class SettingsPageComponent implements OnInit {
       maxResponseTokens: [4096, [Validators.required, Validators.min(1), Validators.max(32768)]]
     });
 
-    this.storageService.initialize().subscribe(() => {
-      this.aiSettingsService.getSettings().subscribe(settings => {
-        this.settingsForm.patchValue({
-          apiKey: settings.apiKey ?? '',
-          selectedModel: settings.selectedModel ?? '',
-          maxResponseTokens: settings.maxResponseTokens
-        });
+    this.reloadData();
+  }
+
+  reloadData(): void {
+    this.loadError = null;
+    this.storageService.initialize()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.aiSettingsService.getSettings()
+            .pipe(takeUntilDestroyed(this.destroyRef))
+            .subscribe({
+              next: (settings) => {
+                this.settingsForm.patchValue({
+                  apiKey: settings.apiKey ?? '',
+                  selectedModel: settings.selectedModel ?? '',
+                  maxResponseTokens: settings.maxResponseTokens
+                });
+              },
+              error: (err) => {
+                this.loadError = err instanceof Error ? err : new Error(String(err));
+              }
+            });
+        },
+        error: (err) => {
+          this.loadError = err instanceof Error ? err : new Error(String(err));
+        }
       });
-    });
   }
 
   onSave(): void {
@@ -249,31 +281,35 @@ export class SettingsPageComponent implements OnInit {
       maxResponseTokens: formValue.maxResponseTokens
     };
 
-    this.aiSettingsService.saveSettings(settings).subscribe({
-      next: () => {
-        this.statusMessage = 'Settings saved successfully.';
-        this.statusIsError = false;
-        this.saving = false;
-      },
-      error: (err) => {
-        this.statusMessage = err.message || 'Failed to save settings.';
-        this.statusIsError = true;
-        this.saving = false;
-      }
-    });
+    this.aiSettingsService.saveSettings(settings)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.statusMessage = 'Settings saved successfully.';
+          this.statusIsError = false;
+          this.saving = false;
+        },
+        error: (err) => {
+          this.statusMessage = err.message || 'Failed to save settings.';
+          this.statusIsError = true;
+          this.saving = false;
+        }
+      });
   }
 
   onClearKey(): void {
-    this.aiSettingsService.clearApiKey().subscribe({
-      next: () => {
-        this.settingsForm.patchValue({ apiKey: '' });
-        this.statusMessage = 'API key cleared.';
-        this.statusIsError = false;
-      },
-      error: (err) => {
-        this.statusMessage = err.message || 'Failed to clear API key.';
-        this.statusIsError = true;
-      }
-    });
+    this.aiSettingsService.clearApiKey()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.settingsForm.patchValue({ apiKey: '' });
+          this.statusMessage = 'API key cleared.';
+          this.statusIsError = false;
+        },
+        error: (err) => {
+          this.statusMessage = err.message || 'Failed to clear API key.';
+          this.statusIsError = true;
+        }
+      });
   }
 }

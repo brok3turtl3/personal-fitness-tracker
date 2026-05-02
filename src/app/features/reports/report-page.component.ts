@@ -1,5 +1,6 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, DestroyRef, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { ChartConfiguration, ChartData } from 'chart.js';
 import { BaseChartDirective } from 'ng2-charts';
@@ -21,11 +22,13 @@ import { StorageService } from '../../services/storage.service';
 import { WeightService } from '../../services/weight.service';
 import { groupByDay, toDateKey, round2 } from '../../shared/chart-grouping';
 import { filterByRange, ResolvedDateRange } from '../../shared/date-range';
+import { EmptyStateComponent } from '../../shared/empty-state.component';
+import { ErrorStateComponent } from '../../shared/error-state.component';
 
 @Component({
   selector: 'app-report-page',
   standalone: true,
-  imports: [CommonModule, RouterLink, BaseChartDirective],
+  imports: [CommonModule, RouterLink, BaseChartDirective, EmptyStateComponent, ErrorStateComponent],
   template: `
     <div class="page-container report">
       <header class="report-header">
@@ -44,7 +47,11 @@ import { filterByRange, ResolvedDateRange } from '../../shared/date-range';
       </header>
 
       @if (loadError) {
-        <div class="form-error" role="alert">{{ loadError }}</div>
+        <app-error-state
+          title="Couldn't load report data"
+          [message]="loadError"
+          (retry)="loadData()"
+        ></app-error-state>
       }
 
       <section class="summary-grid">
@@ -98,7 +105,9 @@ import { filterByRange, ResolvedDateRange } from '../../shared/date-range';
             <canvas baseChart [type]="'line'" [data]="weightChartData" [options]="lineOptions"></canvas>
           </div>
         } @else {
-          <div class="empty-state">No weight entries in this range.</div>
+          <app-empty-state
+            title="No weight entries in this range"
+          ></app-empty-state>
         }
       </section>
 
@@ -109,7 +118,9 @@ import { filterByRange, ResolvedDateRange } from '../../shared/date-range';
             <canvas baseChart [type]="'line'" [data]="cardioChartData" [options]="cardioOptions"></canvas>
           </div>
         } @else {
-          <div class="empty-state">No cardio sessions in this range.</div>
+          <app-empty-state
+            title="No cardio sessions in this range"
+          ></app-empty-state>
         }
       </section>
 
@@ -120,7 +131,9 @@ import { filterByRange, ResolvedDateRange } from '../../shared/date-range';
             <canvas baseChart [type]="'line'" [data]="readingsChartData" [options]="lineOptions"></canvas>
           </div>
         } @else {
-          <div class="empty-state">No readings in this range.</div>
+          <app-empty-state
+            title="No readings in this range"
+          ></app-empty-state>
         }
       </section>
     </div>
@@ -244,6 +257,8 @@ import { filterByRange, ResolvedDateRange } from '../../shared/date-range';
   `]
 })
 export class ReportPageComponent implements OnInit {
+  private destroyRef = inject(DestroyRef);
+
   rangeLabel = 'All time';
   generatedLabel = '';
 
@@ -294,60 +309,66 @@ export class ReportPageComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
-    this.route.queryParamMap.subscribe(params => {
-      const startMs = this.parseNumber(params.get('startMs'));
-      const endMs = this.parseNumber(params.get('endMs'));
-      const generatedAt = params.get('generatedAt');
+    this.route.queryParamMap
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(params => {
+        const startMs = this.parseNumber(params.get('startMs'));
+        const endMs = this.parseNumber(params.get('endMs'));
+        const generatedAt = params.get('generatedAt');
 
-      this.showDistance = this.parseBoolean(params.get('cardioShowDistance'));
-      this.showCalories = this.parseBoolean(params.get('cardioShowCalories'));
-      this.readingType = (params.get('readingType') as HealthReadingType) || 'blood_pressure';
+        this.showDistance = this.parseBoolean(params.get('cardioShowDistance'));
+        this.showCalories = this.parseBoolean(params.get('cardioShowCalories'));
+        this.readingType = (params.get('readingType') as HealthReadingType) || 'blood_pressure';
 
-      this.range = {
-        startMs: startMs ?? undefined,
-        endMs: endMs ?? undefined
-      };
+        this.range = {
+          startMs: startMs ?? undefined,
+          endMs: endMs ?? undefined
+        };
 
-      const generatedDate = generatedAt ? new Date(generatedAt) : new Date();
-      this.generatedLabel = this.formatLongDateTime(generatedDate);
-      this.rangeLabel = this.describeRange(this.range);
+        const generatedDate = generatedAt ? new Date(generatedAt) : new Date();
+        this.generatedLabel = this.formatLongDateTime(generatedDate);
+        this.rangeLabel = this.describeRange(this.range);
 
-      const readingLabel = READING_TYPES.find(t => t.value === this.readingType)?.label;
-      this.readingsChartLabel = readingLabel ?? 'Readings';
+        const readingLabel = READING_TYPES.find(t => t.value === this.readingType)?.label;
+        this.readingsChartLabel = readingLabel ?? 'Readings';
 
-      this.loadData();
-    });
+        this.loadData();
+      });
   }
 
   onPrint(): void {
     window.print();
   }
 
-  private loadData(): void {
+  loadData(): void {
     this.loadError = null;
 
-    this.storageService.initialize().subscribe({
-      next: () => {
-        forkJoin({
-          cardio: this.cardioService.getSessions(),
-          weight: this.weightService.getEntries(),
-          readings: this.readingsService.getReadings()
-        }).subscribe({
-          next: ({ cardio, weight, readings }) => {
-            this.cardioSessions = cardio;
-            this.weightEntries = weight;
-            this.healthReadings = readings;
-            this.rebuild();
-          },
-          error: () => {
-            this.loadError = 'Failed to load report data.';
-          }
-        });
-      },
-      error: () => {
-        this.loadError = 'Failed to initialize storage.';
-      }
-    });
+    this.storageService.initialize()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          forkJoin({
+            cardio: this.cardioService.getSessions(),
+            weight: this.weightService.getEntries(),
+            readings: this.readingsService.getReadings()
+          })
+            .pipe(takeUntilDestroyed(this.destroyRef))
+            .subscribe({
+              next: ({ cardio, weight, readings }) => {
+                this.cardioSessions = cardio;
+                this.weightEntries = weight;
+                this.healthReadings = readings;
+                this.rebuild();
+              },
+              error: () => {
+                this.loadError = 'Failed to load report data.';
+              }
+            });
+        },
+        error: () => {
+          this.loadError = 'Failed to initialize storage.';
+        }
+      });
   }
 
   private rebuild(): void {
