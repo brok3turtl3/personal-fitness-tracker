@@ -44,7 +44,7 @@
 
 **Wave 3** *(unblocked — Wave 2 complete)*
 - [x] 01-foundations/01-07-PLAN.md — Empty/error retrofit + subscription hygiene across 8 feature pages (FOUND-03, FOUND-06) — completed 2026-05-02 (2 commits: 84c76c7, f1bda40; SUMMARY: 01-07-SUMMARY.md). 8 feature page components modified: every `.subscribe(...)` (40 sites total) now pipes through `takeUntilDestroyed(this.destroyRef)`; every page declares `private destroyRef = inject(DestroyRef)` field; 7 list/data pages render BOTH `<app-empty-state>` AND `<app-error-state>`; settings has `<app-error-state>` only (RESEARCH §Open Q 2). Storage failures now visible to user (CONCERNS.md "Console-only error reporting" CLOSED). 5 cross-page invariant gates PASS. 236/236 Karma SUCCESS; production build green. **FOUND-03 + FOUND-06 marked complete in REQUIREMENTS.md.** Wave 3 now 1/2 complete.
-- [ ] 01-foundations/01-10-PLAN.md — Recovery banner + AppComponent integration (FOUND-07) — depends on Plans 03, 09
+- [x] 01-foundations/01-10-PLAN.md — Recovery banner + AppComponent integration (FOUND-07) — completed 2026-05-02 (3 commits: 59840ce, 3bbcc04, 7284b48; SUMMARY: 01-10-SUMMARY.md). 2 NEW files (recovery-banner.component.ts + spec) + 4 MODIFIED files (storage.service.ts + spec — added `getBackup` chokepoint method; app.component.ts/html/spec — wired banner on MIGRATION_FAILED). Banner is a thin wrapper over `<app-error-state>` with 3 actions (Retry / Copy backup JSON / Continue with empty data) + clipboard fallback `<textarea>`. AppComponent calls `this.storage.getBackup(this.recoveryKey)` (the sole sanctioned chokepoint path) — zero direct `localStorage.*` calls in any component file. Tree-wide chokepoint sanity gate PASSES: `localStorage.(getItem|setItem|removeItem)` outside `storage.service.ts(.spec)` returns no matches. Full Karma: **248/248 SUCCESS** (was 236, +12). Production build green. **FOUND-07 marked complete in REQUIREMENTS.md** — Phase 1 success criterion #4 ("malformed AppData sees an explicit migration-failure UI with a recovery key") closed end-to-end. **Wave 3 of Phase 1 now complete (2/2).**
 
 **Wave 4** *(blocked on Wave 3 completion)*
 - [ ] 01-foundations/01-08-PLAN.md — Characterization specs for diet/chat/charts/reports (FOUND-04, FOUND-05) — depends on Plans 02, 03, 07
@@ -116,7 +116,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundations | 8/10 | In Progress|  |
+| 1. Foundations | 9/10 | In Progress|  |
 | 2. Diet UX Overhaul | 0/? | Not started | - |
 | 3. AI Memory + Tool Plumbing | 0/? | Not started | - |
 | 4. Agentic Loop + Citation UI | 0/? | Not started | - |

@@ -17,7 +17,7 @@ Requirements for the refinement milestone. Each maps to roadmap phases (filled i
 - [ ] **FOUND-04**: Characterization tests (DOM snapshots + key user flows) in place for `diet-page`, `chat-page`, `charts-page`, `reports-page` BEFORE any refactor touches them
 - [ ] **FOUND-05**: Puppeteer e2e and `axe-core` per-route a11y scaffolds wired so later phases extend rather than invent
 - [x] **FOUND-06**: Shared empty-state + error-state component pattern available for reuse across feature pages
-- [ ] **FOUND-07**: Schema-migration discipline established — typed `LegacyAppDataVN` interfaces (no `as any` reads), backup-before-migrate recovery key, fixture-driven characterization tests — applies to V5/V6 migrations to follow
+- [x] **FOUND-07**: Schema-migration discipline established — typed `LegacyAppDataVN` interfaces (no `as any` reads), backup-before-migrate recovery key, fixture-driven characterization tests, recovery banner UX — completed in plans 01-04 (typed schemas + fixtures) + 01-09 (typed migrate chain + backup-before-migrate) + 01-10 (recovery banner + AppComponent integration, 2026-05-02)
 
 ### DIET — Diet UX overhaul
 
@@ -127,7 +127,7 @@ Mapped by the roadmapper.
 | FOUND-04 | Phase 1 | Pending |
 | FOUND-05 | Phase 1 | Pending |
 | FOUND-06 | Phase 1 | Complete |
-| FOUND-07 | Phase 1 | Pending |
+| FOUND-07 | Phase 1 | Complete (plans 01-04 + 01-09 + 01-10, 2026-05-02) |
 | DIET-01 | Phase 2 | Pending |
 | DIET-02 | Phase 2 | Pending |
 | DIET-03 | Phase 2 | Pending |
@@ -171,4 +171,4 @@ Mapped by the roadmapper.
 
 ---
 *Requirements defined: 2026-05-02*
-*Last updated: 2026-05-02 — FOUND-02 marked complete after plan 01-06 (consumer retrofit of shared id.ts + chart-grouping)*
+*Last updated: 2026-05-02 — FOUND-07 marked complete after plan 01-10 (recovery banner + AppComponent integration; final FOUND-07 piece — typed legacy schemas + backup-before-migrate + recovery banner all landed; tree-wide storage chokepoint gate now in place)*
