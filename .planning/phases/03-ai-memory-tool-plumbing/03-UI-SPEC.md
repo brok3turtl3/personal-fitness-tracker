@@ -41,7 +41,7 @@ Declared values (multiples of 4, derived from existing `src/styles.css` rem usag
 | Token | Value | Usage |
 |-------|-------|-------|
 | xs | 4px (0.25rem) | Inline badge gaps, error-message margin-top, time-stamp margin |
-| sm | 8px (0.5rem) | Compact element spacing — form-group label margin, button gaps |
+| sm | 8px (0.5rem) | Compact element spacing — form-group label margin, button gaps, pending-pill action-row margin-top |
 | md | 16px (1rem) | Default element spacing — form-group margin-bottom, message gap, history-item padding |
 | lg | 24px (1.5rem) | Section padding — page-container, h1 margin-bottom, settings-section spacing |
 | xl | 32px (2rem) | Layout gaps — main-content padding, side-rail nav width target |
@@ -55,7 +55,7 @@ Declared values (multiples of 4, derived from existing `src/styles.css` rem usag
 
 ## Typography
 
-Declared from `src/styles.css` + existing settings-page.component.ts. Phase 3 does NOT introduce new sizes.
+Declared from `src/styles.css` + existing settings-page.component.ts. Phase 3 does NOT introduce new sizes. Exactly **4 sizes** are in use across the phase: 14px, 16px, 20px, 28px.
 
 | Role | Size | Weight | Line Height |
 |------|------|--------|-------------|
@@ -71,7 +71,7 @@ Declared from `src/styles.css` + existing settings-page.component.ts. Phase 3 do
 - Pending pill action labels: 14px / 600 (button labels, matches `.btn-sm`)
 - Memory inspector path-tree node label: 16px / 400 / 1.5 (file-name look)
 - Memory inspector path-tree segment depth indent: each level adds `1rem` left padding (visual hierarchy without icons)
-- Resolved pending pill timestamp: 12px (0.75rem) / 400 (matches `.message-time`)
+- Resolved pending pill timestamp: 14px (0.875rem) / 400 / `color: #7f8c8d` (existing muted-secondary token from `src/styles.css`). Visual distinction from the 14px / 600 pending-state label is achieved via weight (400 vs 600) **and** muted color — not via a smaller size. This keeps the phase's declared size set at exactly 4 (14/16/20/28).
 
 ---
 
@@ -85,12 +85,13 @@ Existing palette preserved (no new hex introduced). 60/30/10 split derived from 
 | Secondary (30%) | `#2c3e50` (text + nav background) and `#ecf0f1` (button-secondary, side-rail surface) | Body text, h1/h2 headings, side-rail nav background, secondary button surface |
 | Accent (10%) | `#3498db` | **Reserved-for list below — never "all interactive elements"** |
 | Destructive | `#e74c3c` (and hover `#c0392b`) | `<app-error-state>` text, validation errors, Delete-memory-file button hover state |
+| Muted secondary | `#7f8c8d` | Resolved pending-pill timestamp, character-counter helper text (existing token; not a new color) |
 
 **Accent reserved for (explicit list — Phase 3):**
 1. Active route indicator (`routerLinkActive="active"` in side-rail nav — `#3498db` background)
 2. `<form>` input focus border (`border-color: #3498db; box-shadow: 0 0 0 2px rgba(52,152,219,0.2)`) — preserved from existing `.form-group input:focus`
 3. Primary submit button: "Save profile", "Save AI settings" (`<button class="btn btn-primary">`)
-4. Pending pill primary action: "Save" button (memory write / profile update accept) — uses existing `.btn .btn-primary`
+4. Pending pill primary action: "Save to memory" / "Apply update" button — uses existing `.btn .btn-primary`
 5. Info-note left border (`border-left: 3px solid #3498db`) on the AI-settings privacy explainer and the dev-only seed button container
 
 **Accent NOT used for:**
@@ -103,6 +104,21 @@ Existing palette preserved (no new hex introduced). 60/30/10 split derived from 
 - Resolved pending pill carries BOTH a text label ("Saved", "Discarded", "Edited") AND a leading checkmark/cross/pencil glyph (Unicode `✓`, `✗`, `✎`) — color is never the only indicator.
 - Validation-error textareas combine `#e74c3c` border with the existing `.error-message` text below the field.
 - Active side-rail item combines accent background with `aria-current="page"` for screen-reader users.
+
+---
+
+## Focal Point Declaration
+
+Each new page/surface declares one focal point — the single element a sighted user's eye should land on first and the element keyboard users land on after navigation/transition.
+
+| Surface | Focal point | Mechanism |
+|---------|-------------|-----------|
+| `/settings/profile` | **Goals textarea** — first and most-edited profile field. Receives auto-focus on page load so a user who clicked "Profile" can begin typing immediately without clicking. | `ViewChild('goalsField')` + `setTimeout(() => el.focus(), 0)` in `ngAfterViewInit`. Matches the focus pattern used by chat-message-list scroll restoration (`chat-message-list.component.ts:118–120`). |
+| `/settings/ai` | Existing API key field (preserved from current `settings-page.component.ts`). Phase 3 does not move this focal point — the renamed component keeps existing focus behavior. | Existing — no change. |
+| `/settings/memory` | Page h1 (no auto-focus on a control because the surface is read-only by default). First Tab lands on the first path-tree leaf button. | Native document order. |
+| Settings shell (any sub-page) | Sub-page focal point above takes precedence; the side-rail link that matches the current route receives `aria-current="page"` for orientation but does NOT steal focus. | Existing Angular routing — no programmatic focus on the rail. |
+| Chat stream **with a pending pill present** | **Pending pill primary action button** ("Save to memory" or "Apply update") — auto-focused so keyboard users can resolve the proposal without tab-walking through the entire message stream. | `ViewChild('primaryAction')` on `<app-pending-pill>` + `setTimeout(() => el.focus(), 0)` after the pill enters pending state. Released back to chat input on resolve (see Accessibility Contract → focus management). |
+| Chat stream with **no** pending pill | Existing behavior — chat input textarea retains focus per existing `chat-message-list` pattern. | Existing — no change. |
 
 ---
 
@@ -169,7 +185,7 @@ All three default **off** (= data IS sent — D-09: defaults are all redaction-o
 | Path-tree node aria-label | `{path}, {n} bytes` |
 | Inline preview "Edit" button | `Edit` |
 | Edit-mode "Save" button | `Save changes` |
-| Edit-mode "Cancel" button | `Cancel` |
+| Edit-mode "Cancel" button | `Discard edits` |
 | "Delete" button | `Delete` |
 | Delete confirmation (window.confirm) | `Delete memory file "{path}"? This can't be undone.` |
 | Delete success status-message | `Memory file deleted.` |
@@ -185,9 +201,9 @@ Two pill kinds, distinguished by `tool_use.name`:
 |-------|--------------|
 | Pending header | `AI wants to remember this:` |
 | Pending body | `{proposal text}` (rendered as plain block, max-height with scroll) |
-| Pending action 1 | `Save` (primary) |
-| Pending action 2 | `Edit` (secondary) |
-| Pending action 3 | `Discard` (secondary) |
+| Pending action 1 | `Save to memory` (primary) |
+| Pending action 2 | `Edit proposal` (secondary) |
+| Pending action 3 | `Discard proposal` (secondary) |
 | Edited (status='edited') badge | `✎ Edited and saved {date | time}` |
 | Saved (status='approved') badge | `✓ Saved {date | time}` |
 | Discarded (status='discarded') badge | `✗ Discarded {date | time}` |
@@ -198,9 +214,9 @@ Two pill kinds, distinguished by `tool_use.name`:
 |-------|--------------|
 | Pending header | `AI proposes a profile update to "{section}":` |
 | Pending body | `{diff or full proposed text}` |
-| Pending action 1 | `Save` |
-| Pending action 2 | `Edit` |
-| Pending action 3 | `Discard` |
+| Pending action 1 | `Apply update` (primary) |
+| Pending action 2 | `Edit proposal` (secondary) |
+| Pending action 3 | `Discard proposal` (secondary) |
 | Resolved badges | identical to memory pill (`✓ Saved`, `✎ Edited and saved`, `✗ Discarded`) |
 
 `{section}` token is one of: `Goals`, `Preferences`, `Dietary constraints`, `Training history` (matches profile labels above).
@@ -211,7 +227,7 @@ Two pill kinds, distinguished by `tool_use.name`:
 |---------|------|
 | Textarea aria-label | `Edit AI proposal` |
 | Save button | `Save edits` |
-| Cancel button | `Cancel` (returns to pending state) |
+| Cancel button | `Keep original` (returns to pending state — wording emphasizes that the AI's original proposal text is preserved on revert) |
 
 ### Dev-only seed button (D-12) — visible only when `location.hostname === 'localhost'`
 
@@ -238,10 +254,10 @@ Two pill kinds, distinguished by `tool_use.name`:
 | Component | File | Type | Notes |
 |-----------|------|------|-------|
 | `<app-settings-shell>` | `src/app/features/settings/settings-shell.component.ts` | new standalone | Side-rail nav + `<router-outlet>`. On viewports `< 768px` rail collapses to a horizontal tab strip above the outlet. `<aside>` is the rail container; `<main>` is the outlet container. `aria-current="page"` on active link. |
-| `<app-settings-profile>` | `src/app/features/settings/settings-profile.component.ts` | new standalone | 4 textareas in a Reactive Form; per-section live char counter; inline `.error-message` on > 4096; `.status-message` for save outcome; reuses `<app-error-state>` for load failure. |
+| `<app-settings-profile>` | `src/app/features/settings/settings-profile.component.ts` | new standalone | 4 textareas in a Reactive Form; per-section live char counter; inline `.error-message` on > 4096; `.status-message` for save outcome; reuses `<app-error-state>` for load failure. Goals textarea is the page focal point — auto-focus on view init. |
 | `<app-settings-ai>` | `src/app/features/settings/settings-ai.component.ts` | RENAMED from existing `settings-page.component.ts` | Existing API key / model / max-tokens form preserved; appended "What the AI sees" subsection (3 toggles) and the dev-only "Developer tools" container (visible iff `location.hostname === 'localhost'`). |
 | `<app-settings-memory>` | `src/app/features/settings/settings-memory.component.ts` | new standalone | Path-tree (inline template — premature abstraction to extract per Deferred Ideas), inline read-only preview, in-place edit textarea, delete with `window.confirm`. Empty state via `<app-empty-state>`. |
-| `<app-pending-pill>` | `src/app/features/chat/pending-pill.component.ts` | new standalone | Single component handling all 4 statuses (pending / approved / discarded / edited) and both pill kinds (memory / update_profile) via discriminated rendering on `block.name`. Inputs: `block: ToolUseBlock`. Outputs: `(approve)`, `(discard)`, `(edit)` (emits new text). |
+| `<app-pending-pill>` | `src/app/features/chat/pending-pill.component.ts` | new standalone | Single component handling all 4 statuses (pending / approved / discarded / edited) and both pill kinds (memory / update_profile) via discriminated rendering on `block.name`. Inputs: `block: ToolUseBlock`. Outputs: `(approve)`, `(discard)`, `(edit)` (emits new text). Primary action button is the focal point when pill enters pending state. |
 | `<app-chat-message-list>` (modified) | `src/app/features/chat/chat-message-list.component.ts` | existing — adapt | Switch on `block.type`: `text` → existing markdown render; `tool_use` → `<app-pending-pill>`; `tool_result` → static rendering (deferred — Phase 3 ships no real tool_result blocks because no agentic loop fires). |
 
 **Path-tree visual treatment (memory inspector):**
@@ -259,8 +275,8 @@ Two pill kinds, distinguished by `tool_use.name`:
 - Max-width `80%` (matches `.message`)
 - Header: 14px / 600 / `#2c3e50`
 - Body: 14px / 400 / `#333`, white-space `pre-wrap`
-- Action row: flex, `gap: 0.5rem`, `margin-top: 0.75rem`
-- Resolved-state badge replaces the action row entirely — same card chrome, dimmed surface (`#f8f9fa`), neutral border, 14px label
+- Action row: flex, `gap: 0.5rem`, `margin-top: 0.5rem` (8px / `sm` token — keeps the action row tight against the pill body and matches the existing button-gap rhythm)
+- Resolved-state badge replaces the action row entirely — same card chrome, dimmed surface (`#f8f9fa`), neutral border, 14px / 600 label paired with 14px / 400 / `#7f8c8d` timestamp
 
 ---
 
@@ -305,8 +321,8 @@ Two pill kinds, distinguished by `tool_use.name`:
 | Path-tree leaf buttons | Native `<button>` (not `<div role="button">`); `aria-expanded`; `aria-controls` |
 | Path-tree directory nodes | Plain text — no role abuse (directories are not interactive) |
 | Pending pill | `role="region"` with `aria-label="AI proposal: {kind}"`; resolved badge has `role="status"` + `aria-live="polite"` so screen readers announce when a pending → resolved transition occurs |
-| Pending pill action buttons | Native `<button>`; first button (Save) receives focus when pill enters pending state (`autofocus` is unreliable; use `ViewChild` + `setTimeout(() => el.focus(), 0)` matching existing scroll pattern in chat-message-list:118–120) |
-| Edit-mode textarea | Receives focus when Edit is clicked; Cancel restores focus to the original Save button |
+| Pending pill action buttons | Native `<button>`; first button (Save to memory / Apply update) receives focus when pill enters pending state (`autofocus` is unreliable; use `ViewChild` + `setTimeout(() => el.focus(), 0)` matching existing scroll pattern in chat-message-list:118–120) |
+| Edit-mode textarea | Receives focus when Edit proposal is clicked; "Keep original" restores focus to the original primary action button |
 | Dev-only seed button container | `role="region"` with `aria-label="Developer tools"`; visible status `<p>` confirming localhost-only state |
 | Toggle controls (`/settings/ai` redaction) | Native `<input type="checkbox">` paired with `<label>` — NOT custom switches; `<label>` wraps both control and helper text or uses `aria-describedby` to associate the helper |
 
@@ -317,12 +333,12 @@ Two pill kinds, distinguished by `tool_use.name`:
 
 **Keyboard navigation rules:**
 - Path-tree leaves are focusable in document order (no custom arrow-key handler — out of scope per CLAUDE.md "Function over form")
-- Pending pill: Tab through Save → Edit → Discard in DOM order
-- Edit-mode pill: Tab from textarea to Save edits → Cancel
+- Pending pill: Tab through Save to memory / Apply update → Edit proposal → Discard proposal in DOM order
+- Edit-mode pill: Tab from textarea to Save edits → Keep original
 - Side-rail: Tab through links in declaration order (AI → Profile → Memory)
 
 **Focus management on pill resolution:**
-- After clicking Save / Discard / Save-edits, focus moves to the chat input textarea (the next logical action)
+- After clicking Save to memory / Apply update / Discard proposal / Save edits, focus moves to the chat input textarea (the next logical action)
 - Spec assertion: `document.activeElement.id === 'chat-input'` after resolve
 
 ---
@@ -360,7 +376,7 @@ Not applicable — Phase 3 introduces no third-party UI registry, no `components
 | `<app-empty-state>` / `<app-error-state>` / `<app-recovery-banner>` reuse | 03-CONTEXT.md `code_context` reusable assets section |
 | `takeUntilDestroyed(destroyRef)` on every subscription | CLAUDE.md + STATE.md "Pattern 2 Form A is the codebase-wide subscription-cleanup pattern" |
 | Standalone components only | CLAUDE.md "Component Pattern" |
-| Color palette (#2c3e50, #3498db, #e74c3c, #ecf0f1, #f5f5f5) | Surveyed from `src/styles.css`, `nav.component.ts`, `settings-page.component.ts`, `chat-message-list.component.ts` |
+| Color palette (#2c3e50, #3498db, #e74c3c, #ecf0f1, #f5f5f5, #7f8c8d) | Surveyed from `src/styles.css`, `nav.component.ts`, `settings-page.component.ts`, `chat-message-list.component.ts` |
 | Spacing scale (4/8/16/24/32) | Surveyed from `src/styles.css` rem usage at 16px root |
 | Font + body 16px / 1.5 | `src/styles.css:17–22` |
 | Existing global classes reused (no new global CSS) | CLAUDE.md + Phase 1 conventions; settings-shell, profile, memory all `imports: [CommonModule, ReactiveFormsModule, ErrorStateComponent, EmptyStateComponent]` |
