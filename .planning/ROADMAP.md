@@ -35,7 +35,7 @@
 - [x] 01-foundations/01-01-PLAN.md — Coverage config + axe-core install + tsconfig.spec patch (FOUND-01) — completed 2026-05-02 (3 commits: a638189, e56e818, aef83cb; SUMMARY: 01-01-SUMMARY.md)
 - [x] 01-foundations/01-02-PLAN.md — Shared utilities create: id.ts, chart-grouping.ts, a11y-test-helpers.ts (FOUND-02, FOUND-04, FOUND-05) — completed 2026-05-02 (3 commits: fd0a850, 9bc9680, 7190fba; SUMMARY: 01-02-SUMMARY.md). Building blocks only; FOUND-02/04/05 not yet marked complete in REQUIREMENTS.md (gate on consumer retrofit in plan 06 and characterization specs in plan 08).
 - [x] 01-foundations/01-03-PLAN.md — Empty-state + error-state standalone components (FOUND-06) — completed 2026-05-02 (4 commits: c9c12b2, 2227b9f, 99f3d8b, b28b39f; SUMMARY: 01-03-SUMMARY.md). Both components live in `src/app/shared/`; FOUND-06 NOT yet marked complete in REQUIREMENTS.md (gate on Wave 2 plan 07 page retrofit — pattern exists but no feature page imports it yet).
-- [ ] 01-foundations/01-04-PLAN.md — Typed legacy schemas + V0..V3 fixtures + malformed-input fixtures (FOUND-07)
+- [x] 01-foundations/01-04-PLAN.md — Typed legacy schemas + V0..V3 fixtures + malformed-input fixtures (FOUND-07 — building blocks) — completed 2026-05-02 (3 commits: 694b914, afa9eee, cb2e002; SUMMARY: 01-04-SUMMARY.md). 13 new files: legacy-schemas.ts (5 type-only interfaces) + 12 JSON fixtures (4 input v0..v3, 4 expected v1..v4, 4 malformed). FOUND-07 NOT yet marked complete in REQUIREMENTS.md (gate on Wave 2 plan 09 storage.service.ts refactor + Wave 3 plan 10 recovery banner). Wave 1 of Phase 1 now complete.
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 01-foundations/01-05-PLAN.md — Puppeteer + axe-core e2e harness scaffold (FOUND-05) — depends on Plan 01
@@ -116,7 +116,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundations | 3/10 | In progress (Wave 1) | - |
+| 1. Foundations | 4/10 | In progress (Wave 1 complete; Wave 2 unblocked) | - |
 | 2. Diet UX Overhaul | 0/? | Not started | - |
 | 3. AI Memory + Tool Plumbing | 0/? | Not started | - |
 | 4. Agentic Loop + Citation UI | 0/? | Not started | - |
