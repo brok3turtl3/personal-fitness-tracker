@@ -1,18 +1,29 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, DestroyRef, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 
 import { StorageService } from '../../services/storage.service';
 import { DietService, DietValidationError, scaleFoodTotals } from '../../services/diet.service';
 import { MealEntry, MealType, NutritionTotals, SavedFood } from '../../models/diet.model';
+import { EmptyStateComponent } from '../../shared/empty-state.component';
+import { ErrorStateComponent } from '../../shared/error-state.component';
 
 @Component({
   selector: 'app-diet-page',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule],
+  imports: [CommonModule, ReactiveFormsModule, EmptyStateComponent, ErrorStateComponent],
   template: `
     <div class="page-container">
       <h1>Diet</h1>
+
+      @if (loadError) {
+        <app-error-state
+          title="Couldn't load your diet data"
+          [error]="loadError"
+          (retry)="reloadData()"
+        ></app-error-state>
+      }
 
       <section class="panel" aria-label="Saved foods">
         <h2>Saved Foods</h2>
@@ -112,9 +123,10 @@ import { MealEntry, MealType, NutritionTotals, SavedFood } from '../../models/di
 
         @if (showAddFood) {
           @if (!savedFoods.length) {
-            <div class="empty-state">
-              <p>No saved foods yet. Add your first food above.</p>
-            </div>
+            <app-empty-state
+              title="No saved foods yet"
+              message="Add your first food using the form above."
+            ></app-empty-state>
           } @else {
             <div class="saved-foods">
               <h3>Your Foods</h3>
@@ -332,9 +344,10 @@ import { MealEntry, MealType, NutritionTotals, SavedFood } from '../../models/di
           <h2>Meals ({{ selectedDay }})</h2>
 
           @if (!meals.length) {
-            <div class="empty-state">
-              <p>No meals logged for this day.</p>
-            </div>
+            <app-empty-state
+              title="No meals logged for this day"
+              message="Add meal items above and save to start your daily log."
+            ></app-empty-state>
           } @else {
             <ul class="history-list" role="list">
               @for (meal of meals; track meal.id) {
@@ -505,6 +518,8 @@ import { MealEntry, MealType, NutritionTotals, SavedFood } from '../../models/di
   `]
 })
 export class DietPageComponent implements OnInit {
+  private destroyRef = inject(DestroyRef);
+
   addFoodForm: FormGroup;
   mealForm: FormGroup;
   mealItemForm: FormGroup;
@@ -514,6 +529,7 @@ export class DietPageComponent implements OnInit {
   addFoodError: string | null = null;
   isAddingFood = false;
   editingFoodId: string | null = null;
+  loadError: Error | null = null;
 
   savedFoods: SavedFood[] = [];
   servingEditorFoodId: string | null = null;
@@ -576,13 +592,22 @@ export class DietPageComponent implements OnInit {
     const localForInput = formatLocalDateTime(nowLocal);
     this.mealForm.patchValue({ dateTime: localForInput });
 
-    this.storageService.initialize().subscribe({
-      next: () => {
-        this.loadFoods();
-        this.loadMeals();
-      },
-      error: (err) => console.error('Failed to initialize storage:', err)
-    });
+    this.reloadData();
+  }
+
+  reloadData(): void {
+    this.loadError = null;
+    this.storageService.initialize()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.loadFoods();
+          this.loadMeals();
+        },
+        error: (err) => {
+          this.loadError = err instanceof Error ? err : new Error(String(err));
+        }
+      });
   }
 
   toggleAddFood(): void {
@@ -630,14 +655,16 @@ export class DietPageComponent implements OnInit {
     const ok = window.confirm(`Delete "${food.name}"? Existing logged meals will keep their snapshots.`);
     if (!ok) return;
 
-    this.dietService.deleteSavedFood(food.id).subscribe({
-      next: () => {
-        this.loadFoods();
-      },
-      error: () => {
-        this.addFoodError = 'Failed to delete food.';
-      }
-    });
+    this.dietService.deleteSavedFood(food.id)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.loadFoods();
+        },
+        error: () => {
+          this.addFoodError = 'Failed to delete food.';
+        }
+      });
   }
 
   foodUnitLabel(): string {
@@ -679,18 +706,20 @@ export class DietPageComponent implements OnInit {
           nutrientsPerUnit
         });
 
-    save$.subscribe({
-      next: () => {
-        this.isAddingFood = false;
-        this.showAddFood = false;
-        this.editingFoodId = null;
-        this.loadFoods();
-      },
-      error: (err) => {
-        this.isAddingFood = false;
-        this.addFoodError = err instanceof DietValidationError ? err.errors.join(', ') : 'Failed to save food.';
-      }
-    });
+    save$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.isAddingFood = false;
+          this.showAddFood = false;
+          this.editingFoodId = null;
+          this.loadFoods();
+        },
+        error: (err) => {
+          this.isAddingFood = false;
+          this.addFoodError = err instanceof DietValidationError ? err.errors.join(', ') : 'Failed to save food.';
+        }
+      });
   }
 
   toggleServingEditor(foodId: string): void {
@@ -713,15 +742,17 @@ export class DietPageComponent implements OnInit {
       }
     }
 
-    this.dietService.addCustomServing(food.id, label, unit, amount).subscribe({
-      next: () => {
-        this.customServingForm.reset({ label: '', unit: 'g', amount: 100 });
-        this.loadFoods();
-      },
-      error: (err) => {
-        this.customServingError = err instanceof DietValidationError ? err.errors.join(', ') : 'Failed to add serving.';
-      }
-    });
+    this.dietService.addCustomServing(food.id, label, unit, amount)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.customServingForm.reset({ label: '', unit: 'g', amount: 100 });
+          this.loadFoods();
+        },
+        error: (err) => {
+          this.customServingError = err instanceof DietValidationError ? err.errors.join(', ') : 'Failed to add serving.';
+        }
+      });
   }
 
   onDayChanged(event: Event): void {
@@ -810,23 +841,25 @@ export class DietPageComponent implements OnInit {
           }))
         });
 
-    save$.subscribe({
-      next: () => {
-        this.isSavingMeal = false;
-        this.pendingItems = [];
-        this.editingMealId = null;
-        this.mealForm.reset({
-          dateTime: formatLocalDateTime(new Date()),
-          mealType: '',
-          notes: ''
-        });
-        this.loadMeals();
-      },
-      error: (err) => {
-        this.isSavingMeal = false;
-        this.mealError = err instanceof DietValidationError ? err.errors.join(', ') : 'Failed to save meal.';
-      }
-    });
+    save$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.isSavingMeal = false;
+          this.pendingItems = [];
+          this.editingMealId = null;
+          this.mealForm.reset({
+            dateTime: formatLocalDateTime(new Date()),
+            mealType: '',
+            notes: ''
+          });
+          this.loadMeals();
+        },
+        error: (err) => {
+          this.isSavingMeal = false;
+          this.mealError = err instanceof DietValidationError ? err.errors.join(', ') : 'Failed to save meal.';
+        }
+      });
   }
 
   startEditMeal(meal: MealEntry): void {
@@ -864,39 +897,49 @@ export class DietPageComponent implements OnInit {
     if (!ok) return;
 
     this.isDeletingMeal = true;
-    this.dietService.deleteMeal(meal.id).subscribe({
-      next: () => {
-        this.isDeletingMeal = false;
-        if (this.editingMealId === meal.id) {
-          this.cancelEditMeal();
+    this.dietService.deleteMeal(meal.id)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.isDeletingMeal = false;
+          if (this.editingMealId === meal.id) {
+            this.cancelEditMeal();
+          }
+          this.loadMeals();
+        },
+        error: () => {
+          this.isDeletingMeal = false;
+          this.mealError = 'Failed to delete meal.';
         }
-        this.loadMeals();
-      },
-      error: () => {
-        this.isDeletingMeal = false;
-        this.mealError = 'Failed to delete meal.';
-      }
-    });
+      });
   }
 
   private loadFoods(): void {
-    this.dietService.getSavedFoods().subscribe({
-      next: (foods) => {
-        this.savedFoods = foods;
-        this.onMealFoodChanged();
-      },
-      error: (err) => console.error('Failed to load saved foods:', err)
-    });
+    this.dietService.getSavedFoods()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (foods) => {
+          this.savedFoods = foods;
+          this.onMealFoodChanged();
+        },
+        error: (err) => {
+          this.loadError = err instanceof Error ? err : new Error(String(err));
+        }
+      });
   }
 
   private loadMeals(): void {
-    this.dietService.getMealsForDay(this.selectedDay).subscribe({
-      next: (meals) => {
-        this.meals = meals;
-        this.dailyTotals = this.dietService.computeDailyTotals(meals);
-      },
-      error: (err) => console.error('Failed to load meals:', err)
-    });
+    this.dietService.getMealsForDay(this.selectedDay)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (meals) => {
+          this.meals = meals;
+          this.dailyTotals = this.dietService.computeDailyTotals(meals);
+        },
+        error: (err) => {
+          this.loadError = err instanceof Error ? err : new Error(String(err));
+        }
+      });
   }
 
   formatMealTime(dateTimeIso: string): string {
