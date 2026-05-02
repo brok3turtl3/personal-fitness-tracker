@@ -117,58 +117,58 @@ Explicit exclusions. Documented to prevent scope creep and re-litigation.
 
 ## Traceability
 
-Filled in by the roadmapper.
+Mapped by the roadmapper.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FOUND-01 | TBD | Pending |
-| FOUND-02 | TBD | Pending |
-| FOUND-03 | TBD | Pending |
-| FOUND-04 | TBD | Pending |
-| FOUND-05 | TBD | Pending |
-| FOUND-06 | TBD | Pending |
-| FOUND-07 | TBD | Pending |
-| DIET-01 | TBD | Pending |
-| DIET-02 | TBD | Pending |
-| DIET-03 | TBD | Pending |
-| DIET-04 | TBD | Pending |
-| DIET-05 | TBD | Pending |
-| DIET-06 | TBD | Pending |
-| DIET-07 | TBD | Pending |
-| DIET-08 | TBD | Pending |
-| DIET-09 | TBD | Pending |
-| DIET-10 | TBD | Pending |
-| CHAT-01 | TBD | Pending |
-| CHAT-02 | TBD | Pending |
-| CHAT-03 | TBD | Pending |
-| CHAT-04 | TBD | Pending |
-| CHAT-05 | TBD | Pending |
-| CHAT-06 | TBD | Pending |
-| CHAT-07 | TBD | Pending |
-| CHAT-08 | TBD | Pending |
-| CHAT-09 | TBD | Pending |
-| CHAT-10 | TBD | Pending |
-| CHAT-11 | TBD | Pending |
-| CHAT-12 | TBD | Pending |
-| RESCH-01 | TBD | Pending |
-| RESCH-02 | TBD | Pending |
-| RESCH-03 | TBD | Pending |
-| QUAL-01 | TBD | Pending |
-| QUAL-02 | TBD | Pending |
-| QUAL-03 | TBD | Pending |
-| QUAL-04 | TBD | Pending |
-| QUAL-05 | TBD | Pending |
-| QUAL-06 | TBD | Pending |
-| QUAL-07 | TBD | Pending |
-| QUAL-08 | TBD | Pending |
-| QUAL-09 | TBD | Pending |
-| QUAL-10 | TBD | Pending |
+| FOUND-01 | Phase 1 | Pending |
+| FOUND-02 | Phase 1 | Pending |
+| FOUND-03 | Phase 1 | Pending |
+| FOUND-04 | Phase 1 | Pending |
+| FOUND-05 | Phase 1 | Pending |
+| FOUND-06 | Phase 1 | Pending |
+| FOUND-07 | Phase 1 | Pending |
+| DIET-01 | Phase 2 | Pending |
+| DIET-02 | Phase 2 | Pending |
+| DIET-03 | Phase 2 | Pending |
+| DIET-04 | Phase 2 | Pending |
+| DIET-05 | Phase 2 | Pending |
+| DIET-06 | Phase 2 | Pending |
+| DIET-07 | Phase 2 | Pending |
+| DIET-08 | Phase 2 | Pending |
+| DIET-09 | Phase 2 | Pending |
+| DIET-10 | Phase 2 | Pending |
+| CHAT-01 | Phase 3 | Pending |
+| CHAT-02 | Phase 4 | Pending |
+| CHAT-03 | Phase 3 | Pending |
+| CHAT-04 | Phase 3 | Pending |
+| CHAT-05 | Phase 4 | Pending |
+| CHAT-06 | Phase 4 | Pending |
+| CHAT-07 | Phase 4 | Pending |
+| CHAT-08 | Phase 4 | Pending |
+| CHAT-09 | Phase 4 | Pending |
+| CHAT-10 | Phase 4 | Pending |
+| CHAT-11 | Phase 3 | Pending |
+| CHAT-12 | Phase 3 | Pending |
+| RESCH-01 | Phase 5 | Pending |
+| RESCH-02 | Phase 5 | Pending |
+| RESCH-03 | Phase 5 | Pending |
+| QUAL-01 | Phase 5 | Pending |
+| QUAL-02 | Phase 5 | Pending |
+| QUAL-03 | Phase 5 | Pending |
+| QUAL-04 | Phase 5 | Pending |
+| QUAL-05 | Phase 5 | Pending |
+| QUAL-06 | Phase 5 | Pending |
+| QUAL-07 | Phase 5 | Pending |
+| QUAL-08 | Phase 5 | Pending |
+| QUAL-09 | Phase 5 | Pending |
+| QUAL-10 | Phase 5 | Pending |
 
 **Coverage:**
 - v2 requirements: 42 total
-- Mapped to phases: 0 (pending roadmap)
-- Unmapped: 42 ⚠️ (will be filled by roadmapper)
+- Mapped to phases: 42 (100% — Phase 1: 7, Phase 2: 10, Phase 3: 5, Phase 4: 7, Phase 5: 13)
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-05-02*
-*Last updated: 2026-05-02 after initial definition*
+*Last updated: 2026-05-02 after roadmap creation (traceability filled in)*
