@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: ready_to_execute
-last_updated: "2026-05-02T18:35:00.000Z"
+status: executing
+last_updated: "2026-05-02T19:08:14Z"
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 10
-  completed_plans: 0
+  completed_plans: 1
 ---
 
 # State: Personal Fitness Tracker — Refinement Milestone (v2)
 
-**Last Updated:** 2026-05-02 (Phase 1 planned — 10 plans across 4 waves)
+**Last Updated:** 2026-05-02 (Phase 1 plan 01-01 complete — coverage config, axe-core install, tsconfig.spec patch landed)
 
 ---
 
@@ -30,10 +30,10 @@ progress:
 ## Current Position
 
 **Phase:** 1 — Foundations
-**Plan:** 10 plans across 4 waves
-**Status:** Ready to execute (planning complete; verification passed iteration 3/3)
-**Resume file:** `.planning/phases/01-foundations/01-01-PLAN.md` (next action: `/gsd-execute-phase 1`)
-**Progress:** [░░░░░░░░░░] 0/5 phases complete; Phase 1 0/10 plans complete
+**Plan:** 10 plans across 4 waves; Plan 01-01 complete
+**Status:** Executing (Wave 1 in progress; remaining Wave 1 plans 02/03/04 are parallelizable)
+**Resume file:** `.planning/phases/01-foundations/01-02-PLAN.md` (next action: continue Wave 1)
+**Progress:** [█░░░░░░░░░] 0/5 phases complete; Phase 1 1/10 plans complete
 
 **Wave structure:**
 - Wave 1: Plans 01, 02, 03, 04 (no dependencies — Karma config, shared utilities, empty/error components, typed schemas + fixtures)
@@ -51,9 +51,15 @@ progress:
 | Phases completed | 0 |
 | Requirements mapped | 42/42 |
 | Plans drafted | 10 |
-| Plans completed | 0 |
+| Plans completed | 1 |
 | Verifier passes | 0 |
 | Plan-checker iterations | 3 (PASS on iteration 3) |
+
+### Plan Execution Log
+
+| Plan | Name | Duration | Tasks | Files | Commits | Completed |
+|------|------|----------|-------|-------|---------|-----------|
+| 01-01 | Coverage config + axe-core install + tsconfig.spec patch | 3m 13s | 3/3 | 4 | a638189, e56e818, aef83cb | 2026-05-02 |
 
 ---
 
@@ -81,7 +87,12 @@ progress:
 
 ### Open Todos
 
-- Run `/gsd-execute-phase 1` to begin Phase 1 (Foundations) execution. 10 plans across 4 waves; Wave 1 has 4 parallelizable plans.
+- Continue Wave 1 of Phase 1: plans 01-02 (id.ts + replace generateUUID copies), 01-03 (chart-grouping extraction), 01-04 (typed legacy-schemas.ts) are parallelizable.
+- Plan 01-01 landed `karma.conf.js`, `axe-core@^4`, `resolveJsonModule` in `tsconfig.spec.json`, and `karmaConfig` wiring in `angular.json`. All Wave 1 dependencies are now in place.
+
+### Recent Sessions
+
+- **2026-05-02T19:05Z–19:08Z** — Executed plan 01-01. 3 commits on `gsd/phase-1-foundations`. Smoke-verified `ng test` (190 SUCCESS, exit 0) and `ng test --code-coverage` (190 SUCCESS + 27 threshold warnings, exit 1; expected). `ng build --configuration=production` exit 0. No deviations from plan.
 
 ### Blockers
 
