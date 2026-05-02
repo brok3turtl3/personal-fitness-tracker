@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 3,
+  "cardioSessions": [],
+  "weightEntries": [],
+  "healthReadings": [],
+  "savedFoods": [
+    {
+      "id": "food-egg",
+      "name": "Egg, large",
+      "createdAt": "2025-03-01T08:00:00Z",
+      "updatedAt": "2025-03-01T08:00:00Z"
+    }
+  ],
+  "mealEntries": [],
+  "lastModified": "2025-03-01T08:00:00Z"
+}

@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 2,
+  "cardioSessions": [],
+  "weightEntries": [],
+  "healthReadings": [],
+  "savedFoods": [
+    {
+      "id": "food-egg",
+      "name": "Egg, large",
+      "nutrientsPer100g": {
+        "caloriesKcal": 155,
+        "proteinG": 13,
+        "fatG": 11,
+        "carbsG": 1.1,
+        "fiberG": 0,
+        "sugarG": 1.1,
+        "sodiumMg": 124
+      },
+      "servings": [
+        { "id": "s-1", "label": "1 large", "grams": 50 }
+      ],
+      "createdAt": "2025-03-01T08:00:00Z",
+      "updatedAt": "2025-03-01T08:00:00Z"
+    }
+  ],
+  "mealEntries": [],
+  "lastModified": "2025-03-01T08:00:00Z"
+}

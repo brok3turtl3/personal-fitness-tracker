@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 4,
+  "cardioSessions": [],
+  "weightEntries": [],
+  "healthReadings": [
+    {
+      "id": "reading-1",
+      "type": "blood_pressure",
+      "date": "2025-04-01T08:00:00Z",
+      "systolic": 120,
+      "diastolic": 80,
+      "createdAt": "2025-04-01T08:00:00Z",
+      "updatedAt": "2025-04-01T08:00:00Z"
+    }
+  ],
+  "savedFoods": [],
+  "mealEntries": [],
+  "chatConversations": [],
+  "lastModified": "2025-04-01T08:00:00Z"
+}
