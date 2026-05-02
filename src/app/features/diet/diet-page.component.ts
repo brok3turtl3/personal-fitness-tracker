@@ -6,14 +6,6 @@ import { StorageService } from '../../services/storage.service';
 import { DietService, DietValidationError, scaleFoodTotals } from '../../services/diet.service';
 import { MealEntry, MealType, NutritionTotals, SavedFood } from '../../models/diet.model';
 
-function generateUUID(): string {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = Math.random() * 16 | 0;
-    const v = c === 'x' ? r : (r & 0x3 | 0x8);
-    return v.toString(16);
-  });
-}
-
 @Component({
   selector: 'app-diet-page',
   standalone: true,
@@ -294,7 +286,7 @@ function generateUUID(): string {
                 <div class="items-list">
                   <div class="muted">Pending items</div>
                   <ul class="history-list" role="list">
-                    @for (it of pendingItems; track it.id) {
+                    @for (it of pendingItems; track $index) {
                       <li class="history-item">
                         <div class="history-item-main">
                           <div>
@@ -306,7 +298,7 @@ function generateUUID(): string {
                               F {{ it.preview.fatG | number:'1.0-1' }}g
                             </div>
                           </div>
-                          <button type="button" class="btn btn-danger btn-sm" (click)="removePendingItem(it.id)">Remove</button>
+                          <button type="button" class="btn btn-danger btn-sm" (click)="removePendingItem($index)">Remove</button>
                         </div>
                       </li>
                     }
@@ -534,7 +526,7 @@ export class DietPageComponent implements OnInit {
   mealTypes: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 
   mealServingOptions: Array<{ id: string; label: string; unit: 'g' | 'tbsp'; amount: number }> = [];
-  pendingItems: Array<{ id: string; savedFoodId: string; servingId: string; quantity: number; label: string; preview: NutritionTotals }> = [];
+  pendingItems: Array<{ savedFoodId: string; servingId: string; quantity: number; label: string; preview: NutritionTotals }> = [];
   mealError: string | null = null;
   isSavingMeal = false;
   editingMealId: string | null = null;
@@ -771,7 +763,6 @@ export class DietPageComponent implements OnInit {
     this.pendingItems = [
       ...this.pendingItems,
       {
-        id: generateUUID(),
         savedFoodId,
         servingId,
         quantity,
@@ -783,8 +774,8 @@ export class DietPageComponent implements OnInit {
     this.mealItemForm.patchValue({ quantity: 1 });
   }
 
-  removePendingItem(id: string): void {
-    this.pendingItems = this.pendingItems.filter(i => i.id !== id);
+  removePendingItem(index: number): void {
+    this.pendingItems = this.pendingItems.filter((_, i) => i !== index);
   }
 
   onAddMeal(): void {
@@ -843,7 +834,6 @@ export class DietPageComponent implements OnInit {
     this.editingMealId = meal.id;
 
     this.pendingItems = meal.items.map(it => ({
-      id: it.id || generateUUID(),
       savedFoodId: it.savedFoodId,
       servingId: it.servingId,
       quantity: it.quantity,
