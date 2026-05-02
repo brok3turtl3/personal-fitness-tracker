@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 4,
+  "cardioSessions": [
+    {
+      "id": "seed-cardio-1",
+      "date": "2026-04-15T08:00:00.000Z",
+      "type": "running",
+      "durationMinutes": 30,
+      "distanceKm": 5,
+      "createdAt": "2026-04-15T08:00:00.000Z",
+      "updatedAt": "2026-04-15T08:00:00.000Z"
+    }
+  ],
+  "weightEntries": [
+    {
+      "id": "seed-weight-1",
+      "date": "2026-04-15T08:00:00.000Z",
+      "weightLbs": 175,
+      "createdAt": "2026-04-15T08:00:00.000Z",
+      "updatedAt": "2026-04-15T08:00:00.000Z"
+    }
+  ],
+  "healthReadings": [],
+  "savedFoods": [],
+  "mealEntries": [],
+  "chatConversations": [],
+  "lastModified": "2026-04-15T08:00:00.000Z"
+}
