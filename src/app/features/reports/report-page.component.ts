@@ -19,6 +19,7 @@ import { CardioService } from '../../services/cardio.service';
 import { ReadingsService } from '../../services/readings.service';
 import { StorageService } from '../../services/storage.service';
 import { WeightService } from '../../services/weight.service';
+import { groupByDay, toDateKey, round2 } from '../../shared/chart-grouping';
 import { filterByRange, ResolvedDateRange } from '../../shared/date-range';
 
 @Component({
@@ -604,47 +605,3 @@ function computeReadingsSummary(readings: HealthReading[]): { totalCount: number
   return { totalCount, bpCount, glucoseCount, ketoneCount };
 }
 
-function toDateKey(isoString: string): string {
-  const d = new Date(isoString);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-
-function groupByDay<T extends { date: string }>(
-  readings: T[],
-  extractor: (r: T) => number[]
-): { labels: string[]; averages: number[][] } {
-  const map = new Map<string, number[][]>();
-
-  for (const r of readings) {
-    const key = toDateKey(r.date);
-    if (!map.has(key)) {
-      map.set(key, []);
-    }
-    map.get(key)!.push(extractor(r));
-  }
-
-  const sortedKeys = Array.from(map.keys()).sort();
-  const labels: string[] = [];
-  const averages: number[][] = [];
-
-  for (const key of sortedKeys) {
-    const group = map.get(key)!;
-    const fieldCount = group[0].length;
-    const avg: number[] = [];
-    for (let i = 0; i < fieldCount; i++) {
-      const sum = group.reduce((s, vals) => s + vals[i], 0);
-      avg.push(sum / group.length);
-    }
-    labels.push(key);
-    averages.push(avg);
-  }
-
-  return { labels, averages };
-}
-
-function round2(value: number): number {
-  return Math.round(value * 100) / 100;
-}
