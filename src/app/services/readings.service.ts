@@ -1,11 +1,12 @@
 import { Injectable } from '@angular/core';
 import { Observable, map, of, switchMap, throwError } from 'rxjs';
+import { generateId } from '../shared/id';
 import { StorageService } from './storage.service';
-import { 
-  HealthReading, 
+import {
+  HealthReading,
   HealthReadingType,
-  BloodPressureReading, 
-  BloodGlucoseReading, 
+  BloodPressureReading,
+  BloodGlucoseReading,
   KetoneReading,
   CreateBloodPressure,
   CreateBloodGlucose,
@@ -30,17 +31,6 @@ export class ReadingsValidationError extends Error {
     this.name = 'ReadingsValidationError';
     this.errors = errors;
   }
-}
-
-/**
- * Generates a UUID v4 string.
- */
-function generateUUID(): string {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = Math.random() * 16 | 0;
-    const v = c === 'x' ? r : (r & 0x3 | 0x8);
-    return v.toString(16);
-  });
 }
 
 /**
@@ -90,7 +80,7 @@ export class ReadingsService {
     const now = new Date().toISOString();
     
     const newReading: BloodPressureReading = {
-      id: generateUUID(),
+      id: generateId(),
       type: 'blood_pressure',
       date: data.date,
       systolic: data.systolic,
@@ -116,7 +106,7 @@ export class ReadingsService {
     const now = new Date().toISOString();
     
     const newReading: BloodGlucoseReading = {
-      id: generateUUID(),
+      id: generateId(),
       type: 'blood_glucose',
       date: data.date,
       glucoseMmol: data.glucoseMmol,
@@ -141,7 +131,7 @@ export class ReadingsService {
     const now = new Date().toISOString();
     
     const newReading: KetoneReading = {
-      id: generateUUID(),
+      id: generateId(),
       type: 'ketone',
       date: data.date,
       ketoneMmol: data.ketoneMmol,

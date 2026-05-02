@@ -1,5 +1,6 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, DestroyRef, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { ChatService } from '../../services/chat.service';
 import { AISettingsService } from '../../services/ai-settings.service';
@@ -9,6 +10,8 @@ import { AnthropicApiError } from '../../services/anthropic-api.service';
 import { ChatConversationListComponent } from './chat-conversation-list.component';
 import { ChatMessageListComponent } from './chat-message-list.component';
 import { ChatInputComponent } from './chat-input.component';
+import { EmptyStateComponent } from '../../shared/empty-state.component';
+import { ErrorStateComponent } from '../../shared/error-state.component';
 
 @Component({
   selector: 'app-chat-page',
@@ -18,16 +21,19 @@ import { ChatInputComponent } from './chat-input.component';
     RouterLink,
     ChatConversationListComponent,
     ChatMessageListComponent,
-    ChatInputComponent
+    ChatInputComponent,
+    EmptyStateComponent,
+    ErrorStateComponent
   ],
   template: `
     <div class="chat-layout">
       @if (!hasApiKey) {
-        <div class="no-key-prompt">
-          <h2>AI Chat Assistant</h2>
-          <p>To use the AI chat, please configure your Anthropic API key.</p>
+        <app-error-state
+          title="Anthropic API key required"
+          [message]="'Configure your API key in Settings to use the AI chat.'"
+        >
           <a routerLink="/settings" class="btn-primary">Go to Settings</a>
-        </div>
+        </app-error-state>
       } @else {
         <aside class="sidebar">
           <app-chat-conversation-list
@@ -62,9 +68,18 @@ import { ChatInputComponent } from './chat-input.component';
               (send)="onSendMessage($event)"
             />
           } @else {
-            <div class="no-conversation">
-              <p>Select a conversation or start a new chat.</p>
-            </div>
+            @if (conversations.length === 0) {
+              <app-empty-state
+                title="No conversations yet"
+                message="Start a new chat to begin."
+              >
+                <button type="button" class="btn-primary" (click)="onNewChat()">Start a conversation</button>
+              </app-empty-state>
+            } @else {
+              <div class="no-conversation">
+                <p>Select a conversation or start a new chat.</p>
+              </div>
+            }
           }
         </main>
       }
@@ -169,6 +184,8 @@ import { ChatInputComponent } from './chat-input.component';
   `]
 })
 export class ChatPageComponent implements OnInit {
+  private destroyRef = inject(DestroyRef);
+
   conversations: ChatConversation[] = [];
   activeConversationId: string | null = null;
   activeConversation: ChatConversation | null = null;
@@ -183,52 +200,64 @@ export class ChatPageComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
-    this.storageService.initialize().subscribe(() => {
-      this.aiSettingsService.hasValidApiKey().subscribe(valid => {
-        this.hasApiKey = valid;
-        if (valid) {
-          this.loadConversations();
-        }
+    this.storageService.initialize()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        this.aiSettingsService.hasValidApiKey()
+          .pipe(takeUntilDestroyed(this.destroyRef))
+          .subscribe(valid => {
+            this.hasApiKey = valid;
+            if (valid) {
+              this.loadConversations();
+            }
+          });
       });
-    });
   }
 
   loadConversations(): void {
-    this.chatService.getConversations().subscribe(convs => {
-      this.conversations = convs;
-      if (this.activeConversationId) {
-        this.activeConversation = convs.find(c => c.id === this.activeConversationId) ?? null;
-      }
-    });
+    this.chatService.getConversations()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(convs => {
+        this.conversations = convs;
+        if (this.activeConversationId) {
+          this.activeConversation = convs.find(c => c.id === this.activeConversationId) ?? null;
+        }
+      });
   }
 
   onSelectConversation(id: string): void {
     this.activeConversationId = id;
-    this.chatService.getConversation(id).subscribe(conv => {
-      this.activeConversation = conv;
-    });
+    this.chatService.getConversation(id)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(conv => {
+        this.activeConversation = conv;
+      });
     this.errorMessage = '';
   }
 
   onNewChat(): void {
-    this.chatService.createConversation().subscribe(conv => {
-      this.activeConversationId = conv.id;
-      this.activeConversation = conv;
-      this.loadConversations();
-    });
+    this.chatService.createConversation()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(conv => {
+        this.activeConversationId = conv.id;
+        this.activeConversation = conv;
+        this.loadConversations();
+      });
     this.errorMessage = '';
   }
 
   onDeleteConversation(id: string): void {
-    this.chatService.deleteConversation(id).subscribe(deleted => {
-      if (deleted) {
-        if (this.activeConversationId === id) {
-          this.activeConversationId = null;
-          this.activeConversation = null;
+    this.chatService.deleteConversation(id)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(deleted => {
+        if (deleted) {
+          if (this.activeConversationId === id) {
+            this.activeConversationId = null;
+            this.activeConversation = null;
+          }
+          this.loadConversations();
         }
-        this.loadConversations();
-      }
-    });
+      });
   }
 
   onSendMessage(text: string): void {
@@ -237,32 +266,38 @@ export class ChatPageComponent implements OnInit {
     this.sending = true;
     this.errorMessage = '';
 
-    this.chatService.sendMessage(this.activeConversationId, text).subscribe({
-      next: () => {
-        this.sending = false;
-        this.loadConversations();
-        // Refresh active conversation to show new messages
-        if (this.activeConversationId) {
-          this.chatService.getConversation(this.activeConversationId).subscribe(conv => {
-            this.activeConversation = conv;
-          });
+    this.chatService.sendMessage(this.activeConversationId, text)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.sending = false;
+          this.loadConversations();
+          // Refresh active conversation to show new messages
+          if (this.activeConversationId) {
+            this.chatService.getConversation(this.activeConversationId)
+              .pipe(takeUntilDestroyed(this.destroyRef))
+              .subscribe(conv => {
+                this.activeConversation = conv;
+              });
+          }
+        },
+        error: (err) => {
+          this.sending = false;
+          if (err instanceof AnthropicApiError && err.statusCode === 401) {
+            this.errorMessage = 'Invalid API key. Please update it in Settings.';
+          } else {
+            this.errorMessage = err.message || 'Failed to send message. Please try again.';
+          }
+          // Still refresh to show the user message that was saved
+          this.loadConversations();
+          if (this.activeConversationId) {
+            this.chatService.getConversation(this.activeConversationId)
+              .pipe(takeUntilDestroyed(this.destroyRef))
+              .subscribe(conv => {
+                this.activeConversation = conv;
+              });
+          }
         }
-      },
-      error: (err) => {
-        this.sending = false;
-        if (err instanceof AnthropicApiError && err.statusCode === 401) {
-          this.errorMessage = 'Invalid API key. Please update it in Settings.';
-        } else {
-          this.errorMessage = err.message || 'Failed to send message. Please try again.';
-        }
-        // Still refresh to show the user message that was saved
-        this.loadConversations();
-        if (this.activeConversationId) {
-          this.chatService.getConversation(this.activeConversationId).subscribe(conv => {
-            this.activeConversation = conv;
-          });
-        }
-      }
-    });
+      });
   }
 }

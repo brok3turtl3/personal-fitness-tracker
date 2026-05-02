@@ -9,7 +9,7 @@
 
 ## Phases
 
-- [ ] **Phase 1: Foundations** — Test scaffolds, shared utilities, subscription hygiene, schema-migration discipline. No feature work; everything later phases stand on. (FOUND-01..07)
+- [x] **Phase 1: Foundations** — Test scaffolds, shared utilities, subscription hygiene, schema-migration discipline. No feature work; everything later phases stand on. (FOUND-01..07) — completed 2026-05-02
 - [ ] **Phase 2: Diet UX Overhaul** — Multi-unit foods, frictionless meal logging, daily totals, charts integration, V5→V6 schema. (DIET-01..10) [parallel with Phase 3]
 - [ ] **Phase 3: AI Memory + Tool Plumbing** — V4→V5 schema, memory tool, user profile, tool registry, settings UI. Plumbing only — no behavior change for the user yet. (CHAT-01, CHAT-03, CHAT-04, CHAT-11, CHAT-12) [parallel with Phase 2]
 - [ ] **Phase 4: Agentic Loop + Citation UI** — Activate the `while(stop_reason=='tool_use')` loop, data-query tools, slim system prompt, block-aware chat rendering, confidence badges. (CHAT-02, CHAT-05, CHAT-06, CHAT-07, CHAT-08, CHAT-09, CHAT-10)
@@ -32,22 +32,22 @@
 **Plans**: 10 plans across 4 waves
 
 **Wave 1** *(no dependencies — runs first)*
-- [ ] 01-foundations/01-01-PLAN.md — Coverage config + axe-core install + tsconfig.spec patch (FOUND-01)
-- [ ] 01-foundations/01-02-PLAN.md — Shared utilities create: id.ts, chart-grouping.ts, a11y-test-helpers.ts (FOUND-02, FOUND-04, FOUND-05)
-- [ ] 01-foundations/01-03-PLAN.md — Empty-state + error-state standalone components (FOUND-06)
-- [ ] 01-foundations/01-04-PLAN.md — Typed legacy schemas + V0..V3 fixtures + malformed-input fixtures (FOUND-07)
+- [x] 01-foundations/01-01-PLAN.md — Coverage config + axe-core install + tsconfig.spec patch (FOUND-01) — completed 2026-05-02 (3 commits: a638189, e56e818, aef83cb; SUMMARY: 01-01-SUMMARY.md)
+- [x] 01-foundations/01-02-PLAN.md — Shared utilities create: id.ts, chart-grouping.ts, a11y-test-helpers.ts (FOUND-02, FOUND-04, FOUND-05) — completed 2026-05-02 (3 commits: fd0a850, 9bc9680, 7190fba; SUMMARY: 01-02-SUMMARY.md). Building blocks only; FOUND-02/04/05 not yet marked complete in REQUIREMENTS.md (gate on consumer retrofit in plan 06 and characterization specs in plan 08).
+- [x] 01-foundations/01-03-PLAN.md — Empty-state + error-state standalone components (FOUND-06) — completed 2026-05-02 (4 commits: c9c12b2, 2227b9f, 99f3d8b, b28b39f; SUMMARY: 01-03-SUMMARY.md). Both components live in `src/app/shared/`; FOUND-06 NOT yet marked complete in REQUIREMENTS.md (gate on Wave 2 plan 07 page retrofit — pattern exists but no feature page imports it yet).
+- [x] 01-foundations/01-04-PLAN.md — Typed legacy schemas + V0..V3 fixtures + malformed-input fixtures (FOUND-07 — building blocks) — completed 2026-05-02 (3 commits: 694b914, afa9eee, cb2e002; SUMMARY: 01-04-SUMMARY.md). 13 new files: legacy-schemas.ts (5 type-only interfaces) + 12 JSON fixtures (4 input v0..v3, 4 expected v1..v4, 4 malformed). FOUND-07 NOT yet marked complete in REQUIREMENTS.md (gate on Wave 2 plan 09 storage.service.ts refactor + Wave 3 plan 10 recovery banner). Wave 1 of Phase 1 now complete.
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 01-foundations/01-05-PLAN.md — Puppeteer + axe-core e2e harness scaffold (FOUND-05) — depends on Plan 01
-- [ ] 01-foundations/01-06-PLAN.md — id.ts + chart-grouping consumer retrofit across services + chart pages (FOUND-02) — depends on Plan 02
-- [ ] 01-foundations/01-09-PLAN.md — Storage migration refactor: typed chain + backup-before-migrate + fixture-driven spec (FOUND-07) — depends on Plan 04
+- [x] 01-foundations/01-05-PLAN.md — Puppeteer + axe-core e2e harness scaffold (FOUND-05) — completed 2026-05-02 (3 commits: 2dcd7d6, e1edd59, 2ea790a; SUMMARY: 01-05-SUMMARY.md). 5 new files in `e2e/` (run.mjs, smoke.spec.mjs, a11y.spec.mjs, fixtures/seed-data.json, README.md) + 1 line in `package.json` (`scripts.e2e: "node e2e/run.mjs"`). Two-terminal flow (no concurrently/wait-on). 8 routes covered in BOTH spec files; D-08 severity gate (serious|critical) wired. FOUND-05 NOT yet marked complete in REQUIREMENTS.md — gate on plan 08 characterization specs consuming a11y-test-helpers. Wave 2 now 1/3 complete.
+- [x] 01-foundations/01-06-PLAN.md — id.ts + chart-grouping consumer retrofit across services + chart pages (FOUND-02) — completed 2026-05-02 (3 commits: a8b752a, 6801180, cc64149; SUMMARY: 01-06-SUMMARY.md). 8 files modified: 5 services (cardio/weight/readings/diet/chat) + 3 feature pages (diet-page, charts-page, report-page). 6 generateUUID copies deleted (~70 lines) and 6 chart-grouping copies deleted (~96 lines). Full suite regression: 219/219 SUCCESS. **FOUND-02 marked complete in REQUIREMENTS.md** — both shared utilities (`id.ts`, `chart-grouping.ts`) now have all consumers retrofitted. Wave 2 now 2/3 complete.
+- [x] 01-foundations/01-09-PLAN.md — Storage migration refactor: typed chain + backup-before-migrate + fixture-driven spec (FOUND-07) — completed 2026-05-02 (3 commits: c0fce5a, 512afb5, c11904c; SUMMARY: 01-09-SUMMARY.md). 3 files: storage.service.ts (typed chain + backup/prune/throw), storage.service.spec.ts (3 new describe blocks, 8 scenarios), storage.service.migration-fixtures.spec.ts (NEW — 9 specs, V0..V3 chain + 4-case malformed-input matrix). 5 `as any` casts eliminated; **zero `any` keyword in storage.service.ts**. Full Karma: 236/236 SUCCESS. FOUND-07 NOT yet marked complete in REQUIREMENTS.md — gate on Wave 3 plan 10 recovery banner UX. **Wave 2 of Phase 1 now complete (3/3).**
 
-**Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 01-foundations/01-07-PLAN.md — Empty/error retrofit + subscription hygiene across 8 feature pages (FOUND-03, FOUND-06) — depends on Plans 03, 06
-- [ ] 01-foundations/01-10-PLAN.md — Recovery banner + AppComponent integration (FOUND-07) — depends on Plans 03, 09
+**Wave 3** *(unblocked — Wave 2 complete)*
+- [x] 01-foundations/01-07-PLAN.md — Empty/error retrofit + subscription hygiene across 8 feature pages (FOUND-03, FOUND-06) — completed 2026-05-02 (2 commits: 84c76c7, f1bda40; SUMMARY: 01-07-SUMMARY.md). 8 feature page components modified: every `.subscribe(...)` (40 sites total) now pipes through `takeUntilDestroyed(this.destroyRef)`; every page declares `private destroyRef = inject(DestroyRef)` field; 7 list/data pages render BOTH `<app-empty-state>` AND `<app-error-state>`; settings has `<app-error-state>` only (RESEARCH §Open Q 2). Storage failures now visible to user (CONCERNS.md "Console-only error reporting" CLOSED). 5 cross-page invariant gates PASS. 236/236 Karma SUCCESS; production build green. **FOUND-03 + FOUND-06 marked complete in REQUIREMENTS.md.** Wave 3 now 1/2 complete.
+- [x] 01-foundations/01-10-PLAN.md — Recovery banner + AppComponent integration (FOUND-07) — completed 2026-05-02 (3 commits: 59840ce, 3bbcc04, 7284b48; SUMMARY: 01-10-SUMMARY.md). 2 NEW files (recovery-banner.component.ts + spec) + 4 MODIFIED files (storage.service.ts + spec — added `getBackup` chokepoint method; app.component.ts/html/spec — wired banner on MIGRATION_FAILED). Banner is a thin wrapper over `<app-error-state>` with 3 actions (Retry / Copy backup JSON / Continue with empty data) + clipboard fallback `<textarea>`. AppComponent calls `this.storage.getBackup(this.recoveryKey)` (the sole sanctioned chokepoint path) — zero direct `localStorage.*` calls in any component file. Tree-wide chokepoint sanity gate PASSES: `localStorage.(getItem|setItem|removeItem)` outside `storage.service.ts(.spec)` returns no matches. Full Karma: **248/248 SUCCESS** (was 236, +12). Production build green. **FOUND-07 marked complete in REQUIREMENTS.md** — Phase 1 success criterion #4 ("malformed AppData sees an explicit migration-failure UI with a recovery key") closed end-to-end. **Wave 3 of Phase 1 now complete (2/2).**
 
-**Wave 4** *(blocked on Wave 3 completion)*
-- [ ] 01-foundations/01-08-PLAN.md — Characterization specs for diet/chat/charts/reports (FOUND-04, FOUND-05) — depends on Plans 02, 03, 07
+**Wave 4** *(unblocked — Wave 3 complete)*
+- [x] 01-foundations/01-08-PLAN.md — Characterization specs for diet/chat/charts/reports (FOUND-04, FOUND-05) — completed 2026-05-02 (2 commits: 90df6c7, 258aafd; SUMMARY: 01-08-SUMMARY.md). 4 NEW spec files (diet/chat/charts/report-page.component.spec.ts) with 21 specs total covering: store rendering, key user flows (add-meal totals, switch active conversation, b6149d2 same-day-average regression, /report navigation), empty states, error states (StorageError on initialize), and inline axe-core a11y assertions on every spec. Per-spec factory helpers (D-07) — no shared canonical fixtures file. axe-core severity gated to serious|critical with `disableRules: ['color-contrast']` (Phase 5 QUAL-08 deferral per D-13). Full Karma: **269/269 SUCCESS** (was 248, +21). Production build green. **FOUND-04 + FOUND-05 marked complete in REQUIREMENTS.md.** **Phase 1 of milestone now complete (10/10 plans).**
 
 **Cross-cutting constraints** *(must_haves shared across plans):*
 - Storage chokepoint: `StorageService` is the sole LocalStorage access path (Plans 09, 10 add tree-wide grep gate)
@@ -116,7 +116,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundations | 0/10 | Not started | - |
+| 1. Foundations | 10/10 | Complete | 2026-05-02 |
 | 2. Diet UX Overhaul | 0/? | Not started | - |
 | 3. AI Memory + Tool Plumbing | 0/? | Not started | - |
 | 4. Agentic Loop + Citation UI | 0/? | Not started | - |

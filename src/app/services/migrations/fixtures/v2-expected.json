@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 2,
+  "cardioSessions": [],
+  "weightEntries": [
+    {
+      "id": "weight-1",
+      "date": "2025-02-01T08:00:00Z",
+      "weightLbs": 180,
+      "createdAt": "2025-02-01T08:00:00Z",
+      "updatedAt": "2025-02-01T08:00:00Z"
+    }
+  ],
+  "healthReadings": [],
+  "savedFoods": [],
+  "mealEntries": [],
+  "lastModified": "2025-02-01T08:00:00Z"
+}

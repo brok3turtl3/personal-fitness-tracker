@@ -1,5 +1,6 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, DestroyRef, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { ChartConfiguration, ChartData } from 'chart.js';
@@ -20,13 +21,16 @@ import { CardioService } from '../../services/cardio.service';
 import { ReadingsService } from '../../services/readings.service';
 import { StorageService } from '../../services/storage.service';
 import { WeightService } from '../../services/weight.service';
+import { groupByDay, toDateKey, round2 } from '../../shared/chart-grouping';
 import { DateRangePreset, filterByRange, resolveDateRange } from '../../shared/date-range';
+import { EmptyStateComponent } from '../../shared/empty-state.component';
+import { ErrorStateComponent } from '../../shared/error-state.component';
 
 
 @Component({
   selector: 'app-charts-page',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, BaseChartDirective],
+  imports: [CommonModule, ReactiveFormsModule, BaseChartDirective, EmptyStateComponent, ErrorStateComponent],
   template: `
     <div class="page-container">
       <h1>Charts</h1>
@@ -87,7 +91,10 @@ import { DateRangePreset, filterByRange, resolveDateRange } from '../../shared/d
           </div>
 
           @if (rangeError) {
-            <div class="form-error" role="alert">{{ rangeError }}</div>
+            <app-error-state
+              title="Couldn't build charts"
+              [message]="rangeError"
+            ></app-error-state>
           }
 
           <div class="form-row">
@@ -133,7 +140,10 @@ import { DateRangePreset, filterByRange, resolveDateRange } from '../../shared/d
             <canvas baseChart [type]="'line'" [data]="weightChartData" [options]="lineOptions"></canvas>
           </div>
         } @else {
-          <div class="empty-state">No weight entries in this range.</div>
+          <app-empty-state
+            title="No weight entries in this range"
+            message="Try a wider range or add more entries."
+          ></app-empty-state>
         }
       </section>
 
@@ -144,7 +154,10 @@ import { DateRangePreset, filterByRange, resolveDateRange } from '../../shared/d
             <canvas baseChart [type]="'line'" [data]="cardioChartData" [options]="cardioOptions"></canvas>
           </div>
         } @else {
-          <div class="empty-state">No cardio sessions in this range.</div>
+          <app-empty-state
+            title="No cardio sessions in this range"
+            message="Try a wider range or add more entries."
+          ></app-empty-state>
         }
       </section>
 
@@ -155,7 +168,10 @@ import { DateRangePreset, filterByRange, resolveDateRange } from '../../shared/d
             <canvas baseChart [type]="'line'" [data]="readingsChartData" [options]="lineOptions"></canvas>
           </div>
         } @else {
-          <div class="empty-state">No readings in this range.</div>
+          <app-empty-state
+            title="No readings in this range"
+            message="Try a wider range or add more entries."
+          ></app-empty-state>
         }
       </section>
     </div>
@@ -246,6 +262,8 @@ import { DateRangePreset, filterByRange, resolveDateRange } from '../../shared/d
   `]
 })
 export class ChartsPageComponent implements OnInit {
+  private destroyRef = inject(DestroyRef);
+
   controlsForm: FormGroup;
   rangeError: string | null = null;
 
@@ -305,13 +323,14 @@ export class ChartsPageComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    this.storageService.initialize().subscribe({
-      next: () => this.loadAllData(),
-      error: (err) => {
-        console.error('Failed to initialize storage:', err);
-        this.rangeError = 'Failed to load charts data.';
-      }
-    });
+    this.storageService.initialize()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => this.loadAllData(),
+        error: () => {
+          this.rangeError = 'Failed to load charts data.';
+        }
+      });
   }
 
   onControlsChanged(): void {
@@ -352,18 +371,19 @@ export class ChartsPageComponent implements OnInit {
       cardio: this.cardioService.getSessions(),
       weight: this.weightService.getEntries(),
       readings: this.readingsService.getReadings()
-    }).subscribe({
-      next: ({ cardio, weight, readings }) => {
-        this.cardioSessions = cardio;
-        this.weightEntries = weight;
-        this.healthReadings = readings;
-        this.rebuildCharts();
-      },
-      error: (err) => {
-        console.error('Failed to load charts data:', err);
-        this.rangeError = 'Failed to load charts data.';
-      }
-    });
+    })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: ({ cardio, weight, readings }) => {
+          this.cardioSessions = cardio;
+          this.weightEntries = weight;
+          this.healthReadings = readings;
+          this.rebuildCharts();
+        },
+        error: () => {
+          this.rangeError = 'Failed to load charts data.';
+        }
+      });
   }
 
   private rebuildCharts(): void {
@@ -589,58 +609,4 @@ export class ChartsPageComponent implements OnInit {
     });
   }
 
-}
-
-/**
- * Extract the calendar date (YYYY-MM-DD) from an ISO date string,
- * using the local timezone so readings group by the user's day.
- */
-function toDateKey(isoString: string): string {
-  const d = new Date(isoString);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-
-/**
- * Group readings by calendar day and average their numeric values.
- * `extractor` pulls the numeric fields from each reading as an array.
- * Returns one data point per day, ordered by date ascending.
- */
-function groupByDay<T extends { date: string }>(
-  readings: T[],
-  extractor: (r: T) => number[]
-): { labels: string[]; averages: number[][] } {
-  const map = new Map<string, number[][]>();
-
-  for (const r of readings) {
-    const key = toDateKey(r.date);
-    if (!map.has(key)) {
-      map.set(key, []);
-    }
-    map.get(key)!.push(extractor(r));
-  }
-
-  const sortedKeys = Array.from(map.keys()).sort();
-  const labels: string[] = [];
-  const averages: number[][] = [];
-
-  for (const key of sortedKeys) {
-    const group = map.get(key)!;
-    const fieldCount = group[0].length;
-    const avg: number[] = [];
-    for (let i = 0; i < fieldCount; i++) {
-      const sum = group.reduce((s, vals) => s + vals[i], 0);
-      avg.push(sum / group.length);
-    }
-    labels.push(key);
-    averages.push(avg);
-  }
-
-  return { labels, averages };
-}
-
-function round2(value: number): number {
-  return Math.round(value * 100) / 100;
 }

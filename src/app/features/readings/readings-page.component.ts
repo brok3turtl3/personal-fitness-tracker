@@ -1,22 +1,25 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, DestroyRef, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ReadingsService, ReadingsValidationError } from '../../services/readings.service';
 import { StorageService } from '../../services/storage.service';
-import { 
-  HealthReading, 
-  HealthReadingType, 
+import {
+  HealthReading,
+  HealthReadingType,
   READING_TYPES,
   BloodPressureReading,
   BloodGlucoseReading,
   KetoneReading
 } from '../../models/health-reading.model';
 import { VALIDATION_LIMITS } from '../../services/validators';
+import { EmptyStateComponent } from '../../shared/empty-state.component';
+import { ErrorStateComponent } from '../../shared/error-state.component';
 
 @Component({
   selector: 'app-readings-page',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule],
+  imports: [CommonModule, ReactiveFormsModule, EmptyStateComponent, ErrorStateComponent],
   template: `
     <div class="page-container">
       <h1>Health Readings</h1>
@@ -211,11 +214,18 @@ import { VALIDATION_LIMITS } from '../../services/validators';
       <!-- Readings History -->
       <section class="history-section" aria-label="Health readings history">
         <h2>History</h2>
-        
-        @if (readings.length === 0) {
-          <div class="empty-state">
-            <p>No health readings yet. Add your first reading above!</p>
-          </div>
+
+        @if (loadError) {
+          <app-error-state
+            title="Couldn't load your health readings"
+            [error]="loadError"
+            (retry)="reloadData()"
+          ></app-error-state>
+        } @else if (readings.length === 0) {
+          <app-empty-state
+            title="No health readings yet"
+            message="Log your first reading using the form above."
+          ></app-empty-state>
         } @else {
           <ul class="history-list" role="list" aria-label="Health readings list">
             @for (reading of readings; track reading.id) {
@@ -426,6 +436,8 @@ import { VALIDATION_LIMITS } from '../../services/validators';
   `]
 })
 export class ReadingsPageComponent implements OnInit {
+  private destroyRef = inject(DestroyRef);
+
   readingForm: FormGroup;
   readings: HealthReading[] = [];
   readingTypes = READING_TYPES;
@@ -434,6 +446,7 @@ export class ReadingsPageComponent implements OnInit {
   isSubmitting = false;
   isDeleting = false;
   submitError: string | null = null;
+  loadError: Error | null = null;
 
   constructor(
     private fb: FormBuilder,
@@ -456,17 +469,30 @@ export class ReadingsPageComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    this.storageService.initialize().subscribe({
-      next: () => this.loadReadings(),
-      error: (err) => console.error('Failed to initialize storage:', err)
-    });
+    this.reloadData();
+  }
+
+  reloadData(): void {
+    this.loadError = null;
+    this.storageService.initialize()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => this.loadReadings(),
+        error: (err) => {
+          this.loadError = err instanceof Error ? err : new Error(String(err));
+        }
+      });
   }
 
   loadReadings(): void {
-    this.readingsService.getReadings().subscribe({
-      next: (readings) => this.readings = readings,
-      error: (err) => console.error('Failed to load readings:', err)
-    });
+    this.readingsService.getReadings()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (readings) => this.readings = readings,
+        error: (err) => {
+          this.loadError = err instanceof Error ? err : new Error(String(err));
+        }
+      });
   }
 
   onDeleteReading(reading: HealthReading): void {
@@ -474,16 +500,18 @@ export class ReadingsPageComponent implements OnInit {
     if (!ok) return;
 
     this.isDeleting = true;
-    this.readingsService.deleteReading(reading.id).subscribe({
-      next: () => {
-        this.loadReadings();
-        this.isDeleting = false;
-      },
-      error: () => {
-        this.isDeleting = false;
-        this.submitError = 'Failed to delete reading. Please try again.';
-      }
-    });
+    this.readingsService.deleteReading(reading.id)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.loadReadings();
+          this.isDeleting = false;
+        },
+        error: () => {
+          this.isDeleting = false;
+          this.submitError = 'Failed to delete reading. Please try again.';
+        }
+      });
   }
 
   onTypeChange(): void {
@@ -596,21 +624,27 @@ export class ReadingsPageComponent implements OnInit {
           systolic: Number(formValue.systolic),
           diastolic: Number(formValue.diastolic),
           notes
-        }).subscribe({ next: handleSuccess, error: handleError });
+        })
+          .pipe(takeUntilDestroyed(this.destroyRef))
+          .subscribe({ next: handleSuccess, error: handleError });
         break;
       case 'blood_glucose':
         this.readingsService.addBloodGlucose({
           date,
           glucoseMmol: Number(formValue.glucoseMmol),
           notes
-        }).subscribe({ next: handleSuccess, error: handleError });
+        })
+          .pipe(takeUntilDestroyed(this.destroyRef))
+          .subscribe({ next: handleSuccess, error: handleError });
         break;
       case 'ketone':
         this.readingsService.addKetone({
           date,
           ketoneMmol: Number(formValue.ketoneMmol),
           notes
-        }).subscribe({ next: handleSuccess, error: handleError });
+        })
+          .pipe(takeUntilDestroyed(this.destroyRef))
+          .subscribe({ next: handleSuccess, error: handleError });
         break;
       default:
         this.isSubmitting = false;

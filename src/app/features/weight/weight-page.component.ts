@@ -1,15 +1,18 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, DestroyRef, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { WeightService, WeightValidationError } from '../../services/weight.service';
 import { StorageService } from '../../services/storage.service';
 import { WeightEntry, CreateWeightEntry } from '../../models/weight-entry.model';
 import { VALIDATION_LIMITS } from '../../services/validators';
+import { EmptyStateComponent } from '../../shared/empty-state.component';
+import { ErrorStateComponent } from '../../shared/error-state.component';
 
 @Component({
   selector: 'app-weight-page',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule],
+  imports: [CommonModule, ReactiveFormsModule, EmptyStateComponent, ErrorStateComponent],
   template: `
     <div class="page-container">
       <h1>Weight Entries</h1>
@@ -108,11 +111,18 @@ import { VALIDATION_LIMITS } from '../../services/validators';
       <!-- Entries History -->
       <section class="history-section" aria-label="Weight entry history">
         <h2>History</h2>
-        
-        @if (entries.length === 0) {
-          <div class="empty-state">
-            <p>No weight entries yet. Add your first entry above!</p>
-          </div>
+
+        @if (loadError) {
+          <app-error-state
+            title="Couldn't load your weight entries"
+            [error]="loadError"
+            (retry)="reloadData()"
+          ></app-error-state>
+        } @else if (entries.length === 0) {
+          <app-empty-state
+            title="No weight entries yet"
+            message="Log your first weight using the form above."
+          ></app-empty-state>
         } @else {
           <ul class="history-list" role="list" aria-label="Weight entries list">
             @for (entry of entries; track entry.id) {
@@ -287,12 +297,15 @@ import { VALIDATION_LIMITS } from '../../services/validators';
   `]
 })
 export class WeightPageComponent implements OnInit {
+  private destroyRef = inject(DestroyRef);
+
   entryForm: FormGroup;
   entries: WeightEntry[] = [];
   limits = VALIDATION_LIMITS;
   isSubmitting = false;
   isDeleting = false;
   submitError: string | null = null;
+  loadError: Error | null = null;
 
   constructor(
     private fb: FormBuilder,
@@ -311,18 +324,31 @@ export class WeightPageComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    this.reloadData();
+  }
+
+  reloadData(): void {
     // Initialize storage and load entries
-    this.storageService.initialize().subscribe({
-      next: () => this.loadEntries(),
-      error: (err) => console.error('Failed to initialize storage:', err)
-    });
+    this.loadError = null;
+    this.storageService.initialize()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => this.loadEntries(),
+        error: (err) => {
+          this.loadError = err instanceof Error ? err : new Error(String(err));
+        }
+      });
   }
 
   loadEntries(): void {
-    this.weightService.getEntries().subscribe({
-      next: (entries) => this.entries = entries,
-      error: (err) => console.error('Failed to load entries:', err)
-    });
+    this.weightService.getEntries()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (entries) => this.entries = entries,
+        error: (err) => {
+          this.loadError = err instanceof Error ? err : new Error(String(err));
+        }
+      });
   }
 
   onDeleteEntry(entry: WeightEntry): void {
@@ -330,16 +356,18 @@ export class WeightPageComponent implements OnInit {
     if (!ok) return;
 
     this.isDeleting = true;
-    this.weightService.deleteEntry(entry.id).subscribe({
-      next: () => {
-        this.loadEntries();
-        this.isDeleting = false;
-      },
-      error: () => {
-        this.isDeleting = false;
-        this.submitError = 'Failed to delete entry. Please try again.';
-      }
-    });
+    this.weightService.deleteEntry(entry.id)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.loadEntries();
+          this.isDeleting = false;
+        },
+        error: () => {
+          this.isDeleting = false;
+          this.submitError = 'Failed to delete entry. Please try again.';
+        }
+      });
   }
 
   onSubmit(): void {
@@ -363,21 +391,23 @@ export class WeightPageComponent implements OnInit {
       notes: formValue.notes || undefined
     };
 
-    this.weightService.addEntry(entryData).subscribe({
-      next: () => {
-        this.entryForm.reset();
-        this.loadEntries();
-        this.isSubmitting = false;
-      },
-      error: (err) => {
-        this.isSubmitting = false;
-        if (err instanceof WeightValidationError) {
-          this.submitError = err.errors.map(e => e.message).join(', ');
-        } else {
-          this.submitError = 'Failed to save entry. Please try again.';
+    this.weightService.addEntry(entryData)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.entryForm.reset();
+          this.loadEntries();
+          this.isSubmitting = false;
+        },
+        error: (err) => {
+          this.isSubmitting = false;
+          if (err instanceof WeightValidationError) {
+            this.submitError = err.errors.map(e => e.message).join(', ');
+          } else {
+            this.submitError = 'Failed to save entry. Please try again.';
+          }
         }
-      }
-    });
+      });
   }
 
   isFieldInvalid(fieldName: string): boolean {

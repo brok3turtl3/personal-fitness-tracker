@@ -1,15 +1,18 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, DestroyRef, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { CardioService, CardioValidationError } from '../../services/cardio.service';
 import { StorageService } from '../../services/storage.service';
 import { CardioSession, CreateCardioSession, CARDIO_TYPES } from '../../models/cardio-session.model';
 import { VALIDATION_LIMITS } from '../../services/validators';
+import { EmptyStateComponent } from '../../shared/empty-state.component';
+import { ErrorStateComponent } from '../../shared/error-state.component';
 
 @Component({
   selector: 'app-cardio-page',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule],
+  imports: [CommonModule, ReactiveFormsModule, EmptyStateComponent, ErrorStateComponent],
   template: `
     <div class="page-container">
       <h1>Cardio Sessions</h1>
@@ -177,11 +180,18 @@ import { VALIDATION_LIMITS } from '../../services/validators';
       <!-- Sessions History -->
       <section class="history-section" aria-label="Cardio session history">
         <h2>History</h2>
-        
-        @if (sessions.length === 0) {
-          <div class="empty-state">
-            <p>No cardio sessions yet. Add your first session above!</p>
-          </div>
+
+        @if (loadError) {
+          <app-error-state
+            title="Couldn't load your cardio sessions"
+            [error]="loadError"
+            (retry)="reloadData()"
+          ></app-error-state>
+        } @else if (sessions.length === 0) {
+          <app-empty-state
+            title="No cardio sessions yet"
+            message="Log your first session using the form above."
+          ></app-empty-state>
         } @else {
           <ul class="history-list" role="list" aria-label="Cardio sessions list">
             @for (session of sessions; track session.id) {
@@ -383,6 +393,8 @@ import { VALIDATION_LIMITS } from '../../services/validators';
   `]
 })
 export class CardioPageComponent implements OnInit {
+  private destroyRef = inject(DestroyRef);
+
   sessionForm: FormGroup;
   sessions: CardioSession[] = [];
   cardioTypes = CARDIO_TYPES;
@@ -390,6 +402,7 @@ export class CardioPageComponent implements OnInit {
   isSubmitting = false;
   isDeleting = false;
   submitError: string | null = null;
+  loadError: Error | null = null;
 
   constructor(
     private fb: FormBuilder,
@@ -417,18 +430,31 @@ export class CardioPageComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    this.reloadData();
+  }
+
+  reloadData(): void {
     // Initialize storage and load sessions
-    this.storageService.initialize().subscribe({
-      next: () => this.loadSessions(),
-      error: (err) => console.error('Failed to initialize storage:', err)
-    });
+    this.loadError = null;
+    this.storageService.initialize()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => this.loadSessions(),
+        error: (err) => {
+          this.loadError = err instanceof Error ? err : new Error(String(err));
+        }
+      });
   }
 
   loadSessions(): void {
-    this.cardioService.getSessions().subscribe({
-      next: (sessions) => this.sessions = sessions,
-      error: (err) => console.error('Failed to load sessions:', err)
-    });
+    this.cardioService.getSessions()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (sessions) => this.sessions = sessions,
+        error: (err) => {
+          this.loadError = err instanceof Error ? err : new Error(String(err));
+        }
+      });
   }
 
   onDeleteSession(session: CardioSession): void {
@@ -436,16 +462,18 @@ export class CardioPageComponent implements OnInit {
     if (!ok) return;
 
     this.isDeleting = true;
-    this.cardioService.deleteSession(session.id).subscribe({
-      next: () => {
-        this.loadSessions();
-        this.isDeleting = false;
-      },
-      error: () => {
-        this.isDeleting = false;
-        this.submitError = 'Failed to delete session. Please try again.';
-      }
-    });
+    this.cardioService.deleteSession(session.id)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.loadSessions();
+          this.isDeleting = false;
+        },
+        error: () => {
+          this.isDeleting = false;
+          this.submitError = 'Failed to delete session. Please try again.';
+        }
+      });
   }
 
   onSubmit(): void {
@@ -477,21 +505,23 @@ export class CardioPageComponent implements OnInit {
       notes: formValue.notes || undefined
     };
 
-    this.cardioService.addSession(sessionData).subscribe({
-      next: () => {
-        this.sessionForm.reset();
-        this.loadSessions();
-        this.isSubmitting = false;
-      },
-      error: (err) => {
-        this.isSubmitting = false;
-        if (err instanceof CardioValidationError) {
-          this.submitError = err.errors.map(e => e.message).join(', ');
-        } else {
-          this.submitError = 'Failed to save session. Please try again.';
+    this.cardioService.addSession(sessionData)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.sessionForm.reset();
+          this.loadSessions();
+          this.isSubmitting = false;
+        },
+        error: (err) => {
+          this.isSubmitting = false;
+          if (err instanceof CardioValidationError) {
+            this.submitError = err.errors.map(e => e.message).join(', ');
+          } else {
+            this.submitError = 'Failed to save session. Please try again.';
+          }
         }
-      }
-    });
+      });
   }
 
   isFieldInvalid(fieldName: string): boolean {

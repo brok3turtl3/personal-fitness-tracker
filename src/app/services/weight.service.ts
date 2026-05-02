@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { Observable, map, of, switchMap, throwError } from 'rxjs';
+import { generateId } from '../shared/id';
 import { StorageService } from './storage.service';
 import { WeightEntry, CreateWeightEntry } from '../models/weight-entry.model';
 import { validateWeight, ValidationError } from './validators';
@@ -16,17 +17,6 @@ export class WeightValidationError extends Error {
     this.name = 'WeightValidationError';
     this.errors = errors;
   }
-}
-
-/**
- * Generates a UUID v4 string.
- */
-function generateUUID(): string {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = Math.random() * 16 | 0;
-    const v = c === 'x' ? r : (r & 0x3 | 0x8);
-    return v.toString(16);
-  });
 }
 
 /**
@@ -75,7 +65,7 @@ export class WeightService {
     
     // Create the full entry object
     const newEntry: WeightEntry = {
-      id: generateUUID(),
+      id: generateId(),
       date: entryData.date,
       weightLbs: entryData.weightLbs,
       notes: entryData.notes,

@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "cardioSessions": [
+    {
+      "id": "cardio-1",
+      "date": "2025-01-25T08:00:00Z",
+      "type": "running",
+      "durationMinutes": 30,
+      "distanceKm": 5,
+      "createdAt": "2025-01-25T08:00:00Z",
+      "updatedAt": "2025-01-25T08:00:00Z"
+    }
+  ],
+  "weightEntries": [],
+  "healthReadings": [],
+  "lastModified": "2025-01-25T08:00:00Z"
+}

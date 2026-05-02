@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { Observable, map, of, switchMap, throwError } from 'rxjs';
+import { generateId } from '../shared/id';
 import { StorageService } from './storage.service';
 import { AnthropicApiService, AnthropicMessage } from './anthropic-api.service';
 import { AISettingsService } from './ai-settings.service';
@@ -9,14 +10,6 @@ import { ChatConversation, ChatMessage, CLAUDE_MODELS, DEFAULT_AI_SETTINGS } fro
 const MESSAGE_WINDOW_SIZE = 20;
 const TOKEN_WINDOW_SIZE = 8000;
 const SUMMARIZATION_PROMPT = 'Summarize this conversation preserving key facts, goals, decisions, and specific numbers. Keep under 200 words.';
-
-function generateUUID(): string {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = Math.random() * 16 | 0;
-    const v = c === 'x' ? r : (r & 0x3 | 0x8);
-    return v.toString(16);
-  });
-}
 
 function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
@@ -57,7 +50,7 @@ export class ChatService {
     const now = new Date();
     const defaultTitle = `Chat — ${now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
     const conversation: ChatConversation = {
-      id: generateUUID(),
+      id: generateId(),
       title: title ?? defaultTitle,
       messages: [],
       summarizedMessageCount: 0,
@@ -93,7 +86,7 @@ export class ChatService {
   sendMessage(conversationId: string, userMessageText: string): Observable<ChatMessage> {
     const now = new Date().toISOString();
     const userMessage: ChatMessage = {
-      id: generateUUID(),
+      id: generateId(),
       role: 'user',
       content: userMessageText,
       tokenEstimate: estimateTokens(userMessageText),
@@ -143,7 +136,7 @@ export class ChatService {
                   .join('');
 
                 const assistantMessage: ChatMessage = {
-                  id: generateUUID(),
+                  id: generateId(),
                   role: 'assistant',
                   content: assistantText,
                   tokenEstimate: estimateTokens(assistantText),

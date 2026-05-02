@@ -1,4 +1,16 @@
 <app-nav></app-nav>
 <main class="main-content">
-  <router-outlet />
+  @if (migrationError) {
+    <app-recovery-banner
+      [recoveryKey]="recoveryKey"
+      [fromVersion]="fromVersion"
+      [toVersion]="toVersion"
+      [backupJson]="backupJson"
+      (retry)="onRetryMigration()"
+      (copyBackup)="onCopyBackup()"
+      (continueEmpty)="onContinueEmpty()"
+    ></app-recovery-banner>
+  } @else {
+    <router-outlet />
+  }
 </main>

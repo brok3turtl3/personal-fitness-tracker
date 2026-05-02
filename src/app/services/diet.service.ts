@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { Observable, map, of, switchMap, throwError } from 'rxjs';
+import { generateId } from '../shared/id';
 import { StorageService } from './storage.service';
 import { AppData } from '../models/app-data.model';
 import {
@@ -21,14 +22,6 @@ export class DietValidationError extends Error {
     this.name = 'DietValidationError';
     this.errors = errors;
   }
-}
-
-function generateUUID(): string {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = Math.random() * 16 | 0;
-    const v = c === 'x' ? r : (r & 0x3 | 0x8);
-    return v.toString(16);
-  });
 }
 
 @Injectable({
@@ -71,13 +64,13 @@ export class DietService {
     const defaultServings: SavedFoodServing[] = defaultServingsFor(input.baseUnit, input.gramsPerTbsp);
 
     const savedFood: SavedFood = {
-      id: generateUUID(),
+      id: generateId(),
       name: input.name.trim(),
       baseUnit: input.baseUnit,
       gramsPerTbsp: input.gramsPerTbsp,
       nutrientsPerUnit: normalizeTotals(input.nutrientsPerUnit),
       servings: (servingsInput.length ? servingsInput : defaultServings).map(s => ({
-        id: s.id || generateUUID(),
+        id: s.id || generateId(),
         label: s.label.trim(),
         unit: s.unit,
         amount: s.amount
@@ -117,7 +110,7 @@ export class DietService {
         const now = new Date().toISOString();
         const updatedFood: SavedFood = {
           ...data.savedFoods[idx],
-          servings: [...data.savedFoods[idx].servings, { id: generateUUID(), label: label.trim(), unit, amount }],
+          servings: [...data.savedFoods[idx].servings, { id: generateId(), label: label.trim(), unit, amount }],
           updatedAt: now
         };
 
@@ -160,7 +153,7 @@ export class DietService {
         if (update.gramsPerTbsp !== undefined) {
           const hasTbsp = servings.some(s => s.label.trim().toLowerCase() === '1 tbsp');
           if (!hasTbsp) {
-            servings = [{ id: generateUUID(), label: '1 tbsp', unit: 'tbsp', amount: 1 }, ...servings];
+            servings = [{ id: generateId(), label: '1 tbsp', unit: 'tbsp', amount: 1 }, ...servings];
           }
         }
 
@@ -247,7 +240,7 @@ export class DietService {
           const totals = scaleFoodTotals(food, baseUnits);
 
           items.push({
-            id: generateUUID(),
+            id: generateId(),
             savedFoodId: food.id,
             savedFoodName: food.name,
             servingId: serving.id,
@@ -264,7 +257,7 @@ export class DietService {
         const totals = sumTotals(items.map(i => i.snapshot.totals));
 
         const meal: MealEntry = {
-          id: generateUUID(),
+          id: generateId(),
           dateTime: input.dateTime,
           mealType: input.mealType,
           notes: input.notes?.trim() || undefined,
@@ -400,7 +393,7 @@ function buildMealItems(data: AppData, input: CreateMealEntry): { items: MealIte
     const totals = scaleFoodTotals(food, baseUnits);
 
     items.push({
-      id: generateUUID(),
+      id: generateId(),
       savedFoodId: food.id,
       savedFoodName: food.name,
       servingId: serving.id,
@@ -468,17 +461,17 @@ function defaultServingsFor(baseUnit: FoodUnit, gramsPerTbsp?: number): SavedFoo
   const servings: SavedFoodServing[] = [];
 
   if (baseUnit === 'g') {
-    servings.push({ id: generateUUID(), label: '100 g', unit: 'g', amount: 100 });
+    servings.push({ id: generateId(), label: '100 g', unit: 'g', amount: 100 });
     if (gramsPerTbsp && Number.isFinite(gramsPerTbsp) && gramsPerTbsp > 0) {
-      servings.push({ id: generateUUID(), label: '1 tbsp', unit: 'tbsp', amount: 1 });
+      servings.push({ id: generateId(), label: '1 tbsp', unit: 'tbsp', amount: 1 });
     }
     return servings;
   }
 
   // baseUnit === 'tbsp'
-  servings.push({ id: generateUUID(), label: '1 tbsp', unit: 'tbsp', amount: 1 });
+  servings.push({ id: generateId(), label: '1 tbsp', unit: 'tbsp', amount: 1 });
   if (gramsPerTbsp && Number.isFinite(gramsPerTbsp) && gramsPerTbsp > 0) {
-    servings.push({ id: generateUUID(), label: '100 g', unit: 'g', amount: 100 });
+    servings.push({ id: generateId(), label: '100 g', unit: 'g', amount: 100 });
   }
   return servings;
 }
