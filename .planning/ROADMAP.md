@@ -29,7 +29,17 @@
   3. A user navigating between pages produces no leaked subscriptions (verifiable in Angular DevTools), and an empty- or error-state on any feature page renders consistently across the app.
   4. A user whose stored `AppData` shape is malformed sees an explicit migration-failure UI with a recovery key pointing at their pre-migration backup, instead of silently losing data.
   5. A user (or CI) can run a Puppeteer smoke test and an `axe-core` per-route a11y audit without inventing the harness — both extend the scaffolds shipped in this phase.
-**Plans**: TBD
+**Plans**: 10 plans
+- [ ] 01-foundations/01-01-PLAN.md — Coverage config + axe-core install + tsconfig.spec patch (Wave 1; FOUND-01)
+- [ ] 01-foundations/01-02-PLAN.md — Shared utilities create: id.ts, chart-grouping.ts, a11y-test-helpers.ts (Wave 1; FOUND-02, FOUND-04, FOUND-05)
+- [ ] 01-foundations/01-03-PLAN.md — Empty-state + error-state standalone components (Wave 1; FOUND-06)
+- [ ] 01-foundations/01-04-PLAN.md — Typed legacy schemas + V0..V3 fixtures + malformed-input fixtures (Wave 1; FOUND-07)
+- [ ] 01-foundations/01-05-PLAN.md — Puppeteer + axe-core e2e harness scaffold (Wave 2; FOUND-05)
+- [ ] 01-foundations/01-06-PLAN.md — id.ts + chart-grouping consumer retrofit across services + chart pages (Wave 2; FOUND-02)
+- [ ] 01-foundations/01-07-PLAN.md — Empty/error retrofit + subscription hygiene across 8 feature pages (Wave 2; FOUND-03, FOUND-06)
+- [ ] 01-foundations/01-08-PLAN.md — Characterization specs for diet/chat/charts/reports (Wave 2; FOUND-04, FOUND-05)
+- [ ] 01-foundations/01-09-PLAN.md — Storage migration refactor: typed chain + backup-before-migrate + fixture-driven spec (Wave 2; FOUND-07)
+- [ ] 01-foundations/01-10-PLAN.md — Recovery banner + AppComponent integration (Wave 3; FOUND-07)
 
 ### Phase 2: Diet UX Overhaul
 **Goal**: The user's daily diet-logging friction is gone — adding new foods, picking the right unit, copying yesterday's meal, and seeing accurate daily totals all happen without leaving the meal-log flow.
@@ -92,7 +102,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundations | 0/? | Not started | - |
+| 1. Foundations | 0/10 | Not started | - |
 | 2. Diet UX Overhaul | 0/? | Not started | - |
 | 3. AI Memory + Tool Plumbing | 0/? | Not started | - |
 | 4. Agentic Loop + Citation UI | 0/? | Not started | - |
