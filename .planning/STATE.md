@@ -3,17 +3,17 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-05-02T19:16:02Z"
+last_updated: "2026-05-02T19:23:00Z"
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 10
-  completed_plans: 2
+  completed_plans: 3
 ---
 
 # State: Personal Fitness Tracker — Refinement Milestone (v2)
 
-**Last Updated:** 2026-05-02 (Phase 1 plan 01-02 complete — shared utilities id.ts, chart-grouping.ts, a11y-test-helpers.ts landed)
+**Last Updated:** 2026-05-02 (Phase 1 plan 01-03 complete — empty-state + error-state standalone components landed in src/app/shared/)
 
 ---
 
@@ -30,10 +30,10 @@ progress:
 ## Current Position
 
 **Phase:** 1 — Foundations
-**Plan:** 10 plans across 4 waves; Plans 01-01, 01-02 complete
-**Status:** Executing (Wave 1 in progress; remaining Wave 1 plans 03/04 are parallelizable)
-**Resume file:** `.planning/phases/01-foundations/01-03-PLAN.md` (next action: continue Wave 1 — empty/error-state components)
-**Progress:** [██░░░░░░░░] 0/5 phases complete; Phase 1 2/10 plans complete
+**Plan:** 10 plans across 4 waves; Plans 01-01, 01-02, 01-03 complete
+**Status:** Executing (Wave 1 in progress; remaining Wave 1 plan 04 is the last Wave 1 item)
+**Resume file:** `.planning/phases/01-foundations/01-04-PLAN.md` (next action: complete Wave 1 — typed legacy schemas + V0..V3 migration fixtures + malformed-input matrix)
+**Progress:** [███░░░░░░░] 0/5 phases complete; Phase 1 3/10 plans complete
 
 **Wave structure:**
 - Wave 1: Plans 01, 02, 03, 04 (no dependencies — Karma config, shared utilities, empty/error components, typed schemas + fixtures)
@@ -51,7 +51,7 @@ progress:
 | Phases completed | 0 |
 | Requirements mapped | 42/42 |
 | Plans drafted | 10 |
-| Plans completed | 2 |
+| Plans completed | 3 |
 | Verifier passes | 0 |
 | Plan-checker iterations | 3 (PASS on iteration 3) |
 
@@ -61,6 +61,7 @@ progress:
 |------|------|----------|-------|-------|---------|-----------|
 | 01-01 | Coverage config + axe-core install + tsconfig.spec patch | 3m 13s | 3/3 | 4 | a638189, e56e818, aef83cb | 2026-05-02 |
 | 01-02 | Shared utilities create: id.ts, chart-grouping.ts, a11y-test-helpers.ts | 3m 38s | 3/3 | 5 | fd0a850, 9bc9680, 7190fba | 2026-05-02 |
+| 01-03 | Empty-state + error-state standalone components in src/app/shared/ | ~5m | 2/2 | 4 | c9c12b2, 2227b9f, 99f3d8b, b28b39f | 2026-05-02 |
 
 ---
 
@@ -88,14 +89,16 @@ progress:
 
 ### Open Todos
 
-- Continue Wave 1 of Phase 1: plan 01-03 (empty-state + error-state components) and plan 01-04 (typed legacy-schemas.ts + V0..V3 fixtures + malformed-input fixtures) are parallelizable.
-- Plan 01-02 landed `id.ts` (`generateId()` with crypto+fallback), `chart-grouping.ts` (`groupByDay`/`toDateKey`/`round2` lifted from charts-page), and `a11y-test-helpers.ts` (`expectNoSeriousA11yViolations`) plus 13 new specs. The 6 existing `generateUUID` copies and the in-file `charts-page.component.ts:594-646` block stay UNCHANGED until Wave 2 plan 06.
+- Finish Wave 1 of Phase 1: plan 01-04 (typed legacy-schemas.ts + V0..V3 migration fixtures + malformed-input matrix) is the last Wave 1 item.
+- Plan 01-03 landed `<app-empty-state>` and `<app-error-state>` standalone components in `src/app/shared/` plus 16 specs (5 + 11). Both components export from `src/app/shared/`, are TDD-built (RED test commit + GREEN feat commit per task), and consume `StorageError` from `services/storage.service.ts` for the friendlyMessage switch on all 5 `StorageErrorCode` values. No feature page modified — Wave 2 plan 07 will retrofit all 8 pages.
+- FOUND-06 is NOT yet marked complete in REQUIREMENTS.md — the requirement reads "available for reuse across feature pages". The pattern exists but no consumer imports it yet. FOUND-06 flips to [x] when plan 07's page retrofit lands. (Same gating policy used for FOUND-02/04/05.)
 - FOUND-02, FOUND-04, FOUND-05 are NOT yet marked complete in REQUIREMENTS.md — they require consumer retrofit (plan 06) and characterization specs (plan 08) to land first.
 
 ### Recent Sessions
 
 - **2026-05-02T19:05Z–19:08Z** — Executed plan 01-01. 3 commits on `gsd/phase-1-foundations`. Smoke-verified `ng test` (190 SUCCESS, exit 0) and `ng test --code-coverage` (190 SUCCESS + 27 threshold warnings, exit 1; expected). `ng build --configuration=production` exit 0. No deviations from plan.
 - **2026-05-02T19:12Z–19:16Z** — Executed plan 01-02. 3 commits on `gsd/phase-1-foundations` (fd0a850, 9bc9680, 7190fba). Created 5 new files in `src/app/shared/`. `ng test --no-watch --browsers=ChromeHeadless` (full suite): **203 of 203 SUCCESS** (190 pre-existing + 13 new), exit 0. `ng build --configuration=production`: exit 0. No deviations. Threat-model compliance: T-02-01 accept disposition documented in JSDoc, T-02-02 b6149d2 regression spec present, T-02-03 zero production importers of a11y-test-helpers.
+- **2026-05-02T19:18Z–19:23Z** — Executed plan 01-03 TDD. 4 commits on `gsd/phase-1-foundations` (c9c12b2 test, 2227b9f feat, 99f3d8b test, b28b39f feat). Created 4 new files in `src/app/shared/`: `empty-state.component.ts` + spec, `error-state.component.ts` + spec. Targeted spec runs: 5/5 (empty) + 11/11 (error) = **16/16 SUCCESS**. `ng build --configuration=production`: exit 0. No deviations. Threat-model compliance: T-03-01 (raw error rendered inside `<details open=false>` asserted), T-03-02 (all 5 `StorageErrorCode` cases tested + fail-soft fallback), T-03-03 (severity-tiered ARIA: empty=role=status+aria-live=polite, error=role=alert+aria-live=assertive, both asserted).
 
 ### Blockers
 

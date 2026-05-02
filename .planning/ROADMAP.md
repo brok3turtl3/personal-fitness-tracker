@@ -34,7 +34,7 @@
 **Wave 1** *(no dependencies — runs first)*
 - [x] 01-foundations/01-01-PLAN.md — Coverage config + axe-core install + tsconfig.spec patch (FOUND-01) — completed 2026-05-02 (3 commits: a638189, e56e818, aef83cb; SUMMARY: 01-01-SUMMARY.md)
 - [x] 01-foundations/01-02-PLAN.md — Shared utilities create: id.ts, chart-grouping.ts, a11y-test-helpers.ts (FOUND-02, FOUND-04, FOUND-05) — completed 2026-05-02 (3 commits: fd0a850, 9bc9680, 7190fba; SUMMARY: 01-02-SUMMARY.md). Building blocks only; FOUND-02/04/05 not yet marked complete in REQUIREMENTS.md (gate on consumer retrofit in plan 06 and characterization specs in plan 08).
-- [ ] 01-foundations/01-03-PLAN.md — Empty-state + error-state standalone components (FOUND-06)
+- [x] 01-foundations/01-03-PLAN.md — Empty-state + error-state standalone components (FOUND-06) — completed 2026-05-02 (4 commits: c9c12b2, 2227b9f, 99f3d8b, b28b39f; SUMMARY: 01-03-SUMMARY.md). Both components live in `src/app/shared/`; FOUND-06 NOT yet marked complete in REQUIREMENTS.md (gate on Wave 2 plan 07 page retrofit — pattern exists but no feature page imports it yet).
 - [ ] 01-foundations/01-04-PLAN.md — Typed legacy schemas + V0..V3 fixtures + malformed-input fixtures (FOUND-07)
 
 **Wave 2** *(blocked on Wave 1 completion)*
@@ -116,7 +116,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundations | 2/10 | In progress (Wave 1) | - |
+| 1. Foundations | 3/10 | In progress (Wave 1) | - |
 | 2. Diet UX Overhaul | 0/? | Not started | - |
 | 3. AI Memory + Tool Plumbing | 0/? | Not started | - |
 | 4. Agentic Loop + Citation UI | 0/? | Not started | - |
