@@ -925,27 +925,27 @@ These specs / fixtures don't yet exist and must be created in Wave 1 of Phase 3 
 
 **Otherwise:** Every other claim in this research is either `[VERIFIED]` (live tool/file check during this session) or `[CITED]` (drawn from upstream `03-CONTEXT.md` / `03-AI-SPEC.md` / `03-UI-SPEC.md` / FOUND-07 plan summaries / live Anthropic docs). The phase is unusually well-prepared.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **`AISettings.summary` vs. `ChatConversation.summary` documentation drift.**
    - What we know: AI-SPEC.md §4 "Context Window Strategy" notes the input hint suggested summary lives on AISettings, but re-read of `models/ai-chat.model.ts` shows it lives on `ChatConversation`. AI-SPEC.md self-corrects and locks `ChatConversation.summary` as current state.
    - What's unclear: Nothing — this is a non-issue. The planner just needs to be aware that `summary` stays per-conversation and `AISettings` only holds API key / model / max_tokens / (new) redaction toggles + tool toggles + agent-turn cap + web-search caps.
-   - Recommendation: No action needed. Note for the planner so they don't get confused if they read the AI-SPEC.md note out of context.
+   - **RESOLVED:** No action needed. Note for the planner so they don't get confused if they read the AI-SPEC.md note out of context.
 
 2. **`AIToolSettings` shape — defaults for fields the Phase 3 UI doesn't expose yet.**
    - What we know: CONTEXT.md `code_context` section names defaults: `enableDataQueryTools: true, enableMemoryTool: true, enableWebSearch: false, webSearchMaxUses: 3, maxAgentTurns: 10`. Plus 3 redaction toggles all `false`.
    - What's unclear: Phase 3 UI exposes (a) the 3 redaction toggles in `/settings/ai`, (b) probably the agent-turn cap and tool-toggles per CHAT-12, (c) NOT the web-search bits (Phase 5).
-   - Recommendation: Wire the full struct now (it's just defaults). UI exposes only the fields CHAT-12 calls for; Phase 4/5 enable the rest. Specifically, `/settings/ai` "What the AI sees" section gets the 3 redaction toggles + the existing API key / model / max-tokens form. CHAT-12 also asks for "AI tool toggles (data-query, memory, web-search), memory inspector, agent-turn cap, web-search usage cap" — recommend the planner stretch CHAT-12 in Phase 3 to expose `enableDataQueryTools` / `enableMemoryTool` / `enableWebSearch` toggles (read-only or just not yet effective in Phase 3 since SC5 forbids `tools[]`) + `maxAgentTurns` + `webSearchMaxUses` so the UI is complete in Phase 3 even though the wired-up effect is Phase 4/5. UI-SPEC.md does NOT document UI for these knobs (focuses on the redaction subsection); planner MUST decide whether to (a) ship the full toggle set in Phase 3 (UI surface complete, dormant effect), (b) ship only redaction in Phase 3 and defer the tool toggles to Phase 4. **Recommendation: option (a)** — CHAT-12 explicitly lists these and the AI-SPEC.md eval rubric D-06 already counts on the dormant scaffold. Planner finalizes copy.
+   - **RESOLVED:** Wire the full struct now (it's just defaults). UI exposes only the fields CHAT-12 calls for; Phase 4/5 enable the rest. Specifically, `/settings/ai` "What the AI sees" section gets the 3 redaction toggles + the existing API key / model / max-tokens form. CHAT-12 also asks for "AI tool toggles (data-query, memory, web-search), memory inspector, agent-turn cap, web-search usage cap" — recommend the planner stretch CHAT-12 in Phase 3 to expose `enableDataQueryTools` / `enableMemoryTool` / `enableWebSearch` toggles (read-only or just not yet effective in Phase 3 since SC5 forbids `tools[]`) + `maxAgentTurns` + `webSearchMaxUses` so the UI is complete in Phase 3 even though the wired-up effect is Phase 4/5. UI-SPEC.md does NOT document UI for these knobs (focuses on the redaction subsection); planner MUST decide whether to (a) ship the full toggle set in Phase 3 (UI surface complete, dormant effect), (b) ship only redaction in Phase 3 and defer the tool toggles to Phase 4. **Recommendation: option (a)** — CHAT-12 explicitly lists these and the AI-SPEC.md eval rubric D-06 already counts on the dormant scaffold. Planner finalizes copy.
 
 3. **Existing `chat-page.component.spec.ts` characterization assertions on `.content`.**
    - What we know: Plan 01-08 added a 6-spec characterization spec for chat-page asserting on rendered DOM (textContent + a11y).
    - What's unclear: Whether any of those 6 specs assert on `msg.content` directly (vs. asserting on rendered text inside `.message-content`). If they assert on rendered text, the cut-over is invisible to them — the template just changes from `{{ msg.content }}` to a `@switch` over blocks that emits the same text for `text` blocks. If they assert on the property, the spec needs to update.
-   - Recommendation: Planner reads `chat-page.component.spec.ts` early in Wave 1 and includes any property-level assertion update as part of the V4→V5 cut-over plan, not as a side effect.
+   - **RESOLVED:** Planner reads `chat-page.component.spec.ts` early in Wave 1 and includes any property-level assertion update as part of the V4→V5 cut-over plan, not as a side effect.
 
 4. **Memory tool error string for "directory does not exist".**
    - What we know: Anthropic docs canonical strings include `"Error: The path {path} does not exist"` for `delete` and `insert`, and `"The path {path} does not exist. Please provide a valid path."` for `view` and `str_replace`. Slight inconsistency.
    - What's unclear: Whether to honor the per-command difference (probably yes — match the spec) or normalize.
-   - Recommendation: Match the spec verbatim. Fixture-test each command's error string per the table above.
+   - **RESOLVED:** Match the spec verbatim. Fixture-test each command's error string per the table above.
 
 ## Sources
 
