@@ -78,7 +78,19 @@
   3. A user can toggle AI tool capabilities (data-query, memory, web-search), set the agent-turn cap and web-search usage cap, and inspect/delete memory files from `/settings`.
   4. A user-entered meal note containing prompt-injection text (e.g. `</system>`) cannot escape its delimiter wrapper in the system prompt, and any AI tool-call argument is re-validated through the same domain validators that guard direct user input.
   5. A user sending a chat message at the end of this phase sees the same single-shot behavior as today — no agentic loop yet — confirming plumbing landed without breaking shipped behavior.
-**Plans**: TBD
+**Plans**: 5 plans across 3 waves
+
+**Wave 1** *(no dependencies — runs first)*
+- [ ] 03-ai-memory-tool-plumbing/03-01-PLAN.md — Models V5 + UserProfile + ChatBlock union + LegacyAppDataV4 + migrateV4ToV5 + V4 fixtures + chat.service/.spec compile-saving cut-over (CHAT-01)
+
+**Wave 2** *(blocked on Wave 1)*
+- [ ] 03-ai-memory-tool-plumbing/03-02-PLAN.md — @anthropic-ai/sdk transport adoption + chat-block-serializer pure module + chat.service rewire + CLAUDE_MODELS update (CHAT-01 / D-15 / D-16 / D-17)
+- [ ] 03-ai-memory-tool-plumbing/03-03-PLAN.md — UserProfileService + MemoryStoreService + MemoryToolExecutor + ToolRegistryService + FitnessContextService delimiter wrap + redaction toggles (CHAT-03 / CHAT-04 / CHAT-11)
+
+**Wave 3** *(blocked on Wave 2)*
+- [ ] 03-ai-memory-tool-plumbing/03-04-PLAN.md — Settings shell + 3 sub-pages (/settings/{ai,profile,memory}) + dev-only seed buttons + AIToolSettings UI + routes (CHAT-04 / CHAT-12)
+- [ ] 03-ai-memory-tool-plumbing/03-05-PLAN.md — pending-pill component + chat-message-list block-aware @switch render + chat-page dev-seed consume + chat.service.updateMessageBlock&appendAssistantBlocks (CHAT-01 / CHAT-03 / CHAT-04)
+
 **UI hint**: yes
 **AI hint**: yes
 
