@@ -481,10 +481,12 @@ export class StorageService {
       messages: conv.messages.map(msg => ({
         id: msg.id,
         role: msg.role,
-        // Build new blocks array from legacy content. Defensive guard: lift
-        // null/undefined content to an empty text block rather than dropping
-        // the message (CONTEXT.md "Specific Ideas").
-        blocks: [{ type: 'text' as const, text: msg.content ?? '' }],
+        // Build new blocks array from legacy content. Defensive guard
+        // (CONTEXT.md "Specific Ideas" + T-3-CI): coerce to a string so
+        // null/undefined/non-string content can never produce a malformed
+        // TextBlock at runtime. Empty/falsy stays empty; 0/false/etc. would
+        // be unusual but coerce to their string form rather than be dropped.
+        blocks: [{ type: 'text' as const, text: typeof msg.content === 'string' ? msg.content : (msg.content == null ? '' : String(msg.content)) }],
         // Defensive coerce for malformed-V4 inputs (T-3-CI): missing or
         // wrong-type tokenEstimate becomes 0 rather than producing a NaN
         // anywhere downstream.
