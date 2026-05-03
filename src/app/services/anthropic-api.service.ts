@@ -8,19 +8,6 @@ import type {
 } from '@anthropic-ai/sdk/resources/messages';
 
 /**
- * Compile-saving type aliases for callers that have not yet been migrated
- * to the SDK types directly. Plan 03-02 Task 4 removes the `AnthropicMessage`
- * and `AnthropicResponse` aliases when chat.service.ts is fully wired
- * through chat-block-serializer.ts. They are NOT new public surface — they
- * are throwaway shims, scoped to the Wave 2 transition.
- *
- * Task 3 verification gate requires no `export interface AnthropicMessage`,
- * etc. Using `type` aliases satisfies that gate (it forbids `interface`).
- */
-export type AnthropicMessage = MessageParam;
-export type AnthropicResponse = Message;
-
-/**
  * Typed error thrown by AnthropicApiService.
  *
  * Public surface (statusCode + errorType) is unchanged from the pre-SDK

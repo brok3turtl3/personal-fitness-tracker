@@ -2,11 +2,12 @@ import { Injectable } from '@angular/core';
 import { Observable, map, of, switchMap, throwError } from 'rxjs';
 import { generateId } from '../shared/id';
 import { StorageService } from './storage.service';
-import { AnthropicApiService, AnthropicMessage } from './anthropic-api.service';
+import { AnthropicApiService } from './anthropic-api.service';
 import { AISettingsService } from './ai-settings.service';
 import { FitnessContextService } from './fitness-context.service';
+import { toAnthropicContent, fromAnthropicMessage } from './chat-block-serializer';
+import type { MessageParam } from '@anthropic-ai/sdk/resources/messages';
 import {
-  ChatBlock,
   ChatConversation,
   ChatMessage,
   CLAUDE_MODELS,
@@ -20,20 +21,6 @@ const SUMMARIZATION_PROMPT = 'Summarize this conversation preserving key facts, 
 
 function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
-}
-
-/**
- * Interim helper: collapse a ChatBlock[] into the plain-text view that the
- * V4 wire format expects. Plan 02 will replace this with the
- * `chat-block-serializer.ts` module (proper handling of tool_use/tool_result
- * blocks). For Plan 01 the cut-over keeps `tools[]`-free SC5 behavior intact
- * — only text blocks reach the wire.
- */
-function blocksToText(blocks: ChatBlock[]): string {
-  return blocks
-    .filter((b): b is TextBlock => b.type === 'text')
-    .map(b => b.text)
-    .join('');
 }
 
 @Injectable({
@@ -151,16 +138,15 @@ export class ChatService {
                 });
               }),
               switchMap(response => {
-                const assistantText = response.content
-                  .filter(block => block.type === 'text')
-                  .map(block => block.text)
-                  .join('');
+                const assistantBlocks = fromAnthropicMessage(response);
 
                 const assistantMessage: ChatMessage = {
                   id: generateId(),
                   role: 'assistant',
-                  blocks: [{ type: 'text', text: assistantText }],
-                  tokenEstimate: estimateTokens(assistantText),
+                  blocks: assistantBlocks,
+                  // Accurate token count from the SDK (replaces estimateTokens
+                  // heuristic for assistant messages — CONCERNS.md drift item).
+                  tokenEstimate: response.usage.output_tokens,
                   createdAt: new Date().toISOString()
                 };
 
@@ -196,18 +182,18 @@ export class ChatService {
     );
   }
 
-  private buildApiMessages(conversation: ChatConversation): AnthropicMessage[] {
-    const messages: AnthropicMessage[] = [];
+  private buildApiMessages(conversation: ChatConversation): MessageParam[] {
+    const messages: MessageParam[] = [];
 
     // If there's a summary, prepend it as context
     if (conversation.summary) {
       messages.push({
         role: 'user',
-        content: `[Previous conversation summary: ${conversation.summary}]`
+        content: [{ type: 'text', text: `[Previous conversation summary: ${conversation.summary}]` }]
       });
       messages.push({
         role: 'assistant',
-        content: 'I understand the context from our previous conversation. How can I help you?'
+        content: [{ type: 'text', text: 'I understand the context from our previous conversation. How can I help you?' }]
       });
     }
 
@@ -226,7 +212,7 @@ export class ChatService {
     }
 
     for (const msg of windowMessages) {
-      messages.push({ role: msg.role, content: blocksToText(msg.blocks) });
+      messages.push({ role: msg.role, content: toAnthropicContent(msg.blocks) });
     }
 
     return messages;
@@ -258,7 +244,7 @@ export class ChatService {
     }
 
     const conversationText = messagesToSummarize
-      .map(m => `${m.role}: ${blocksToText(m.blocks)}`)
+      .map(m => `${m.role}: ${m.blocks.filter((b): b is TextBlock => b.type === 'text').map(b => b.text).join('')}`)
       .join('\n');
 
     const existingSummary = conversation.summary
@@ -270,13 +256,13 @@ export class ChatService {
       max_tokens: Math.min(maxTokens, 1024),
       messages: [{
         role: 'user',
-        content: `${SUMMARIZATION_PROMPT}\n\n${existingSummary}${conversationText}`
+        content: [{ type: 'text', text: `${SUMMARIZATION_PROMPT}\n\n${existingSummary}${conversationText}` }]
       }]
     }).pipe(
       switchMap(response => {
-        const summaryText = response.content
-          .filter(block => block.type === 'text')
-          .map(block => block.text)
+        const summaryText = fromAnthropicMessage(response)
+          .filter((b): b is TextBlock => b.type === 'text')
+          .map(b => b.text)
           .join('');
 
         return this.storageService.getData().pipe(

@@ -1,8 +1,9 @@
 import { TestBed } from '@angular/core/testing';
 import { firstValueFrom, of } from 'rxjs';
+import type { Message } from '@anthropic-ai/sdk/resources/messages';
 import { ChatService } from './chat.service';
 import { StorageService } from './storage.service';
-import { AnthropicApiService, AnthropicResponse } from './anthropic-api.service';
+import { AnthropicApiService } from './anthropic-api.service';
 import { AISettingsService } from './ai-settings.service';
 import { FitnessContextService } from './fitness-context.service';
 import { AppData, createEmptyAppData } from '../models/app-data.model';
@@ -26,16 +27,16 @@ describe('ChatService', () => {
 
   const mockSettings: AISettings = {
     apiKey: 'sk-ant-test-key',
-    selectedModel: 'claude-sonnet-4-5-20250929',
+    selectedModel: 'claude-sonnet-4-6',
     maxResponseTokens: 4096
   };
 
-  const mockApiResponse: AnthropicResponse = {
+  const mockApiResponse = {
     id: 'msg_test',
     type: 'message',
     role: 'assistant',
-    content: [{ type: 'text', text: 'Hello! I can help with your fitness goals.' }],
-    model: 'claude-sonnet-4-5-20250929',
+    content: [{ type: 'text', text: 'Hello! I can help with your fitness goals.', citations: null }],
+    model: 'claude-sonnet-4-6',
     stop_reason: 'end_turn',
     stop_sequence: null,
     usage: {
@@ -44,7 +45,7 @@ describe('ChatService', () => {
       cache_creation_input_tokens: null,
       cache_read_input_tokens: null,
     },
-  } as unknown as AnthropicResponse;
+  } as unknown as Message;
 
   beforeEach(() => {
     mockAppData = createEmptyAppData();
@@ -163,7 +164,49 @@ describe('ChatService', () => {
       const [apiKey, request] = mockAnthropicApi.sendMessage.calls.mostRecent().args;
       expect(apiKey).toBe('sk-ant-test-key');
       expect(request.system).toBe('You are a fitness expert.');
-      expect(request.model).toBe('claude-sonnet-4-5-20250929');
+      expect(request.model).toBe('claude-sonnet-4-6');
+    });
+
+    it('SC5: outbound request shape has no tools field', async () => {
+      const conv = await firstValueFrom(service.createConversation('Test'));
+      await firstValueFrom(service.sendMessage(conv.id, 'Hello'));
+
+      const callArgs = mockAnthropicApi.sendMessage.calls.mostRecent().args[1] as unknown as Record<string, unknown>;
+      expect('tools' in callArgs).toBeFalse();
+      expect(callArgs['tools']).toBeUndefined();
+      expect('tool_choice' in callArgs).toBeFalse();
+    });
+
+    it('outbound messages[].content is ContentBlockParam[] (serializer bridge)', async () => {
+      const conv = await firstValueFrom(service.createConversation('Test'));
+      await firstValueFrom(service.sendMessage(conv.id, 'Hello world'));
+
+      const callArgs = mockAnthropicApi.sendMessage.calls.mostRecent().args[1];
+      // The user message is the only message; content must be an array of
+      // ContentBlockParam, NOT a plain string. This is the visible signature
+      // of the chat-block-serializer integration.
+      expect(Array.isArray(callArgs.messages[0].content)).toBeTrue();
+      const userContent = callArgs.messages[0].content as Array<{ type: string; text?: string }>;
+      expect(userContent[0].type).toBe('text');
+      expect(userContent[0].text).toBe('Hello world');
+    });
+
+    it('assistant blocks length matches response text-block count via fromAnthropicMessage', async () => {
+      const conv = await firstValueFrom(service.createConversation('Test'));
+      const assistantMsg = await firstValueFrom(service.sendMessage(conv.id, 'Hello'));
+
+      // Phase 3: response.content has 1 text block; assistantMsg.blocks
+      // should mirror that exactly. fromAnthropicMessage round-trip lock.
+      expect(assistantMsg.blocks.length).toBe(1);
+      expect(assistantMsg.blocks[0].type).toBe('text');
+    });
+
+    it('assistant tokenEstimate uses response.usage.output_tokens (not heuristic)', async () => {
+      const conv = await firstValueFrom(service.createConversation('Test'));
+      const assistantMsg = await firstValueFrom(service.sendMessage(conv.id, 'Hello'));
+
+      // mockApiResponse.usage.output_tokens === 20.
+      expect(assistantMsg.tokenEstimate).toBe(20);
     });
 
     it('should error when no API key is set', async () => {
