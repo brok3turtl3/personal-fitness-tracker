@@ -90,9 +90,9 @@ export interface AISettings {
 }
 
 export const CLAUDE_MODELS = [
-  { value: 'claude-sonnet-4-5-20250929', label: 'Claude Sonnet 4.5', contextWindow: 200000 },
-  { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5', contextWindow: 200000 },
-  { value: 'claude-opus-4-20250514', label: 'Claude Opus 4', contextWindow: 200000 },
+  { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6 (default)', contextWindow: 200000 },
+  { value: 'claude-haiku-4-5', label: 'Claude Haiku 4.5 (faster)', contextWindow: 200000 },
+  { value: 'claude-opus-4-7', label: 'Claude Opus 4.7 (best reasoning)', contextWindow: 200000 },
 ];
 
 export const DEFAULT_AI_SETTINGS: AISettings = { maxResponseTokens: 4096 };
