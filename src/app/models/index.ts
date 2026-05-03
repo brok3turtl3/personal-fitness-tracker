@@ -4,3 +4,4 @@ export * from './cardio-session.model';
 export * from './weight-entry.model';
 export * from './health-reading.model';
 export * from './ai-chat.model';
+export * from './user-profile.model';

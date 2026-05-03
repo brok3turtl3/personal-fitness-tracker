@@ -1,9 +1,74 @@
 export type ChatRole = 'user' | 'assistant';
 
+/**
+ * Plain text content in a chat message.
+ *
+ * Persistence shape — SDK-agnostic per AI-SPEC.md §3 Pitfall #2. Bridges to
+ * the Anthropic wire format via `chat-block-serializer.ts` (D-16).
+ */
+export interface TextBlock {
+  type: 'text';
+  text: string;
+}
+
+/**
+ * AI-proposed tool invocation (Phase 3 dormant scaffold; Phase 4 activates).
+ *
+ * Persistence shape — SDK-agnostic per AI-SPEC.md §3 Pitfall #2.
+ *
+ * `status` and `editedFromText` are persistence-only fields — stripped by
+ * `chat-block-serializer.toAnthropicContent` before going on the wire
+ * (D-15, D-16). They distinguish our model from Anthropic's tool_use block,
+ * carrying the user's confirm-before-write decision through to the audit
+ * trail (D-11).
+ */
+export interface ToolUseBlock {
+  type: 'tool_use';
+  id: string;
+  name: string;
+  input: unknown;
+  /** Persistence-only: confirm-before-write disposition. Stripped before API call. */
+  status: 'pending' | 'approved' | 'discarded' | 'edited';
+  /** Persistence-only: original AI text when status='edited'. Stripped before API call. */
+  editedFromText?: string;
+}
+
+/**
+ * Result of executing a tool — fed back to the AI on the next turn.
+ *
+ * Persistence shape — SDK-agnostic per AI-SPEC.md §3 Pitfall #2.
+ */
+export interface ToolResultBlock {
+  type: 'tool_result';
+  tool_use_id: string;
+  content: string;
+  isError?: boolean;
+}
+
+/**
+ * Discriminated union of all chat message block kinds.
+ *
+ * Persistence shape — SDK-agnostic per AI-SPEC.md §3 Pitfall #2. The
+ * `chat-block-serializer.ts` module bridges this to the Anthropic wire
+ * format (drops persistence-only fields, normalizes tool_use blocks with
+ * `status='pending'` to plain text per D-16).
+ */
+export type ChatBlock = TextBlock | ToolUseBlock | ToolResultBlock;
+
+/**
+ * One message inside a ChatConversation.
+ *
+ * V5 shape per CONTEXT.md D-15: full cut-over from `content: string` to
+ * `blocks: ChatBlock[]` (discriminated union per D-15). No transitional
+ * shim. V4→V5 migration lifts each `content` string into a single text
+ * block. Render via `chat-message-list.component.ts` @switch on
+ * `block.type`.
+ */
 export interface ChatMessage {
   id: string;
   role: ChatRole;
-  content: string;
+  /** Discriminated union per D-15. Replaces the V4 `content: string` field. */
+  blocks: ChatBlock[];
   tokenEstimate: number;
   createdAt: string;
 }
@@ -31,3 +96,45 @@ export const CLAUDE_MODELS = [
 ];
 
 export const DEFAULT_AI_SETTINGS: AISettings = { maxResponseTokens: 4096 };
+
+/**
+ * Per-tool, per-redaction settings the user controls in /settings/ai.
+ *
+ * Per CONTEXT.md D-09: redaction defaults are all OFF (single sophisticated
+ * user opted-in to seeing everything; toggles exist for screen-sharing and
+ * future granularity). Tool flags default ON for memory/data-query and OFF
+ * for web search (Phase 5 territory).
+ */
+export interface AIToolSettings {
+  /** Master switch for the data-query tool family (Phase 4). Default: true. */
+  enableDataQueryTools: boolean;
+  /** Master switch for the memory tool (Phase 4). Default: true. */
+  enableMemoryTool: boolean;
+  /** Master switch for web search (Phase 5). Default: false. */
+  enableWebSearch: boolean;
+  /** Max web-search invocations per turn (Phase 5). Default: 3. */
+  webSearchMaxUses: number;
+  /** Max agentic-loop turns per user message (Phase 4). Default: 10. */
+  maxAgentTurns: number;
+  /** Omit BP/glucose/ketone readings from system prompt. Default: false. */
+  redactHealthReadings: boolean;
+  /** Omit weight entries from system prompt. Default: false. */
+  redactWeightEntries: boolean;
+  /** Omit free-text meal notes from system prompt (macros still sent). Default: false. */
+  redactMealNotes: boolean;
+}
+
+/**
+ * Default AIToolSettings — tools on, web search off, redaction off (D-09).
+ * Used by `createEmptyAppData()` and the V4→V5 migration.
+ */
+export const DEFAULT_AI_TOOL_SETTINGS: AIToolSettings = {
+  enableDataQueryTools: true,
+  enableMemoryTool: true,
+  enableWebSearch: false,
+  webSearchMaxUses: 3,
+  maxAgentTurns: 10,
+  redactHealthReadings: false,
+  redactWeightEntries: false,
+  redactMealNotes: false,
+};

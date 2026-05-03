@@ -22,15 +22,24 @@ import { expectNoSeriousA11yViolations } from '../../shared/a11y-test-helpers';
 // Per-spec factory helpers (D-07: NO shared canonical fixture file).
 // ---------------------------------------------------------------------------
 
-function createValidMessage(overrides: Partial<ChatMessage> = {}): ChatMessage {
-  return {
+function createValidMessage(
+  overrides: Partial<ChatMessage> & { content?: string } = {},
+): ChatMessage {
+  // Spec ergonomics: callers may pass a `content: 'X'` shorthand to keep
+  // existing call sites readable; the helper lifts it into the V5 `blocks`
+  // shape (D-15) so the production type contract is preserved.
+  const { content, ...rest } = overrides;
+  const base: ChatMessage = {
     id: 'msg-1',
     role: 'user',
-    content: 'Hello',
+    blocks: [{ type: 'text', text: 'Hello' }],
     tokenEstimate: 1,
     createdAt: '2026-04-15T10:00:00.000Z',
-    ...overrides,
   };
+  if (content !== undefined) {
+    return { ...base, ...rest, blocks: [{ type: 'text', text: content }] };
+  }
+  return { ...base, ...rest };
 }
 
 function createValidConversation(overrides: Partial<ChatConversation> = {}): ChatConversation {

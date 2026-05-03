@@ -6,7 +6,15 @@ import { AnthropicApiService, AnthropicResponse } from './anthropic-api.service'
 import { AISettingsService } from './ai-settings.service';
 import { FitnessContextService } from './fitness-context.service';
 import { AppData, createEmptyAppData } from '../models/app-data.model';
-import { AISettings } from '../models/ai-chat.model';
+import { AISettings, ChatMessage, TextBlock } from '../models/ai-chat.model';
+
+/** Spec helper: extract joined text from a ChatMessage's blocks (D-15). */
+function textOf(msg: ChatMessage): string {
+  return msg.blocks
+    .filter((b): b is TextBlock => b.type === 'text')
+    .map(b => b.text)
+    .join('');
+}
 
 describe('ChatService', () => {
   let service: ChatService;
@@ -132,12 +140,12 @@ describe('ChatService', () => {
       const assistantMsg = await firstValueFrom(service.sendMessage(conv.id, 'How is my weight trend?'));
 
       expect(assistantMsg.role).toBe('assistant');
-      expect(assistantMsg.content).toBe('Hello! I can help with your fitness goals.');
+      expect(textOf(assistantMsg)).toBe('Hello! I can help with your fitness goals.');
 
       const updatedConv = mockAppData.chatConversations.find(c => c.id === conv.id)!;
       expect(updatedConv.messages.length).toBe(2);
       expect(updatedConv.messages[0].role).toBe('user');
-      expect(updatedConv.messages[0].content).toBe('How is my weight trend?');
+      expect(textOf(updatedConv.messages[0])).toBe('How is my weight trend?');
       expect(updatedConv.messages[1].role).toBe('assistant');
     });
 

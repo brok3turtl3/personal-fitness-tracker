@@ -7,11 +7,14 @@ import {
   createEmptyAppData
 } from '../models/app-data.model';
 import { SavedFood } from '../models/diet.model';
+import { DEFAULT_AI_TOOL_SETTINGS } from '../models/ai-chat.model';
+import { DEFAULT_USER_PROFILE } from '../models/user-profile.model';
 import {
   LegacyAppDataV0,
   LegacyAppDataV1,
   LegacyAppDataV2,
   LegacyAppDataV3,
+  LegacyAppDataV4,
   LegacySavedFoodV2,
 } from './legacy-schemas';
 
@@ -306,7 +309,7 @@ export class StorageService {
     try {
       const dataString = localStorage.getItem(STORAGE_KEY) || '';
       const usedBytes = new Blob([dataString]).size;
-      
+
       // Estimate available storage (5MB typical limit)
       const estimatedTotal = 5 * 1024 * 1024; // 5MB
       const availableBytes = Math.max(0, estimatedTotal - usedBytes);
@@ -323,6 +326,56 @@ export class StorageService {
         'NOT_AVAILABLE',
         e instanceof Error ? e : undefined
       ));
+    }
+  }
+
+  // ========================================================================
+  // Dev-only seed sentinel (D-12 — Phase 3)
+  // ------------------------------------------------------------------------
+  // Plans 04 (writer in /settings/ai "Developer tools" container) and 05
+  // (reader in chat-page ngOnInit) consume these methods. The sentinel is
+  // stored under a SEPARATE LocalStorage key (`dev_seed_pending`) — NOT
+  // under STORAGE_KEY. It is not user data, never migrated, never backed
+  // up. Lifting these methods into Wave 1 removes the implicit Plan 04 →
+  // Plan 05 cross-wave coupling.
+  // ========================================================================
+
+  private static readonly DEV_SEED_KEY = 'dev_seed_pending';
+
+  /**
+   * Dev-only seed sentinel writer (D-12). Visible from /settings/ai only
+   * when `location.hostname === 'localhost'`. Best-effort — quota or
+   * serialization failures are swallowed (the seed is a debugging
+   * convenience, not a correctness path).
+   */
+  setDevSeed(kind: 'memory' | 'profile'): void {
+    try {
+      const sentinel = JSON.stringify({ kind, at: new Date().toISOString() });
+      localStorage.setItem(StorageService.DEV_SEED_KEY, sentinel);
+    } catch {
+      /* ignore — best-effort */
+    }
+  }
+
+  /**
+   * Dev-only seed sentinel reader (D-12). Reads-and-removes idempotently.
+   * Called from chat-page.component.ts ngOnInit (Plan 05). Returns null
+   * when absent, when JSON parse fails, or when LocalStorage access throws.
+   */
+  consumeDevSeed(): { kind: 'memory' | 'profile'; at: string } | null {
+    try {
+      const raw = localStorage.getItem(StorageService.DEV_SEED_KEY);
+      if (!raw) return null;
+      localStorage.removeItem(StorageService.DEV_SEED_KEY);
+      const parsed = JSON.parse(raw) as { kind?: unknown; at?: unknown };
+      if (parsed.kind !== 'memory' && parsed.kind !== 'profile') return null;
+      const at = typeof parsed.at === 'string' ? parsed.at : '';
+      return { kind: parsed.kind, at };
+    } catch {
+      // Corrupted JSON or localStorage error — best-effort removal so we
+      // don't loop on a bad value.
+      try { localStorage.removeItem(StorageService.DEV_SEED_KEY); } catch { /* ignore */ }
+      return null;
     }
   }
 
@@ -370,11 +423,15 @@ export class StorageService {
       ? this.migrateV2ToV3(v2)
       : (data as LegacyAppDataV3);
 
-    const v4: AppData = (fromVersion < 4)
+    const v4: LegacyAppDataV4 = (fromVersion < 4)
       ? this.migrateV3ToV4(v3)
+      : (data as LegacyAppDataV4);
+
+    const v5: AppData = (fromVersion < 5)
+      ? this.migrateV4ToV5(v4)
       : (data as AppData);
 
-    return v4;
+    return v5;
   }
 
   /**
@@ -436,8 +493,12 @@ export class StorageService {
    * Migration from version 3 to version 4.
    * Adds AI chat fields (chatConversations defaults to []; aiSettings stays
    * undefined per CLAUDE.md "no null for absent optional fields").
+   *
+   * Returns the legacy V4 shape (NOT current AppData) so the chain can hand
+   * it off to migrateV4ToV5. V5-only fields (memoryFiles, userProfile,
+   * aiToolSettings) are NOT introduced here — that's V4→V5's job.
    */
-  private migrateV3ToV4(data: LegacyAppDataV3): AppData {
+  private migrateV3ToV4(data: LegacyAppDataV3): LegacyAppDataV4 {
     return {
       schemaVersion: 4,
       cardioSessions: data.cardioSessions,
@@ -447,6 +508,60 @@ export class StorageService {
       mealEntries: data.mealEntries,
       chatConversations: [],
       lastModified: data.lastModified
+    };
+  }
+
+  /**
+   * Migration from version 4 to version 5 (D-15, FOUND-07 + T-3-DM).
+   *
+   * Lifts each ChatMessage's `content: string` into a single text block
+   * (`blocks: [{ type: 'text', text: msg.content ?? '' }]`) and removes the
+   * `content` field. Adds three V5-only fields with defaults: `memoryFiles`,
+   * `userProfile`, `aiToolSettings`.
+   *
+   * Defensive guard per CONTEXT.md "Specific Ideas": `msg.content ?? ''` so
+   * legacy messages with null/undefined content are lifted to an empty text
+   * block rather than dropped or thrown on. Order: build new ChatMessage
+   * literal with `blocks` → never mutate the legacy object in place.
+   */
+  private migrateV4ToV5(data: LegacyAppDataV4): AppData {
+    const migratedConversations = data.chatConversations.map(conv => ({
+      id: conv.id,
+      title: conv.title,
+      messages: conv.messages.map(msg => ({
+        id: msg.id,
+        role: msg.role,
+        // Build new blocks array from legacy content. Defensive guard
+        // (CONTEXT.md "Specific Ideas" + T-3-CI): coerce to a string so
+        // null/undefined/non-string content can never produce a malformed
+        // TextBlock at runtime. Empty/falsy stays empty; 0/false/etc. would
+        // be unusual but coerce to their string form rather than be dropped.
+        blocks: [{ type: 'text' as const, text: typeof msg.content === 'string' ? msg.content : (msg.content == null ? '' : String(msg.content)) }],
+        // Defensive coerce for malformed-V4 inputs (T-3-CI): missing or
+        // wrong-type tokenEstimate becomes 0 rather than producing a NaN
+        // anywhere downstream.
+        tokenEstimate: typeof msg.tokenEstimate === 'number' ? msg.tokenEstimate : 0,
+        createdAt: msg.createdAt,
+      })),
+      summary: conv.summary,
+      summarizedMessageCount: conv.summarizedMessageCount,
+      createdAt: conv.createdAt,
+      updatedAt: conv.updatedAt,
+    }));
+
+    return {
+      schemaVersion: 5,
+      cardioSessions: data.cardioSessions,
+      weightEntries: data.weightEntries,
+      healthReadings: data.healthReadings,
+      savedFoods: data.savedFoods,
+      mealEntries: data.mealEntries,
+      aiSettings: data.aiSettings,
+      chatConversations: migratedConversations,
+      memoryFiles: {},
+      userProfile: { ...DEFAULT_USER_PROFILE },
+      aiToolSettings: { ...DEFAULT_AI_TOOL_SETTINGS },
+      lastModified: data.lastModified,
     };
   }
 }

@@ -16,6 +16,7 @@ import { CardioSession } from '../models/cardio-session.model';
 import { WeightEntry } from '../models/weight-entry.model';
 import { HealthReading } from '../models/health-reading.model';
 import { SavedFood, MealEntry } from '../models/diet.model';
+import type { AISettings } from '../models/ai-chat.model';
 
 /**
  * Pre-versioning shape. No `schemaVersion` field.
@@ -91,5 +92,47 @@ export interface LegacyAppDataV3 {
   healthReadings: HealthReading[];
   savedFoods: SavedFood[];
   mealEntries: MealEntry[];
+  lastModified: string;
+}
+
+/**
+ * V4 chat message shape: pre-blocks. `content: string` is the legacy field
+ * V4→V5 lifts into `blocks: [{ type: 'text', text: <content> }]` (D-15).
+ */
+export interface LegacyChatMessageV4 {
+  id: string;
+  role: 'user' | 'assistant';
+  /** V4 — pre-blocks shape. V5 replaces this with `blocks: ChatBlock[]`. */
+  content: string;
+  tokenEstimate: number;
+  createdAt: string;
+}
+
+/**
+ * V4 chat conversation shape: messages still carry `content: string`.
+ */
+export interface LegacyChatConversationV4 {
+  id: string;
+  title: string;
+  messages: LegacyChatMessageV4[];
+  summary?: string;
+  summarizedMessageCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * V4 shape: chat conversations exist; ChatMessage.content is a STRING. No
+ * memoryFiles, userProfile, aiToolSettings (those are V5+).
+ */
+export interface LegacyAppDataV4 {
+  schemaVersion: 4;
+  cardioSessions: CardioSession[];
+  weightEntries: WeightEntry[];
+  healthReadings: HealthReading[];
+  savedFoods: SavedFood[];
+  mealEntries: MealEntry[];
+  aiSettings?: AISettings;
+  chatConversations: LegacyChatConversationV4[];
   lastModified: string;
 }

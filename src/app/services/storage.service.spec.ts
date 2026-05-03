@@ -1,6 +1,8 @@
 import { TestBed } from '@angular/core/testing';
 import { StorageService, StorageError } from './storage.service';
 import { AppData, STORAGE_KEY, CURRENT_SCHEMA_VERSION } from '../models/app-data.model';
+import { DEFAULT_AI_TOOL_SETTINGS } from '../models/ai-chat.model';
+import { DEFAULT_USER_PROFILE } from '../models/user-profile.model';
 import { firstValueFrom } from 'rxjs';
 
 describe('StorageService', () => {
@@ -79,6 +81,9 @@ describe('StorageService', () => {
         savedFoods: [],
         mealEntries: [],
         chatConversations: [],
+        memoryFiles: {},
+        userProfile: { ...DEFAULT_USER_PROFILE },
+        aiToolSettings: { ...DEFAULT_AI_TOOL_SETTINGS },
         lastModified: '2025-01-25T10:00:00Z'
       };
       localStorageMock[STORAGE_KEY] = JSON.stringify(existingData);
@@ -144,6 +149,9 @@ describe('StorageService', () => {
         savedFoods: [],
         mealEntries: [],
         chatConversations: [],
+        memoryFiles: {},
+        userProfile: { ...DEFAULT_USER_PROFILE },
+        aiToolSettings: { ...DEFAULT_AI_TOOL_SETTINGS },
         lastModified: new Date().toISOString()
       };
 
@@ -236,9 +244,9 @@ describe('StorageService', () => {
       // Data without schemaVersion (v0)
       const oldData = {
         cardioSessions: [],
-        weightEntries: [{ 
-          id: '123', 
-          date: '2025-01-25T10:00:00Z', 
+        weightEntries: [{
+          id: '123',
+          date: '2025-01-25T10:00:00Z',
           weightLbs: 150,
           createdAt: '2025-01-25T10:00:00Z',
           updatedAt: '2025-01-25T10:00:00Z'
@@ -249,13 +257,17 @@ describe('StorageService', () => {
       localStorageMock[STORAGE_KEY] = JSON.stringify(oldData);
 
       await firstValueFrom(service.initialize());
-      
+
       const data = await firstValueFrom(service.getData());
-      
+
       expect(data?.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
       expect(data?.weightEntries.length).toBe(1);
       expect(data?.savedFoods).toEqual([]);
       expect(data?.mealEntries).toEqual([]);
+      // V5 defaults — full chain V0→V5 ends with defaulted memory/profile/tool fields.
+      expect(data?.memoryFiles).toEqual({});
+      expect(data?.userProfile).toEqual(DEFAULT_USER_PROFILE);
+      expect(data?.aiToolSettings).toEqual(DEFAULT_AI_TOOL_SETTINGS);
     });
 
     it('should preserve data during migration', async () => {
@@ -286,7 +298,7 @@ describe('StorageService', () => {
       expect(data?.mealEntries).toEqual([]);
     });
 
-    it('should migrate v1 data to v3 by adding diet containers', async () => {
+    it('should migrate v1 data to current schema by adding diet + V5 defaults', async () => {
       const v1Data = {
         schemaVersion: 1,
         cardioSessions: [],
@@ -302,9 +314,13 @@ describe('StorageService', () => {
       expect(data?.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
       expect(data?.savedFoods).toEqual([]);
       expect(data?.mealEntries).toEqual([]);
+      // V5 defaults reached through the full V1→V5 chain.
+      expect(data?.memoryFiles).toEqual({});
+      expect(data?.userProfile).toEqual(DEFAULT_USER_PROFILE);
+      expect(data?.aiToolSettings).toEqual(DEFAULT_AI_TOOL_SETTINGS);
     });
 
-    it('should migrate v3 data to v4 by adding AI chat fields', async () => {
+    it('should migrate v3 data to current schema by adding chat + V5 defaults', async () => {
       const v3Data = {
         schemaVersion: 3,
         cardioSessions: [],
@@ -320,8 +336,14 @@ describe('StorageService', () => {
       const data = await firstValueFrom(service.getData());
 
       expect(data?.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+      // V3→V4 introduces chatConversations.
       expect(data?.chatConversations).toEqual([]);
+      // CLAUDE.md "no null for absent optional fields" — aiSettings stays undefined.
       expect(data?.aiSettings).toBeUndefined();
+      // V5 defaults reached through the full V3→V5 chain.
+      expect(data?.memoryFiles).toEqual({});
+      expect(data?.userProfile).toEqual(DEFAULT_USER_PROFILE);
+      expect(data?.aiToolSettings).toEqual(DEFAULT_AI_TOOL_SETTINGS);
     });
 
     it('should migrate v2 saved foods to v3 (per100g -> perUnit)', async () => {
@@ -406,6 +428,9 @@ describe('StorageService', () => {
         savedFoods: [],
         mealEntries: [],
         chatConversations: [],
+        memoryFiles: {},
+        userProfile: { ...DEFAULT_USER_PROFILE },
+        aiToolSettings: { ...DEFAULT_AI_TOOL_SETTINGS },
         lastModified: '2026-05-01T08:00:00.000Z'
       };
       localStorageMock[STORAGE_KEY] = JSON.stringify(currentData);
@@ -604,6 +629,72 @@ describe('StorageService', () => {
       // Foreign keys must still be present.
       expect(localStorageMock['fitness_tracker_data_other']).toBe('"foreign-1"');
       expect(localStorageMock['some.other.app.backup']).toBe('"foreign-2"');
+    });
+  });
+
+  describe('dev-seed sentinel (D-12)', () => {
+    const DEV_SEED_KEY = 'dev_seed_pending';
+
+    afterEach(() => {
+      delete localStorageMock[DEV_SEED_KEY];
+    });
+
+    it('setDevSeed("memory") writes a JSON sentinel under dev_seed_pending key', () => {
+      service.setDevSeed('memory');
+
+      const raw = localStorageMock[DEV_SEED_KEY];
+      expect(raw).toBeTruthy();
+      const parsed = JSON.parse(raw);
+      expect(parsed.kind).toBe('memory');
+      expect(typeof parsed.at).toBe('string');
+      expect(new Date(parsed.at).getTime()).not.toBeNaN();
+    });
+
+    it('setDevSeed("profile") writes a sentinel with kind: "profile"', () => {
+      service.setDevSeed('profile');
+
+      const parsed = JSON.parse(localStorageMock[DEV_SEED_KEY]);
+      expect(parsed.kind).toBe('profile');
+    });
+
+    it('consumeDevSeed returns parsed sentinel AND removes the key (idempotent on second call)', () => {
+      service.setDevSeed('memory');
+
+      const first = service.consumeDevSeed();
+      expect(first?.kind).toBe('memory');
+      expect(typeof first?.at).toBe('string');
+      expect(localStorageMock[DEV_SEED_KEY]).toBeUndefined();
+
+      // Second call returns null — sentinel was consumed.
+      const second = service.consumeDevSeed();
+      expect(second).toBeNull();
+    });
+
+    it('consumeDevSeed on empty LocalStorage returns null without throwing', () => {
+      expect(() => service.consumeDevSeed()).not.toThrow();
+      expect(service.consumeDevSeed()).toBeNull();
+    });
+
+    it('consumeDevSeed on malformed JSON returns null AND removes the corrupted key', () => {
+      localStorageMock[DEV_SEED_KEY] = 'not-json{{';
+
+      const result = service.consumeDevSeed();
+      expect(result).toBeNull();
+      // Best-effort removal so we don't loop on a bad value.
+      expect(localStorageMock[DEV_SEED_KEY]).toBeUndefined();
+    });
+
+    it('setDevSeed swallows storage-quota errors gracefully', () => {
+      // Replace the existing setItem call-fake with a thrower.
+      (localStorage.setItem as jasmine.Spy).and.throwError('QuotaExceededError');
+      expect(() => service.setDevSeed('memory')).not.toThrow();
+    });
+
+    it('consumeDevSeed rejects sentinel with unexpected kind value', () => {
+      localStorageMock[DEV_SEED_KEY] = JSON.stringify({ kind: 'arbitrary', at: '2026-05-03T00:00:00Z' });
+
+      const result = service.consumeDevSeed();
+      expect(result).toBeNull();
     });
   });
 });
