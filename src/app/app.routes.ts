@@ -32,6 +32,21 @@ export const routes: Routes = [
   },
   {
     path: 'settings',
-    loadComponent: () => import('./features/settings/settings-ai.component').then(m => m.SettingsAiComponent)
+    loadComponent: () => import('./features/settings/settings-shell.component').then(m => m.SettingsShellComponent),
+    children: [
+      { path: '', redirectTo: 'ai', pathMatch: 'full' },
+      {
+        path: 'ai',
+        loadComponent: () => import('./features/settings/settings-ai.component').then(m => m.SettingsAiComponent)
+      },
+      {
+        path: 'profile',
+        loadComponent: () => import('./features/settings/settings-profile.component').then(m => m.SettingsProfileComponent)
+      },
+      {
+        path: 'memory',
+        loadComponent: () => import('./features/settings/settings-memory.component').then(m => m.SettingsMemoryComponent)
+      },
+    ],
   },
 ];
