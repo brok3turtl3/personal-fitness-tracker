@@ -1,9 +1,14 @@
 import { TestBed } from '@angular/core/testing';
-import { firstValueFrom, of } from 'rxjs';
+import { firstValueFrom, of, throwError } from 'rxjs';
 import { AISettingsService } from './ai-settings.service';
 import { StorageService } from './storage.service';
 import { AppData, createEmptyAppData } from '../models/app-data.model';
-import { AISettings, DEFAULT_AI_SETTINGS } from '../models/ai-chat.model';
+import {
+  AISettings,
+  AIToolSettings,
+  DEFAULT_AI_SETTINGS,
+  DEFAULT_AI_TOOL_SETTINGS,
+} from '../models/ai-chat.model';
 
 describe('AISettingsService', () => {
   let service: AISettingsService;
@@ -132,6 +137,74 @@ describe('AISettingsService', () => {
       await firstValueFrom(service.clearApiKey());
       expect(mockAppData.aiSettings?.apiKey).toBeUndefined();
       expect(mockAppData.aiSettings?.selectedModel).toBe('claude-sonnet-4-6');
+    });
+  });
+
+  describe('getToolSettings', () => {
+    it('returns DEFAULT_AI_TOOL_SETTINGS when AppData has no aiToolSettings', async () => {
+      // Simulate partial AppData (defensive null-coalesce path).
+      const partial = { ...mockAppData } as Partial<AppData> as AppData;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (partial as any).aiToolSettings = undefined;
+      mockStorageService.getData.and.returnValue(of(partial));
+
+      const ts = await firstValueFrom(service.getToolSettings());
+      expect(ts).toEqual({ ...DEFAULT_AI_TOOL_SETTINGS });
+    });
+
+    it('returns the persisted tool settings when set', async () => {
+      mockAppData.aiToolSettings = {
+        ...DEFAULT_AI_TOOL_SETTINGS,
+        redactHealthReadings: true,
+        enableWebSearch: true,
+        maxAgentTurns: 5,
+      };
+
+      const ts = await firstValueFrom(service.getToolSettings());
+      expect(ts.redactHealthReadings).toBeTrue();
+      expect(ts.enableWebSearch).toBeTrue();
+      expect(ts.maxAgentTurns).toBe(5);
+    });
+  });
+
+  describe('saveToolSettings', () => {
+    it('persists the given tool settings via saveData', async () => {
+      const ts: AIToolSettings = {
+        ...DEFAULT_AI_TOOL_SETTINGS,
+        redactWeightEntries: true,
+        webSearchMaxUses: 7,
+      };
+
+      await firstValueFrom(service.saveToolSettings(ts));
+      expect(mockStorageService.saveData).toHaveBeenCalled();
+      expect(mockAppData.aiToolSettings.redactWeightEntries).toBeTrue();
+      expect(mockAppData.aiToolSettings.webSearchMaxUses).toBe(7);
+    });
+
+    it('rejects when storage is not initialized (getData returns null)', async () => {
+      mockStorageService.getData.and.returnValue(of(null));
+      const ts: AIToolSettings = { ...DEFAULT_AI_TOOL_SETTINGS };
+
+      try {
+        await firstValueFrom(service.saveToolSettings(ts));
+        fail('Should have thrown');
+      } catch (e) {
+        expect((e as Error).message).toContain('Storage not initialized');
+      }
+    });
+
+    it('propagates saveData errors', async () => {
+      mockStorageService.saveData.and.returnValue(
+        throwError(() => new Error('disk full'))
+      );
+      const ts: AIToolSettings = { ...DEFAULT_AI_TOOL_SETTINGS };
+
+      try {
+        await firstValueFrom(service.saveToolSettings(ts));
+        fail('Should have thrown');
+      } catch (e) {
+        expect((e as Error).message).toBe('disk full');
+      }
     });
   });
 });
