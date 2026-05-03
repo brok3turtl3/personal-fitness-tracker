@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 4,
+  "cardioSessions": [],
+  "weightEntries": [],
+  "healthReadings": [],
+  "savedFoods": [],
+  "mealEntries": [],
+  "aiSettings": {
+    "apiKey": "sk-ant-test",
+    "selectedModel": "claude-sonnet-4-5-20250929",
+    "maxResponseTokens": 4096
+  },
+  "lastModified": "2026-04-15T12:00:01Z"
+}

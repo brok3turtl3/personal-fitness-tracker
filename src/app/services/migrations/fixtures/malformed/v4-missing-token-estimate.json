@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 4,
+  "cardioSessions": [],
+  "weightEntries": [],
+  "healthReadings": [],
+  "savedFoods": [],
+  "mealEntries": [],
+  "chatConversations": [
+    {
+      "id": "conv1",
+      "title": "Missing tokenEstimate",
+      "messages": [
+        {
+          "id": "m1",
+          "role": "user",
+          "content": "Hello",
+          "createdAt": "2026-04-15T12:00:00Z"
+        }
+      ],
+      "summarizedMessageCount": 0,
+      "createdAt": "2026-04-15T12:00:00Z",
+      "updatedAt": "2026-04-15T12:00:00Z"
+    }
+  ],
+  "lastModified": "2026-04-15T12:00:01Z"
+}
