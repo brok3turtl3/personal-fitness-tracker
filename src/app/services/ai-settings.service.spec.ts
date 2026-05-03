@@ -41,13 +41,13 @@ describe('AISettingsService', () => {
     it('should return saved settings', async () => {
       mockAppData.aiSettings = {
         apiKey: 'sk-ant-test123',
-        selectedModel: 'claude-sonnet-4-5-20250929',
+        selectedModel: 'claude-sonnet-4-6',
         maxResponseTokens: 2048
       };
 
       const settings = await firstValueFrom(service.getSettings());
       expect(settings.apiKey).toBe('sk-ant-test123');
-      expect(settings.selectedModel).toBe('claude-sonnet-4-5-20250929');
+      expect(settings.selectedModel).toBe('claude-sonnet-4-6');
       expect(settings.maxResponseTokens).toBe(2048);
     });
   });
@@ -56,7 +56,7 @@ describe('AISettingsService', () => {
     it('should persist valid settings', async () => {
       const settings: AISettings = {
         apiKey: 'sk-ant-valid-key',
-        selectedModel: 'claude-sonnet-4-5-20250929',
+        selectedModel: 'claude-sonnet-4-6',
         maxResponseTokens: 4096
       };
 
@@ -95,7 +95,7 @@ describe('AISettingsService', () => {
 
     it('should allow saving without API key', async () => {
       const settings: AISettings = {
-        selectedModel: 'claude-sonnet-4-5-20250929',
+        selectedModel: 'claude-sonnet-4-6',
         maxResponseTokens: 4096
       };
 
@@ -125,13 +125,13 @@ describe('AISettingsService', () => {
     it('should remove the API key', async () => {
       mockAppData.aiSettings = {
         apiKey: 'sk-ant-valid-key',
-        selectedModel: 'claude-sonnet-4-5-20250929',
+        selectedModel: 'claude-sonnet-4-6',
         maxResponseTokens: 4096
       };
 
       await firstValueFrom(service.clearApiKey());
       expect(mockAppData.aiSettings?.apiKey).toBeUndefined();
-      expect(mockAppData.aiSettings?.selectedModel).toBe('claude-sonnet-4-5-20250929');
+      expect(mockAppData.aiSettings?.selectedModel).toBe('claude-sonnet-4-6');
     });
   });
 });
