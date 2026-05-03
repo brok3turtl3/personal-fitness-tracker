@@ -37,8 +37,14 @@ describe('ChatService', () => {
     content: [{ type: 'text', text: 'Hello! I can help with your fitness goals.' }],
     model: 'claude-sonnet-4-5-20250929',
     stop_reason: 'end_turn',
-    usage: { input_tokens: 100, output_tokens: 20 }
-  };
+    stop_sequence: null,
+    usage: {
+      input_tokens: 100,
+      output_tokens: 20,
+      cache_creation_input_tokens: null,
+      cache_read_input_tokens: null,
+    },
+  } as unknown as AnthropicResponse;
 
   beforeEach(() => {
     mockAppData = createEmptyAppData();
