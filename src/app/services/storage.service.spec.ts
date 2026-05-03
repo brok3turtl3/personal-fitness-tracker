@@ -631,4 +631,70 @@ describe('StorageService', () => {
       expect(localStorageMock['some.other.app.backup']).toBe('"foreign-2"');
     });
   });
+
+  describe('dev-seed sentinel (D-12)', () => {
+    const DEV_SEED_KEY = 'dev_seed_pending';
+
+    afterEach(() => {
+      delete localStorageMock[DEV_SEED_KEY];
+    });
+
+    it('setDevSeed("memory") writes a JSON sentinel under dev_seed_pending key', () => {
+      service.setDevSeed('memory');
+
+      const raw = localStorageMock[DEV_SEED_KEY];
+      expect(raw).toBeTruthy();
+      const parsed = JSON.parse(raw);
+      expect(parsed.kind).toBe('memory');
+      expect(typeof parsed.at).toBe('string');
+      expect(new Date(parsed.at).getTime()).not.toBeNaN();
+    });
+
+    it('setDevSeed("profile") writes a sentinel with kind: "profile"', () => {
+      service.setDevSeed('profile');
+
+      const parsed = JSON.parse(localStorageMock[DEV_SEED_KEY]);
+      expect(parsed.kind).toBe('profile');
+    });
+
+    it('consumeDevSeed returns parsed sentinel AND removes the key (idempotent on second call)', () => {
+      service.setDevSeed('memory');
+
+      const first = service.consumeDevSeed();
+      expect(first?.kind).toBe('memory');
+      expect(typeof first?.at).toBe('string');
+      expect(localStorageMock[DEV_SEED_KEY]).toBeUndefined();
+
+      // Second call returns null — sentinel was consumed.
+      const second = service.consumeDevSeed();
+      expect(second).toBeNull();
+    });
+
+    it('consumeDevSeed on empty LocalStorage returns null without throwing', () => {
+      expect(() => service.consumeDevSeed()).not.toThrow();
+      expect(service.consumeDevSeed()).toBeNull();
+    });
+
+    it('consumeDevSeed on malformed JSON returns null AND removes the corrupted key', () => {
+      localStorageMock[DEV_SEED_KEY] = 'not-json{{';
+
+      const result = service.consumeDevSeed();
+      expect(result).toBeNull();
+      // Best-effort removal so we don't loop on a bad value.
+      expect(localStorageMock[DEV_SEED_KEY]).toBeUndefined();
+    });
+
+    it('setDevSeed swallows storage-quota errors gracefully', () => {
+      // Replace the existing setItem call-fake with a thrower.
+      (localStorage.setItem as jasmine.Spy).and.throwError('QuotaExceededError');
+      expect(() => service.setDevSeed('memory')).not.toThrow();
+    });
+
+    it('consumeDevSeed rejects sentinel with unexpected kind value', () => {
+      localStorageMock[DEV_SEED_KEY] = JSON.stringify({ kind: 'arbitrary', at: '2026-05-03T00:00:00Z' });
+
+      const result = service.consumeDevSeed();
+      expect(result).toBeNull();
+    });
+  });
 });

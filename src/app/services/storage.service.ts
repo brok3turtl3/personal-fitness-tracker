@@ -309,7 +309,7 @@ export class StorageService {
     try {
       const dataString = localStorage.getItem(STORAGE_KEY) || '';
       const usedBytes = new Blob([dataString]).size;
-      
+
       // Estimate available storage (5MB typical limit)
       const estimatedTotal = 5 * 1024 * 1024; // 5MB
       const availableBytes = Math.max(0, estimatedTotal - usedBytes);
@@ -326,6 +326,56 @@ export class StorageService {
         'NOT_AVAILABLE',
         e instanceof Error ? e : undefined
       ));
+    }
+  }
+
+  // ========================================================================
+  // Dev-only seed sentinel (D-12 — Phase 3)
+  // ------------------------------------------------------------------------
+  // Plans 04 (writer in /settings/ai "Developer tools" container) and 05
+  // (reader in chat-page ngOnInit) consume these methods. The sentinel is
+  // stored under a SEPARATE LocalStorage key (`dev_seed_pending`) — NOT
+  // under STORAGE_KEY. It is not user data, never migrated, never backed
+  // up. Lifting these methods into Wave 1 removes the implicit Plan 04 →
+  // Plan 05 cross-wave coupling.
+  // ========================================================================
+
+  private static readonly DEV_SEED_KEY = 'dev_seed_pending';
+
+  /**
+   * Dev-only seed sentinel writer (D-12). Visible from /settings/ai only
+   * when `location.hostname === 'localhost'`. Best-effort — quota or
+   * serialization failures are swallowed (the seed is a debugging
+   * convenience, not a correctness path).
+   */
+  setDevSeed(kind: 'memory' | 'profile'): void {
+    try {
+      const sentinel = JSON.stringify({ kind, at: new Date().toISOString() });
+      localStorage.setItem(StorageService.DEV_SEED_KEY, sentinel);
+    } catch {
+      /* ignore — best-effort */
+    }
+  }
+
+  /**
+   * Dev-only seed sentinel reader (D-12). Reads-and-removes idempotently.
+   * Called from chat-page.component.ts ngOnInit (Plan 05). Returns null
+   * when absent, when JSON parse fails, or when LocalStorage access throws.
+   */
+  consumeDevSeed(): { kind: 'memory' | 'profile'; at: string } | null {
+    try {
+      const raw = localStorage.getItem(StorageService.DEV_SEED_KEY);
+      if (!raw) return null;
+      localStorage.removeItem(StorageService.DEV_SEED_KEY);
+      const parsed = JSON.parse(raw) as { kind?: unknown; at?: unknown };
+      if (parsed.kind !== 'memory' && parsed.kind !== 'profile') return null;
+      const at = typeof parsed.at === 'string' ? parsed.at : '';
+      return { kind: parsed.kind, at };
+    } catch {
+      // Corrupted JSON or localStorage error — best-effort removal so we
+      // don't loop on a bad value.
+      try { localStorage.removeItem(StorageService.DEV_SEED_KEY); } catch { /* ignore */ }
+      return null;
     }
   }
 
