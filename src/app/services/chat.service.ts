@@ -5,7 +5,14 @@ import { StorageService } from './storage.service';
 import { AnthropicApiService, AnthropicMessage } from './anthropic-api.service';
 import { AISettingsService } from './ai-settings.service';
 import { FitnessContextService } from './fitness-context.service';
-import { ChatConversation, ChatMessage, CLAUDE_MODELS, DEFAULT_AI_SETTINGS } from '../models/ai-chat.model';
+import {
+  ChatBlock,
+  ChatConversation,
+  ChatMessage,
+  CLAUDE_MODELS,
+  DEFAULT_AI_SETTINGS,
+  TextBlock,
+} from '../models/ai-chat.model';
 
 const MESSAGE_WINDOW_SIZE = 20;
 const TOKEN_WINDOW_SIZE = 8000;
@@ -13,6 +20,20 @@ const SUMMARIZATION_PROMPT = 'Summarize this conversation preserving key facts, 
 
 function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
+}
+
+/**
+ * Interim helper: collapse a ChatBlock[] into the plain-text view that the
+ * V4 wire format expects. Plan 02 will replace this with the
+ * `chat-block-serializer.ts` module (proper handling of tool_use/tool_result
+ * blocks). For Plan 01 the cut-over keeps `tools[]`-free SC5 behavior intact
+ * — only text blocks reach the wire.
+ */
+function blocksToText(blocks: ChatBlock[]): string {
+  return blocks
+    .filter((b): b is TextBlock => b.type === 'text')
+    .map(b => b.text)
+    .join('');
 }
 
 @Injectable({
@@ -88,7 +109,7 @@ export class ChatService {
     const userMessage: ChatMessage = {
       id: generateId(),
       role: 'user',
-      content: userMessageText,
+      blocks: [{ type: 'text', text: userMessageText }],
       tokenEstimate: estimateTokens(userMessageText),
       createdAt: now
     };
@@ -138,7 +159,7 @@ export class ChatService {
                 const assistantMessage: ChatMessage = {
                   id: generateId(),
                   role: 'assistant',
-                  content: assistantText,
+                  blocks: [{ type: 'text', text: assistantText }],
                   tokenEstimate: estimateTokens(assistantText),
                   createdAt: new Date().toISOString()
                 };
@@ -205,7 +226,7 @@ export class ChatService {
     }
 
     for (const msg of windowMessages) {
-      messages.push({ role: msg.role, content: msg.content });
+      messages.push({ role: msg.role, content: blocksToText(msg.blocks) });
     }
 
     return messages;
@@ -237,7 +258,7 @@ export class ChatService {
     }
 
     const conversationText = messagesToSummarize
-      .map(m => `${m.role}: ${m.content}`)
+      .map(m => `${m.role}: ${blocksToText(m.blocks)}`)
       .join('\n');
 
     const existingSummary = conversation.summary

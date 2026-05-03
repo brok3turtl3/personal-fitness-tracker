@@ -11,7 +11,9 @@ import { ChatMessage } from '../../models/ai-chat.model';
       @for (msg of messages; track msg.id) {
         <div class="message" [class.user]="msg.role === 'user'" [class.assistant]="msg.role === 'assistant'">
           <div class="message-role">{{ msg.role === 'user' ? 'You' : 'AI Assistant' }}</div>
-          <div class="message-content">{{ msg.content }}</div>
+          <div class="message-content">@for (block of msg.blocks; track $index) {
+            @if (block.type === 'text') {{{ block.text }}}
+          }</div>
           <div class="message-time">{{ msg.createdAt | date:'shortTime' }}</div>
         </div>
       } @empty {
