@@ -7,7 +7,6 @@
  * Focal-point: primary action receives focus on entering pending state.
  */
 import { TestBed, ComponentFixture } from '@angular/core/testing';
-import { By } from '@angular/platform-browser';
 
 import { PendingPillComponent } from './pending-pill.component';
 import { ToolUseBlock } from '../../models/ai-chat.model';
@@ -283,6 +282,7 @@ describe('PendingPillComponent', () => {
     expect(article.getAttribute('role')).toBe('region');
     expect(article.getAttribute('aria-label')).toBe('AI proposal: memory');
 
+    TestBed.resetTestingModule();
     const fixture2 = await createFixture(profilePendingBlock('goals'));
     const article2 = fixture2.nativeElement.querySelector('.pending-pill') as HTMLElement;
     expect(article2.getAttribute('aria-label')).toBe('AI proposal: update_profile');
