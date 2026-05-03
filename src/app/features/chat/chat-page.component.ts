@@ -1,12 +1,13 @@
-import { Component, DestroyRef, OnInit, inject } from '@angular/core';
+import { Component, DestroyRef, ElementRef, OnInit, ViewChild, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { ChatService } from '../../services/chat.service';
 import { AISettingsService } from '../../services/ai-settings.service';
 import { StorageService } from '../../services/storage.service';
-import { ChatConversation, ChatMessage } from '../../models/ai-chat.model';
+import { ChatBlock, ChatConversation, ChatMessage, ToolUseBlock } from '../../models/ai-chat.model';
 import { AnthropicApiError } from '../../services/anthropic-api.service';
+import { generateId } from '../../shared/id';
 import { ChatConversationListComponent } from './chat-conversation-list.component';
 import { ChatMessageListComponent } from './chat-message-list.component';
 import { ChatInputComponent } from './chat-input.component';
@@ -54,6 +55,7 @@ import { ErrorStateComponent } from '../../shared/error-state.component';
             <app-chat-message-list
               [messages]="activeConversation.messages"
               [loading]="sending"
+              (blockAction)="onBlockAction($event)"
             />
 
             @if (errorMessage) {
@@ -209,9 +211,132 @@ export class ChatPageComponent implements OnInit {
             this.hasApiKey = valid;
             if (valid) {
               this.loadConversations();
+              // After conversations load, attempt to consume any dev-seed
+              // sentinel left by /settings/ai (D-12). Best-effort — null
+              // sentinel is the no-op path.
+              this.consumeDevSeedIfPresent();
             }
           });
       });
+  }
+
+  /**
+   * Read-and-remove the dev-seed sentinel from StorageService (D-12 reader
+   * side; Plan 03-05 Task 3). If a sentinel is present AND an active
+   * conversation exists, append a synthetic assistant message containing a
+   * pending tool_use block (memory or update_profile, depending on kind).
+   * Public on the component surface so specs can drive it deterministically.
+   */
+  consumeDevSeedIfPresent(): void {
+    const seed = this.storageService.consumeDevSeed();
+    if (!seed) return;
+    if (!this.activeConversationId) return;
+
+    const block: ToolUseBlock = seed.kind === 'memory'
+      ? {
+          type: 'tool_use',
+          id: generateId(),
+          name: 'memory',
+          input: {
+            command: 'create',
+            path: `/memories/seed-${Date.now()}.md`,
+            file_text: 'This is a seeded memory proposal for development testing.',
+          },
+          status: 'pending',
+        }
+      : {
+          type: 'tool_use',
+          id: generateId(),
+          name: 'update_profile',
+          input: {
+            section: 'goals',
+            value: 'This is a seeded profile-update proposal for development testing.',
+          },
+          status: 'pending',
+        };
+
+    this.chatService.appendAssistantBlocks(this.activeConversationId, [block])
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          // Refresh active conversation to surface the new pill in the stream.
+          if (this.activeConversationId) {
+            this.chatService.getConversation(this.activeConversationId)
+              .pipe(takeUntilDestroyed(this.destroyRef))
+              .subscribe(conv => { this.activeConversation = conv; });
+          }
+        },
+        error: (err) => console.error('[chat-page] dev-seed append failed', err),
+      });
+  }
+
+  /**
+   * Handle (blockAction) Output emitted by chat-message-list. Dispatches to
+   * chat.service.updateMessageBlock with a per-action patch. On success,
+   * re-reads the active conversation so the UI reflects the new status.
+   * (Plan 03-05 Task 3; D-11.)
+   */
+  onBlockAction(event: {
+    messageId: string;
+    blockIndex: number;
+    action: 'approve' | 'discard' | 'edit';
+    editedText?: string;
+  }): void {
+    if (!this.activeConversationId) return;
+    const conversationId = this.activeConversationId;
+    const { messageId, blockIndex, action, editedText } = event;
+
+    let patch: Partial<ToolUseBlock> | null = null;
+    if (action === 'approve') {
+      patch = { status: 'approved' };
+    } else if (action === 'discard') {
+      patch = { status: 'discarded' };
+    } else if (action === 'edit') {
+      const block = this.findToolUseBlock(messageId, blockIndex);
+      if (block) {
+        patch = {
+          status: 'edited',
+          editedFromText: this.extractEditableText(block),
+          input: this.applyEditedText(block, editedText ?? ''),
+        };
+      }
+    }
+
+    if (!patch) return;
+
+    this.chatService.updateMessageBlock(conversationId, messageId, blockIndex, patch)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          // Refresh active conversation to render the new resolved-state badge.
+          this.chatService.getConversation(conversationId)
+            .pipe(takeUntilDestroyed(this.destroyRef))
+            .subscribe(conv => { this.activeConversation = conv; });
+        },
+        error: (err) => console.error('[chat-page] block-action update failed', err),
+      });
+  }
+
+  private findToolUseBlock(messageId: string, blockIndex: number): ToolUseBlock | null {
+    const msg = this.activeConversation?.messages.find(m => m.id === messageId);
+    if (!msg) return null;
+    const block = msg.blocks[blockIndex] as ChatBlock | undefined;
+    if (!block || block.type !== 'tool_use') return null;
+    return block;
+  }
+
+  private extractEditableText(block: ToolUseBlock): string {
+    const input = block.input as Record<string, unknown> | null | undefined;
+    if (!input || typeof input !== 'object') return '';
+    const candidate = input['file_text'] ?? input['value'] ?? input['new_str'] ?? '';
+    return typeof candidate === 'string' ? candidate : '';
+  }
+
+  private applyEditedText(block: ToolUseBlock, newText: string): unknown {
+    const input = (block.input as Record<string, unknown> | null | undefined) ?? {};
+    if (block.name === 'memory') return { ...input, file_text: newText };
+    if (block.name === 'update_profile') return { ...input, value: newText };
+    return { ...input, value: newText };
   }
 
   loadConversations(): void {
