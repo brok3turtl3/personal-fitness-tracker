@@ -45,5 +45,22 @@ export interface ToolExecutor<TInput = unknown, TOutput = string> {
   providedIn: 'root',
 })
 export class ToolRegistryService {
-  // Filled in by Task 4 — Task 3 ships only the type surface.
+  // RED-phase stub: methods compile but throw at runtime so spec fails meaningfully.
+  // GREEN phase replaces with full implementation.
+
+  register(_executor: ToolExecutor): void {
+    throw new Error('not implemented');
+  }
+
+  has(_name: string): boolean {
+    throw new Error('not implemented');
+  }
+
+  dispatch(_name: string, _input: unknown): Promise<string> {
+    return Promise.reject(new Error('not implemented'));
+  }
+
+  definitions(): ToolDefinition[] {
+    throw new Error('not implemented');
+  }
 }
