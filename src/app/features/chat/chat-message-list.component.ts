@@ -1,18 +1,47 @@
-import { Component, ElementRef, Input, OnChanges, ViewChild } from '@angular/core';
+import { Component, ElementRef, EventEmitter, Input, OnChanges, Output, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ChatMessage } from '../../models/ai-chat.model';
+import { PendingPillComponent } from './pending-pill.component';
 
+/**
+ * Block-aware chat message list (Plan 03-05 Task 3; D-15).
+ *
+ * Renders ChatMessage.blocks via @switch (block.type):
+ * - 'text'        → existing markdown-style text render (preserves Phase 1
+ *                   characterization-spec DOM shape)
+ * - 'tool_use'    → <app-pending-pill> wired to (approve)/(discard)/(edit)
+ *                   handlers that re-emit through (blockAction) so the parent
+ *                   chat-page can dispatch chat.service.updateMessageBlock
+ * - 'tool_result' → static rendering with the content text and a 'Tool result'
+ *                   prefix (Phase 4 wires the collapsible viewer)
+ *
+ * The `<div class="message-content">` wrapper is preserved verbatim — this
+ * is the DOM contract the Phase 1 plan 01-08 characterization spec asserts on.
+ */
 @Component({
   selector: 'app-chat-message-list',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, PendingPillComponent],
   template: `
     <div class="message-list" #scrollContainer>
       @for (msg of messages; track msg.id) {
         <div class="message" [class.user]="msg.role === 'user'" [class.assistant]="msg.role === 'assistant'">
           <div class="message-role">{{ msg.role === 'user' ? 'You' : 'AI Assistant' }}</div>
           <div class="message-content">@for (block of msg.blocks; track $index) {
-            @if (block.type === 'text') {{{ block.text }}}
+            @switch (block.type) {
+              @case ('text') {<span class="block-text">{{ block.text }}</span>}
+              @case ('tool_use') {
+                <app-pending-pill
+                  [block]="block"
+                  (approve)="emitAction(msg.id, $index, 'approve')"
+                  (discard)="emitAction(msg.id, $index, 'discard')"
+                  (edit)="emitAction(msg.id, $index, 'edit', $event)"
+                ></app-pending-pill>
+              }
+              @case ('tool_result') {
+                <div class="tool-result-placeholder" aria-label="Tool result"><strong>Tool result:</strong> {{ block.content }}</div>
+              }
+            }
           }</div>
           <div class="message-time">{{ msg.createdAt | date:'shortTime' }}</div>
         </div>
@@ -79,6 +108,17 @@ import { ChatMessage } from '../../models/ai-chat.model';
       word-wrap: break-word;
     }
 
+    .tool-result-placeholder {
+      background: #f8f9fa;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 0.5rem 0.75rem;
+      margin-top: 0.5rem;
+      font-size: 0.875rem;
+      color: #2c3e50;
+      white-space: pre-wrap;
+    }
+
     .message-time {
       font-size: 0.7rem;
       opacity: 0.6;
@@ -115,10 +155,30 @@ import { ChatMessage } from '../../models/ai-chat.model';
 export class ChatMessageListComponent implements OnChanges {
   @Input() messages: ChatMessage[] = [];
   @Input() loading = false;
+  /**
+   * Re-emitted from inner pending-pill (approve|discard|edit) outputs. The
+   * parent chat-page dispatches this to chat.service.updateMessageBlock with
+   * the appropriate patch (Plan 03-05 Task 3; D-11).
+   */
+  @Output() blockAction = new EventEmitter<{
+    messageId: string;
+    blockIndex: number;
+    action: 'approve' | 'discard' | 'edit';
+    editedText?: string;
+  }>();
   @ViewChild('scrollContainer') scrollContainer!: ElementRef<HTMLDivElement>;
 
   ngOnChanges(): void {
     setTimeout(() => this.scrollToBottom(), 0);
+  }
+
+  emitAction(
+    messageId: string,
+    blockIndex: number,
+    action: 'approve' | 'discard' | 'edit',
+    editedText?: string,
+  ): void {
+    this.blockAction.emit({ messageId, blockIndex, action, editedText });
   }
 
   private scrollToBottom(): void {

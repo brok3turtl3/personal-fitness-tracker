@@ -8,12 +8,15 @@ import { FitnessContextService } from './fitness-context.service';
 import { toAnthropicContent, fromAnthropicMessage } from './chat-block-serializer';
 import type { MessageParam } from '@anthropic-ai/sdk/resources/messages';
 import {
+  ChatBlock,
   ChatConversation,
   ChatMessage,
   CLAUDE_MODELS,
   DEFAULT_AI_SETTINGS,
   TextBlock,
+  ToolUseBlock,
 } from '../models/ai-chat.model';
+import { AppData } from '../models/app-data.model';
 
 const MESSAGE_WINDOW_SIZE = 20;
 const TOKEN_WINDOW_SIZE = 8000;
@@ -179,6 +182,112 @@ export class ChatService {
           })
         );
       })
+    );
+  }
+
+  /**
+   * Patch a single tool_use ChatBlock inside a conversation/message. Used
+   * by chat-page block-action handlers to flip pending → approved /
+   * discarded / edited (Plan 03-05 Task 2; D-11). Type-narrows to
+   * tool_use; throws if any node along the path is missing or the block
+   * at the given index is not a tool_use block.
+   */
+  updateMessageBlock(
+    conversationId: string,
+    messageId: string,
+    blockIndex: number,
+    patch: Partial<ToolUseBlock>,
+  ): Observable<void> {
+    return this.storageService.getData().pipe(
+      switchMap(data => {
+        if (!data) return throwError(() => new Error('Storage not initialized'));
+
+        const convIdx = data.chatConversations.findIndex(c => c.id === conversationId);
+        if (convIdx === -1) return throwError(() => new Error(`Conversation not found: ${conversationId}`));
+
+        const conv = data.chatConversations[convIdx];
+        const msgIdx = conv.messages.findIndex(m => m.id === messageId);
+        if (msgIdx === -1) return throwError(() => new Error(`Message not found: ${messageId}`));
+
+        const msg = conv.messages[msgIdx];
+        if (blockIndex < 0 || blockIndex >= msg.blocks.length) {
+          return throwError(() => new Error(`Block index out of range: ${blockIndex}`));
+        }
+
+        const block = msg.blocks[blockIndex];
+        if (block.type !== 'tool_use') {
+          return throwError(() => new Error(`Block at index ${blockIndex} is not tool_use (got: ${block.type})`));
+        }
+
+        const updatedBlock: ToolUseBlock = { ...block, ...patch };
+        const updatedBlocks = [
+          ...msg.blocks.slice(0, blockIndex),
+          updatedBlock,
+          ...msg.blocks.slice(blockIndex + 1),
+        ];
+        const updatedMsg: ChatMessage = { ...msg, blocks: updatedBlocks };
+        const updatedConv: ChatConversation = {
+          ...conv,
+          messages: [
+            ...conv.messages.slice(0, msgIdx),
+            updatedMsg,
+            ...conv.messages.slice(msgIdx + 1),
+          ],
+          updatedAt: new Date().toISOString(),
+        };
+        const updatedData: AppData = {
+          ...data,
+          chatConversations: [
+            ...data.chatConversations.slice(0, convIdx),
+            updatedConv,
+            ...data.chatConversations.slice(convIdx + 1),
+          ],
+        };
+        return this.storageService.saveData(updatedData);
+      }),
+    );
+  }
+
+  /**
+   * Append a synthetic assistant message containing the supplied blocks
+   * to an existing conversation. Used by the chat-page dev-seed reader
+   * (Plan 03-05 Task 3; D-12). Returns the new ChatMessage so callers can
+   * reference its id (e.g., to dispatch follow-up block-action events).
+   */
+  appendAssistantBlocks(
+    conversationId: string,
+    blocks: ChatBlock[],
+  ): Observable<ChatMessage> {
+    const newMessage: ChatMessage = {
+      id: generateId(),
+      role: 'assistant',
+      blocks,
+      tokenEstimate: 0,
+      createdAt: new Date().toISOString(),
+    };
+    return this.storageService.getData().pipe(
+      switchMap(data => {
+        if (!data) return throwError(() => new Error('Storage not initialized'));
+
+        const idx = data.chatConversations.findIndex(c => c.id === conversationId);
+        if (idx === -1) return throwError(() => new Error(`Conversation not found: ${conversationId}`));
+
+        const conv = data.chatConversations[idx];
+        const updatedConv: ChatConversation = {
+          ...conv,
+          messages: [...conv.messages, newMessage],
+          updatedAt: new Date().toISOString(),
+        };
+        const updatedData: AppData = {
+          ...data,
+          chatConversations: [
+            ...data.chatConversations.slice(0, idx),
+            updatedConv,
+            ...data.chatConversations.slice(idx + 1),
+          ],
+        };
+        return this.storageService.saveData(updatedData).pipe(map(() => newMessage));
+      }),
     );
   }
 
