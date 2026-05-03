@@ -1,4 +1,5 @@
 import { Injectable } from '@angular/core';
+import { MemoryToolExecutor } from './memory-tool-executor.service';
 
 /**
  * Local subset of @anthropic-ai/sdk's Tool union.
@@ -32,35 +33,64 @@ export interface ToolExecutor<TInput = unknown, TOutput = string> {
  * Single dispatch point for all Phase-3+ tools (CHAT-12 / SC5 / T-3-RG).
  *
  * Phase 3: registers MemoryToolExecutor; tools[] are NEVER passed to
- * `messages.create`. Surface exists for unit tests only.
+ * `messages.create`. Surface exists for unit tests only — `chat.service.ts`
+ * MUST NOT import this class in Phase 3 (grep gate enforces SC5).
  *
  * Phase 4: chat.service.ts will gain a `while (stop_reason === 'tool_use')`
- * loop that calls `dispatch(name, input)`.
- *
- * Task 4 fills out the implementation. This file ships the interfaces in
- * Task 3 to break the circular import (MemoryToolExecutor implements
- * `ToolExecutor`, which lives here).
+ * loop that calls `dispatch(name, input)` and feeds the string back as a
+ * `tool_result` block.
  */
 @Injectable({
   providedIn: 'root',
 })
 export class ToolRegistryService {
-  // RED-phase stub: methods compile but throw at runtime so spec fails meaningfully.
-  // GREEN phase replaces with full implementation.
+  private readonly executors = new Map<string, ToolExecutor>();
 
-  register(_executor: ToolExecutor): void {
-    throw new Error('not implemented');
+  constructor(memoryExecutor: MemoryToolExecutor) {
+    this.register(memoryExecutor);
   }
 
-  has(_name: string): boolean {
-    throw new Error('not implemented');
+  /**
+   * Register or overwrite an executor under its declared `definition.name`.
+   * Last write wins (idempotent for the same instance; Phase 4 may swap
+   * implementations during tests).
+   */
+  register(executor: ToolExecutor): void {
+    this.executors.set(executor.definition.name, executor);
   }
 
-  dispatch(_name: string, _input: unknown): Promise<string> {
-    return Promise.reject(new Error('not implemented'));
+  /** Returns true iff an executor is registered under the given name. */
+  has(name: string): boolean {
+    return this.executors.has(name);
   }
 
+  /**
+   * Phase 4 dispatcher — NOT called from `chat.service.ts` in Phase 3 (SC5).
+   *
+   * Re-validates input is an object at the registry boundary (CHAT-11 /
+   * T-3-VL — defense-in-depth before the executor's own type guards).
+   * Phase 4 will extend this with per-tool zod schema validation.
+   *
+   * The executor's output is coerced via `String()` so callers receive a
+   * plain string suitable for a `tool_result` block content.
+   */
+  async dispatch(name: string, input: unknown): Promise<string> {
+    const executor = this.executors.get(name);
+    if (!executor) {
+      throw new Error(`Unknown tool: ${name}`);
+    }
+    if (typeof input !== 'object' || input === null) {
+      throw new Error(`Tool input must be an object: got ${typeof input}`);
+    }
+    return String(await executor.execute(input));
+  }
+
+  /**
+   * Phase 4 surface — definitions to pass into
+   * `messages.create({ tools: [...] })`. Phase 3 returns the array but never
+   * sends it (chat.service.ts has zero references — grep-gated).
+   */
   definitions(): ToolDefinition[] {
-    throw new Error('not implemented');
+    return Array.from(this.executors.values()).map((e) => e.definition);
   }
 }
