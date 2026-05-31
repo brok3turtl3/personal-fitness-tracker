@@ -53,7 +53,8 @@ import { ChatConversation } from '../../models/ai-chat.model';
     .new-chat-btn {
       padding: 0.75rem 1rem;
       margin: 0.75rem;
-      background: #3498db;
+      /* QUAL-08: #2471a3 → white text 5.30:1 (was #3498db 3.15:1). */
+      background: #2471a3;
       color: white;
       border: none;
       border-radius: 4px;
@@ -63,7 +64,7 @@ import { ChatConversation } from '../../models/ai-chat.model';
     }
 
     .new-chat-btn:hover {
-      background: #2980b9;
+      background: #1d5a82;
     }
 
     .conversations {
@@ -110,7 +111,9 @@ import { ChatConversation } from '../../models/ai-chat.model';
 
     .conv-date {
       font-size: 0.75rem;
-      color: #888;
+      /* QUAL-08: #5f6c6d → 4.93:1 on the active #ebf5fb row, 5.45:1 on white
+         (was #888 ~3.2:1). */
+      color: #5f6c6d;
       margin-top: 0.125rem;
     }
 

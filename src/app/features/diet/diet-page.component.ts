@@ -399,7 +399,7 @@ import { ErrorStateComponent } from '../../shared/error-state.component';
     }
 
     .muted {
-      color: #7f8c8d;
+      color: #5f6c6d; /* QUAL-08: was #7f8c8d (3.47:1); #5f6c6d clears WCAG AA */
       font-size: 0.95rem;
       margin: 0 0 0.75rem 0;
     }
@@ -508,7 +508,7 @@ import { ErrorStateComponent } from '../../shared/error-state.component';
     }
 
     .k {
-      color: #7f8c8d;
+      color: #5f6c6d; /* QUAL-08: was #7f8c8d (3.47:1); #5f6c6d clears WCAG AA */
     }
 
     .v {

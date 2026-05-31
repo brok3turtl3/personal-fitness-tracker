@@ -55,7 +55,12 @@ export function isLinkableCitation(citation: { type?: string } | undefined | nul
   standalone: true,
   imports: [CommonModule, PendingPillComponent],
   template: `
-    <div class="message-list" #scrollContainer>
+    <!--
+      QUAL-08: the scrollable transcript must be keyboard-focusable so a
+      keyboard-only user can scroll it (axe scrollable-region-focusable, serious).
+      tabindex="0" + a role/label makes the region reachable and announced.
+    -->
+    <div class="message-list" #scrollContainer tabindex="0" role="log" aria-label="Conversation messages">
       @if (canLoadEarlier()) {
         <div class="load-earlier-row">
           <button
@@ -193,7 +198,8 @@ export function isLinkableCitation(citation: { type?: string } | undefined | nul
 
     .message.user {
       align-self: flex-end;
-      background: #3498db;
+      /* QUAL-08: #2471a3 → white text 5.30:1 (was #3498db 3.15:1). */
+      background: #2471a3;
       color: white;
     }
 
@@ -207,7 +213,8 @@ export function isLinkableCitation(citation: { type?: string } | undefined | nul
       font-size: 0.75rem;
       font-weight: 600;
       margin-bottom: 0.25rem;
-      opacity: 0.8;
+      /* QUAL-08: opacity de-emphasis dropped contrast below AA on both bubble
+         backgrounds; hierarchy is carried by size+weight instead. */
     }
 
     .message-content {
@@ -362,7 +369,8 @@ export function isLinkableCitation(citation: { type?: string } | undefined | nul
 
     .message-time {
       font-size: 0.7rem;
-      opacity: 0.6;
+      /* QUAL-08: was opacity 0.6 (2.05:1 on the user bubble, 3.29:1 on the
+         assistant bubble); full opacity clears AA on both. */
       margin-top: 0.375rem;
       text-align: right;
     }

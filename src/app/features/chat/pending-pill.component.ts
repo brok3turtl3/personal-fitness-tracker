@@ -165,12 +165,13 @@ import { ToolUseBlock } from '../../models/ai-chat.model';
     }
 
     .btn-primary {
-      background: #3498db;
+      /* QUAL-08: #2471a3 → white text 5.30:1 (was #3498db 3.15:1). */
+      background: #2471a3;
       color: white;
     }
 
     .btn-primary:hover {
-      background: #2980b9;
+      background: #1d5a82;
     }
 
     .btn-secondary {

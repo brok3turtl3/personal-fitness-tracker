@@ -152,7 +152,7 @@ import { ErrorStateComponent } from '../../shared/error-state.component';
     }
 
     .meta {
-      color: #7f8c8d;
+      color: #5f6c6d; /* QUAL-08: was #7f8c8d (3.47:1); #5f6c6d clears WCAG AA */
       font-size: 0.95rem;
       margin-top: 0.25rem;
       display: grid;
@@ -212,7 +212,7 @@ import { ErrorStateComponent } from '../../shared/error-state.component';
     }
 
     .k {
-      color: #7f8c8d;
+      color: #5f6c6d; /* QUAL-08: was #7f8c8d (3.47:1); #5f6c6d clears WCAG AA */
     }
 
     .v {
@@ -240,13 +240,13 @@ import { ErrorStateComponent } from '../../shared/error-state.component';
 
     .empty-state {
       padding: 1.25rem;
-      color: #95a5a6;
+      color: #5f6c6d; /* QUAL-08: was #95a5a6 (2.56:1); #5f6c6d clears WCAG AA */
       background: #f8f9fa;
       border-radius: 8px;
     }
 
     .empty {
-      color: #95a5a6;
+      color: #5f6c6d; /* QUAL-08: was #95a5a6 (2.56:1); #5f6c6d clears WCAG AA */
     }
 
     @media print {
