@@ -128,10 +128,18 @@ Do NOT fabricate citations or links — only structured search results may be li
 
   // Escape both the opening AND closing tag literals occurring inside content
   // (Pitfall 3 — escape both directions). Returns content wrapped in fresh delimiters.
+  //
+  // WR-04: neutralize VARIANT forms of the guard tags too — not just the exact
+  // `<tag>` / `</tag>` literals. A user could embed `</tag >` (trailing space),
+  // `</tag\n>` (newline), or `<tag id="x">` (attributes) to attempt to close the
+  // outer wrapper. The regexes below match any whitespace/attribute variant up to
+  // the first `>` (case-insensitive) and defang it by inserting an underscore.
   private wrapUntrusted(tag: string, content: string): string {
+    const closeRe = new RegExp(`</${tag}[^>]*>`, 'gi');
+    const openRe = new RegExp(`<${tag}(\\s[^>]*)?>`, 'gi');
     const safe = content
-      .replaceAll(`</${tag}>`, `</_${tag}>`)
-      .replaceAll(`<${tag}>`, `<_${tag}>`);
+      .replace(closeRe, m => m.replace('</', '</_'))
+      .replace(openRe, m => m.replace('<', '<_'));
     return `<${tag}>\n${safe}\n</${tag}>`;
   }
 
