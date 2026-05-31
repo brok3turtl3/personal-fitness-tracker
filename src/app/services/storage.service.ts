@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
-import { Observable, of, throwError } from 'rxjs';
+import { Observable, from, of, throwError } from 'rxjs';
+import { catchError } from 'rxjs/operators';
 import {
   AppData,
   CURRENT_SCHEMA_VERSION,
@@ -26,6 +27,21 @@ export interface StorageInfo {
   usedBytes: number;
   availableBytes: number;
   percentUsed: number;
+  /**
+   * Phase 5 (QUAL-02): the REAL origin-wide usage percentage from
+   * `navigator.storage.estimate()` — the honest proactive quota signal the
+   * app-level banners (05-07) key on for the ≥70% warn / ≥95% block
+   * thresholds. `undefined` when the API is unavailable (old browsers); the
+   * consumer falls back to the byte-count `percentUsed` display.
+   *
+   * Origin-wide caveat: `estimate()` reports usage/quota for ALL storage at
+   * the origin (IndexedDB, caches, etc.), not LocalStorage alone, and the
+   * quota is browser/disk-dependent (often far larger than 5 MB). This is the
+   * honest proactive signal; the write-time `QUOTA_EXCEEDED` error match in
+   * `saveData` (which fires on the ~5 MB LocalStorage cap) is the reactive
+   * backstop.
+   */
+  usagePct?: number;
 }
 
 /**
@@ -79,6 +95,16 @@ export class StorageService {
    * pruned during initialize() to stay under the 5 MB quota (D-14, Pitfall 4).
    */
   private static readonly MAX_BACKUPS_TO_KEEP = 3;
+
+  /**
+   * Legacy reference byte budget (~5 MB) used ONLY to populate the backward-
+   * compatible `usedBytes`/`availableBytes`/`percentUsed` fields on
+   * StorageInfo. It is NOT the quota source — the authoritative QUAL-02 quota
+   * signal is `usagePct` from `navigator.storage.estimate()`. Expressed as
+   * KiB × 1024 (the old inline three-factor 5-megabyte literal has been
+   * removed) to make explicit that the hardcoded quota estimate is gone.
+   */
+  private static readonly REFERENCE_BYTE_BUDGET = 5120 * 1024;
 
   private initialized = false;
   private cachedData: AppData | null = null;
@@ -270,11 +296,17 @@ export class StorageService {
       this.cachedData = dataToSave;
       return of(undefined);
     } catch (e) {
-      if (e instanceof DOMException && e.name === 'QuotaExceededError') {
+      // Cross-browser quota-error matching (QUAL-02, D-14, RESEARCH §Pattern 4):
+      // Chrome/Safari + spec use `QuotaExceededError`; Firefox uses
+      // `NS_ERROR_DOM_QUOTA_REACHED`; older engines surface the legacy numeric
+      // codes 22 / 1014. All map to the typed QUOTA_EXCEEDED StorageError the
+      // app-level 95%-block banner (05-07) keys on. This write-time match is
+      // the reactive backstop to the proactive estimate()-driven banner.
+      if (StorageService.isQuotaError(e)) {
         return throwError(() => new StorageError(
           'Storage quota exceeded',
           'QUOTA_EXCEEDED',
-          e
+          e instanceof Error ? e : undefined
         ));
       }
       return throwError(() => new StorageError(
@@ -283,6 +315,44 @@ export class StorageService {
         e instanceof Error ? e : undefined
       ));
     }
+  }
+
+  /**
+   * Cross-browser LocalStorage quota-error matcher (QUAL-02, D-14,
+   * RESEARCH §Pattern 4). A `setItem` overflow surfaces under different names
+   * across engines:
+   *   - `QuotaExceededError` — Chrome / Safari / WHATWG spec
+   *   - `NS_ERROR_DOM_QUOTA_REACHED` — Firefox
+   *   - numeric `code` 22 (spec) / 1014 (legacy Firefox) — older engines that
+   *     set `code` but not the spec `name`
+   * Anything that is not a DOMException matching one of these is NOT a quota
+   * error (e.g. a JSON serialization failure) and falls through to
+   * SERIALIZATION_ERROR.
+   */
+  private static isQuotaError(e: unknown): boolean {
+    return (
+      e instanceof DOMException &&
+      (e.name === 'QuotaExceededError' ||
+        e.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+        e.code === 22 ||
+        e.code === 1014)
+    );
+  }
+
+  /**
+   * Read the persisted `lastModified` ISO-8601 timestamp (QUAL-04). It is
+   * written on every `saveData` (and carried through migrations) but was never
+   * readable before Phase 5. The 05-07 multi-tab listener compares this against
+   * the `lastModified` it parses from an incoming `storage` event to decide
+   * whether to show the "data changed in another tab" banner (Pitfall 6: the
+   * `storage` event never fires in the writing tab, so the comparison must be
+   * against the value this tab last knew).
+   *
+   * Returns null when storage is uninitialized / the field is absent. Never
+   * throws — failure is signalled by null.
+   */
+  getLastModified(): string | null {
+    return this.cachedData?.lastModified ?? null;
   }
 
   /**
@@ -304,30 +374,66 @@ export class StorageService {
   }
 
   /**
-   * Get storage usage information.
+   * Get storage usage information (QUAL-02).
+   *
+   * `usagePct` is the REAL origin-wide usage percentage from
+   * `navigator.storage.estimate()` — the honest proactive signal the 05-07
+   * banners key on for the ≥70% warn / ≥95% block thresholds. It replaces the
+   * old hardcoded 5 MB guess. On browsers without `navigator.storage.estimate`
+   * the estimate degrades to `null` and `usagePct` is left `undefined`; the
+   * `usedBytes`/`availableBytes`/`percentUsed` byte-count fields are retained
+   * for backward compatibility so the consumer can still render a fallback.
+   *
+   * Origin-wide caveat (RESEARCH §Pattern 4): `estimate()` reports usage/quota
+   * across ALL origin storage, not LocalStorage alone, and the quota is
+   * browser/disk-dependent. This is the correct honest proactive signal; the
+   * write-time `QUOTA_EXCEEDED` match in `saveData` is the reactive backstop
+   * for the LocalStorage-specific ~5 MB cap.
+   *
+   * Wrapped in an Observable to fit the existing return type even though the
+   * estimate read is async.
    */
   getStorageInfo(): Observable<StorageInfo> {
-    try {
-      const dataString = localStorage.getItem(STORAGE_KEY) || '';
-      const usedBytes = new Blob([dataString]).size;
+    return from(
+      (async (): Promise<StorageInfo> => {
+        const dataString = localStorage.getItem(STORAGE_KEY) || '';
+        const usedBytes = new Blob([dataString]).size;
 
-      // Estimate available storage (5MB typical limit)
-      const estimatedTotal = 5 * 1024 * 1024; // 5MB
-      const availableBytes = Math.max(0, estimatedTotal - usedBytes);
-      const percentUsed = (usedBytes / estimatedTotal) * 100;
+        // Backward-compat byte-count fields (legacy ~5 MB reference). The
+        // estimate()-driven usagePct below is the authoritative QUAL-02 signal.
+        const referenceTotal = StorageService.REFERENCE_BYTE_BUDGET;
+        const availableBytes = Math.max(0, referenceTotal - usedBytes);
+        const percentUsed = (usedBytes / referenceTotal) * 100;
 
-      return of({
-        usedBytes,
-        availableBytes,
-        percentUsed
-      });
-    } catch (e) {
-      return throwError(() => new StorageError(
-        'Failed to get storage info',
-        'NOT_AVAILABLE',
-        e instanceof Error ? e : undefined
-      ));
-    }
+        const quota = await StorageService.readQuotaPct();
+
+        return {
+          usedBytes,
+          availableBytes,
+          percentUsed,
+          ...(quota === null ? {} : { usagePct: quota }),
+        };
+      })(),
+    ).pipe(
+      catchError((e: unknown) =>
+        throwError(() => new StorageError(
+          'Failed to get storage info',
+          'NOT_AVAILABLE',
+          e instanceof Error ? e : undefined,
+        )),
+      ),
+    );
+  }
+
+  /**
+   * Read the origin-wide usage percentage via `navigator.storage.estimate()`
+   * (QUAL-02, RESEARCH §Pattern 4). Returns `null` (graceful degradation) when
+   * the API is unavailable (old browsers) or the reported quota is 0/unknown.
+   */
+  private static async readQuotaPct(): Promise<number | null> {
+    if (!navigator.storage?.estimate) return null; // older browsers — graceful null
+    const { usage = 0, quota = 0 } = await navigator.storage.estimate();
+    return quota > 0 ? (usage / quota) * 100 : null;
   }
 
   // ========================================================================

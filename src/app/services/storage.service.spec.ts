@@ -229,13 +229,166 @@ describe('StorageService', () => {
   describe('getStorageInfo', () => {
     it('should return storage usage information', async () => {
       await firstValueFrom(service.initialize());
-      
+
       const info = await firstValueFrom(service.getStorageInfo());
-      
+
       expect(info.usedBytes).toBeGreaterThan(0);
       expect(info.availableBytes).toBeGreaterThan(0);
       expect(info.percentUsed).toBeGreaterThanOrEqual(0);
       expect(info.percentUsed).toBeLessThan(100);
+    });
+  });
+
+  describe('getStorageInfo — navigator.storage.estimate() quota (QUAL-02)', () => {
+    let originalStorage: PropertyDescriptor | undefined;
+
+    function stubNavigatorStorage(value: unknown): void {
+      originalStorage = Object.getOwnPropertyDescriptor(navigator, 'storage');
+      Object.defineProperty(navigator, 'storage', {
+        configurable: true,
+        get: () => value,
+      });
+    }
+
+    afterEach(() => {
+      if (originalStorage) {
+        Object.defineProperty(navigator, 'storage', originalStorage);
+      } else {
+        // navigator.storage had no own descriptor — remove the stub.
+        try { delete (navigator as unknown as { storage?: unknown }).storage; } catch { /* ignore */ }
+      }
+      originalStorage = undefined;
+    });
+
+    it('reports usagePct at 70% from estimate()', async () => {
+      stubNavigatorStorage({
+        estimate: () => Promise.resolve({ usage: 70, quota: 100 }),
+      });
+      await firstValueFrom(service.initialize());
+
+      const info = await firstValueFrom(service.getStorageInfo());
+
+      expect(info.usagePct).toBeCloseTo(70, 6);
+    });
+
+    it('reports usagePct at 95% from estimate()', async () => {
+      stubNavigatorStorage({
+        estimate: () => Promise.resolve({ usage: 950, quota: 1000 }),
+      });
+      await firstValueFrom(service.initialize());
+
+      const info = await firstValueFrom(service.getStorageInfo());
+
+      expect(info.usagePct).toBeCloseTo(95, 6);
+    });
+
+    it('leaves usagePct undefined when navigator.storage.estimate is unavailable (old browsers)', async () => {
+      // navigator.storage present but with no estimate fn → graceful null.
+      stubNavigatorStorage({});
+      await firstValueFrom(service.initialize());
+
+      const info = await firstValueFrom(service.getStorageInfo());
+
+      expect(info.usagePct).toBeUndefined();
+      // Byte-count fallback fields still populated.
+      expect(info.usedBytes).toBeGreaterThan(0);
+      expect(info.percentUsed).toBeGreaterThanOrEqual(0);
+    });
+
+    it('leaves usagePct undefined when reported quota is 0', async () => {
+      stubNavigatorStorage({
+        estimate: () => Promise.resolve({ usage: 0, quota: 0 }),
+      });
+      await firstValueFrom(service.initialize());
+
+      const info = await firstValueFrom(service.getStorageInfo());
+
+      expect(info.usagePct).toBeUndefined();
+    });
+  });
+
+  describe('saveData — cross-browser quota-error matching (QUAL-02, D-14)', () => {
+    async function expectQuotaError(thrown: unknown): Promise<void> {
+      await firstValueFrom(service.initialize());
+      const data = await firstValueFrom(service.getData());
+
+      // Make persistToStorage's setItem throw the engine-specific error. The
+      // initialize() call above already succeeded; only the saveData write
+      // throws (the isLocalStorageAvailable probe also uses setItem, but that
+      // ran during initialize before this re-stub).
+      (localStorage.setItem as jasmine.Spy).and.callFake(() => { throw thrown; });
+
+      try {
+        await firstValueFrom(service.saveData(data!));
+        fail('Should have thrown a StorageError');
+      } catch (e) {
+        expect(e instanceof StorageError).toBe(true);
+        expect((e as StorageError).code).toBe('QUOTA_EXCEEDED');
+      }
+    }
+
+    it('maps a QuotaExceededError DOMException (Chrome/Safari/spec) to QUOTA_EXCEEDED', async () => {
+      await expectQuotaError(new DOMException('quota', 'QuotaExceededError'));
+    });
+
+    it('maps a Firefox NS_ERROR_DOM_QUOTA_REACHED DOMException to QUOTA_EXCEEDED', async () => {
+      await expectQuotaError(new DOMException('quota', 'NS_ERROR_DOM_QUOTA_REACHED'));
+    });
+
+    it('maps a legacy numeric code-22 DOMException to QUOTA_EXCEEDED', async () => {
+      // Older engines set the numeric `code` (22) but an unrecognized `name`.
+      // Build a real DOMException instance and pin code=22 to exercise the
+      // numeric-fallback branch of isQuotaError.
+      const ex = new DOMException('quota', 'SomeLegacyName');
+      Object.defineProperty(ex, 'code', { configurable: true, value: 22 });
+      await expectQuotaError(ex);
+    });
+
+    it('maps a NON-quota error to SERIALIZATION_ERROR, not QUOTA_EXCEEDED', async () => {
+      await firstValueFrom(service.initialize());
+      const data = await firstValueFrom(service.getData());
+      (localStorage.setItem as jasmine.Spy).and.callFake(() => { throw new Error('disk on fire'); });
+
+      try {
+        await firstValueFrom(service.saveData(data!));
+        fail('Should have thrown a StorageError');
+      } catch (e) {
+        expect(e instanceof StorageError).toBe(true);
+        expect((e as StorageError).code).toBe('SERIALIZATION_ERROR');
+      }
+    });
+  });
+
+  describe('getLastModified (QUAL-04)', () => {
+    it('returns the stored lastModified after a save', async () => {
+      await firstValueFrom(service.initialize());
+      const data = await firstValueFrom(service.getData());
+      await firstValueFrom(service.saveData(data!));
+
+      const stored = JSON.parse(localStorageMock[STORAGE_KEY]).lastModified;
+      expect(service.getLastModified()).toBe(stored);
+      expect(typeof service.getLastModified()).toBe('string');
+    });
+
+    it('returns the value from loaded existing data', async () => {
+      const existingData: AppData = {
+        schemaVersion: CURRENT_SCHEMA_VERSION,
+        cardioSessions: [],
+        weightEntries: [],
+        healthReadings: [],
+        savedFoods: [],
+        mealEntries: [],
+        chatConversations: [],
+        memoryFiles: {},
+        userProfile: { ...DEFAULT_USER_PROFILE },
+        aiToolSettings: { ...DEFAULT_AI_TOOL_SETTINGS },
+        lastModified: '2025-06-01T09:00:00.000Z'
+      };
+      localStorageMock[STORAGE_KEY] = JSON.stringify(existingData);
+
+      await firstValueFrom(service.initialize());
+
+      expect(service.getLastModified()).toBe('2025-06-01T09:00:00.000Z');
     });
   });
 
