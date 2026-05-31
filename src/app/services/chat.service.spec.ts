@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { firstValueFrom, of } from 'rxjs';
+import { Subscription, firstValueFrom, of } from 'rxjs';
 import type { Message } from '@anthropic-ai/sdk/resources/messages';
 import { ChatService } from './chat.service';
 import { StorageService } from './storage.service';
@@ -9,9 +9,12 @@ import { FitnessContextService } from './fitness-context.service';
 import { AppData, createEmptyAppData } from '../models/app-data.model';
 import {
   AISettings,
+  AIToolSettings,
   ChatBlock,
   ChatConversation,
   ChatMessage,
+  ChatTurnEvent,
+  DEFAULT_AI_TOOL_SETTINGS,
   TextBlock,
   ToolUseBlock,
 } from '../models/ai-chat.model';
@@ -36,12 +39,15 @@ describe('ChatService', () => {
   let mockAnthropicApi: jasmine.SpyObj<AnthropicApiService>;
   let mockAISettings: jasmine.SpyObj<AISettingsService>;
   let mockFitnessContext: jasmine.SpyObj<FitnessContextService>;
+  let mockToolRegistry: jasmine.SpyObj<ToolRegistryService>;
 
   const mockSettings: AISettings = {
     apiKey: 'sk-ant-test-key',
     selectedModel: 'claude-sonnet-4-6',
     maxResponseTokens: 4096
   };
+
+  const mockToolSettings: AIToolSettings = { ...DEFAULT_AI_TOOL_SETTINGS };
 
   const mockApiResponse = {
     id: 'msg_test',
@@ -72,8 +78,21 @@ describe('ChatService', () => {
     mockAnthropicApi = jasmine.createSpyObj('AnthropicApiService', ['sendMessage']);
     mockAnthropicApi.sendMessage.and.returnValue(of(mockApiResponse));
 
-    mockAISettings = jasmine.createSpyObj('AISettingsService', ['getSettings']);
+    mockAISettings = jasmine.createSpyObj('AISettingsService', ['getSettings', 'getToolSettings']);
     mockAISettings.getSettings.and.returnValue(of(mockSettings));
+    mockAISettings.getToolSettings.and.returnValue(of({ ...mockToolSettings }));
+
+    mockToolRegistry = jasmine.createSpyObj('ToolRegistryService', [
+      'definitions',
+      'dispatch',
+      'isWriteProposal',
+    ]);
+    mockToolRegistry.definitions.and.returnValue([
+      { type: 'custom', name: 'query_weight_entries', description: 'q', input_schema: {}, strict: true },
+      { type: 'memory_20250818', name: 'memory' },
+    ]);
+    mockToolRegistry.dispatch.and.returnValue(Promise.resolve('tool result text'));
+    mockToolRegistry.isWriteProposal.and.callFake((name: string) => name === 'memory');
 
     mockFitnessContext = jasmine.createSpyObj('FitnessContextService', ['buildSystemPrompt']);
     // Phase 4 (04-03): buildSystemPrompt now returns a structured
@@ -90,7 +109,8 @@ describe('ChatService', () => {
         { provide: StorageService, useValue: mockStorageService },
         { provide: AnthropicApiService, useValue: mockAnthropicApi },
         { provide: AISettingsService, useValue: mockAISettings },
-        { provide: FitnessContextService, useValue: mockFitnessContext }
+        { provide: FitnessContextService, useValue: mockFitnessContext },
+        { provide: ToolRegistryService, useValue: mockToolRegistry }
       ]
     });
 
@@ -700,6 +720,304 @@ describe('ChatService', () => {
       for (let i = 1; i < messages.length; i++) {
         expect(messages[i].role).not.toBe(messages[i - 1].role);
       }
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // runAgenticLoop — Plan 04-04 Task 1 (E2: the bounded agentic loop)
+  //
+  // A multi-emit Observable<ChatTurnEvent> running while(stop_reason ===
+  // 'tool_use'), bounded by maxAgentTurns. Drives a MOCKED AnthropicApiService
+  // through every StopReason branch (D-16), the cap (D-04), a write proposal
+  // (D-03 — never blocks), and teardown (cancelled seam). tool_result blocks
+  // always serialize into a USER turn (commit 49e275b regression).
+  // ---------------------------------------------------------------------------
+
+  describe('runAgenticLoop (E2 — bounded agentic loop, every stop_reason)', () => {
+    const CONV_ID = 'loop-conv';
+
+    /** Seed an empty conversation with a single user message already persisted. */
+    function seedLoopConversation(): void {
+      const userMsg: ChatMessage = {
+        id: 'u1',
+        role: 'user',
+        blocks: [{ type: 'text', text: 'How is my weight trend?' }],
+        tokenEstimate: 6,
+        createdAt: '2026-05-31T10:00:00.000Z',
+      };
+      const conv: ChatConversation = {
+        id: CONV_ID,
+        title: 'Loop',
+        messages: [userMsg],
+        summarizedMessageCount: 0,
+        createdAt: '2026-05-31T10:00:00.000Z',
+        updatedAt: '2026-05-31T10:00:00.000Z',
+      };
+      mockAppData = { ...mockAppData, chatConversations: [conv] };
+      mockStorageService.getData.and.callFake(() => of(mockAppData));
+    }
+
+    /** Build a Message with the given stop_reason and content blocks. */
+    function message(
+      stopReason: string,
+      content: Array<Record<string, unknown>>,
+    ): Message {
+      return {
+        id: `msg_${stopReason}`,
+        type: 'message',
+        role: 'assistant',
+        content,
+        model: 'claude-sonnet-4-6',
+        stop_reason: stopReason,
+        stop_sequence: null,
+        usage: {
+          input_tokens: 50,
+          output_tokens: 10,
+          cache_creation_input_tokens: null,
+          cache_read_input_tokens: null,
+        },
+      } as unknown as Message;
+    }
+
+    const textBlock = (text: string) => ({ type: 'text', text, citations: null });
+    const toolUseBlock = (id: string, name: string, input: unknown) => ({
+      type: 'tool_use', id, name, input,
+    });
+
+    /** Collect every emitted ChatTurnEvent to completion. */
+    function collect(): Promise<ChatTurnEvent[]> {
+      return new Promise<ChatTurnEvent[]>((resolve, reject) => {
+        const events: ChatTurnEvent[] = [];
+        service.runAgenticLoop(CONV_ID, 'sk-ant-test-key').subscribe({
+          next: e => events.push(e),
+          error: reject,
+          complete: () => resolve(events),
+        });
+      });
+    }
+
+    beforeEach(() => seedLoopConversation());
+
+    it('end_turn → emits assistant_text then done(end_turn) and completes', async () => {
+      mockAnthropicApi.sendMessage.and.returnValue(
+        of(message('end_turn', [textBlock('Your weight is trending down.')])),
+      );
+
+      const events = await collect();
+
+      expect(events.some(e => e.kind === 'assistant_text')).toBeTrue();
+      const done = events.find(e => e.kind === 'done') as { kind: 'done'; stopReason: string };
+      expect(done.stopReason).toBe('end_turn');
+      expect(mockAnthropicApi.sendMessage).toHaveBeenCalledTimes(1);
+    });
+
+    it('stop_sequence → completes with done(stop_sequence)', async () => {
+      mockAnthropicApi.sendMessage.and.returnValue(
+        of(message('stop_sequence', [textBlock('Done.')])),
+      );
+      const events = await collect();
+      const done = events.find(e => e.kind === 'done') as { kind: 'done'; stopReason: string };
+      expect(done.stopReason).toBe('stop_sequence');
+    });
+
+    it('max_tokens → completes with done(max_tokens) (truncation surfaced)', async () => {
+      mockAnthropicApi.sendMessage.and.returnValue(
+        of(message('max_tokens', [textBlock('Truncated…')])),
+      );
+      const events = await collect();
+      const done = events.find(e => e.kind === 'done') as { kind: 'done'; stopReason: string };
+      expect(done.stopReason).toBe('max_tokens');
+    });
+
+    it('refusal → completes with done(refusal), no retry', async () => {
+      mockAnthropicApi.sendMessage.and.returnValue(
+        of(message('refusal', [textBlock("I can't help with that.")])),
+      );
+      const events = await collect();
+      const done = events.find(e => e.kind === 'done') as { kind: 'done'; stopReason: string };
+      expect(done.stopReason).toBe('refusal');
+      expect(mockAnthropicApi.sendMessage).toHaveBeenCalledTimes(1);
+    });
+
+    it('pause_turn → re-sends the SAME messages unmodified, does NOT net-decrement the cap', async () => {
+      let call = 0;
+      const sentMessages: unknown[] = [];
+      mockAnthropicApi.sendMessage.and.callFake((_key, params) => {
+        sentMessages.push(JSON.parse(JSON.stringify(params.messages)));
+        call++;
+        if (call === 1) return of(message('pause_turn', [textBlock('thinking…')]));
+        return of(message('end_turn', [textBlock('Resolved.')]));
+      });
+
+      const events = await collect();
+
+      // Two sends: the paused one + the resumed one.
+      expect(mockAnthropicApi.sendMessage).toHaveBeenCalledTimes(2);
+      // Resume re-sends the same messages array (paused assistant turn pushed,
+      // no tool_result fabricated between them).
+      expect(sentMessages[1]).toEqual(sentMessages[0]);
+      const done = events.find(e => e.kind === 'done') as { kind: 'done'; stopReason: string };
+      expect(done.stopReason).toBe('end_turn');
+    });
+
+    it('tool_use (query_*) → dispatches, appends tool_result in a USER turn, re-calls', async () => {
+      let call = 0;
+      let secondTurnMessages: Array<{ role: string; content: Array<{ type: string; tool_use_id?: string }> }> = [];
+      mockAnthropicApi.sendMessage.and.callFake((_key, params) => {
+        call++;
+        if (call === 1) {
+          return of(message('tool_use', [toolUseBlock('tu-q1', 'query_weight_entries', { from: '2026-01-01' })]));
+        }
+        secondTurnMessages = JSON.parse(JSON.stringify(params.messages)) as typeof secondTurnMessages;
+        return of(message('end_turn', [textBlock('Based on your data, trending down.')]));
+      });
+
+      const events = await collect();
+
+      // dispatch was invoked for the read-only query tool
+      expect(mockToolRegistry.dispatch).toHaveBeenCalledWith('query_weight_entries', { from: '2026-01-01' });
+      // tool_use_started + tool_result events emitted
+      expect(events.some(e => e.kind === 'tool_use_started')).toBeTrue();
+      expect(events.some(e => e.kind === 'tool_result')).toBeTrue();
+      // The tool_result block was sent back in a USER turn (49e275b regression)
+      const userWithToolResult = secondTurnMessages.some(
+        m => m.role === 'user' && m.content.some(b => b.type === 'tool_result' && b.tool_use_id === 'tu-q1'),
+      );
+      expect(userWithToolResult).toBeTrue();
+      const noAssistantToolResult = secondTurnMessages.every(
+        m => !(m.role === 'assistant' && m.content.some(b => b.type === 'tool_result')),
+      );
+      expect(noAssistantToolResult).toBeTrue();
+      expect(mockAnthropicApi.sendMessage).toHaveBeenCalledTimes(2);
+    });
+
+    it('auto-executed query tool_use persists as status="approved" paired with its tool_result (serializer replays a real wire tool_use)', async () => {
+      let call = 0;
+      mockAnthropicApi.sendMessage.and.callFake(() => {
+        call++;
+        if (call === 1) {
+          return of(message('tool_use', [toolUseBlock('tu-q2', 'query_weight_entries', { from: '2026-01-01' })]));
+        }
+        return of(message('end_turn', [textBlock('answer')]));
+      });
+
+      await collect();
+
+      // Find the persisted assistant message carrying the tool_use.
+      const conv = mockAppData.chatConversations.find(c => c.id === CONV_ID)!;
+      const toolMsg = conv.messages.find(m =>
+        m.blocks.some(b => b.type === 'tool_use' && (b as ToolUseBlock).id === 'tu-q2'),
+      )!;
+      expect(toolMsg).toBeTruthy();
+      const tu = toolMsg.blocks.find(b => b.type === 'tool_use') as ToolUseBlock;
+      expect(tu.status).toBe('approved');
+      // The paired tool_result is co-located so the serializer emits a real wire tool_use.
+      const wire = toAnthropicContent(toolMsg.blocks);
+      const wireToolUse = wire.find(b => b.type === 'tool_use') as { id: string } | undefined;
+      const wireResultIds = new Set(
+        wire.filter(b => b.type === 'tool_result').map(b => (b as { tool_use_id: string }).tool_use_id),
+      );
+      expect(wireToolUse).toBeTruthy();
+      expect(wireResultIds.has('tu-q2')).toBeTrue();
+    });
+
+    it('dispatch throw → feeds an is_error tool_result and the loop recovers (CHAT-11)', async () => {
+      mockToolRegistry.dispatch.and.returnValue(Promise.reject(new Error('range too wide')));
+      let call = 0;
+      let secondTurnMessages: Array<{ role: string; content: Array<{ type: string; is_error?: boolean }> }> = [];
+      mockAnthropicApi.sendMessage.and.callFake((_key, params) => {
+        call++;
+        if (call === 1) {
+          return of(message('tool_use', [toolUseBlock('tu-e', 'query_weight_entries', { from: 'x' })]));
+        }
+        secondTurnMessages = JSON.parse(JSON.stringify(params.messages)) as typeof secondTurnMessages;
+        return of(message('end_turn', [textBlock('recovered')]));
+      });
+
+      const events = await collect();
+
+      const errResult = secondTurnMessages
+        .flatMap(m => m.content)
+        .find(b => b.type === 'tool_result' && b.is_error === true);
+      expect(errResult).toBeTruthy();
+      const done = events.find(e => e.kind === 'done') as { kind: 'done'; stopReason: string };
+      expect(done.stopReason).toBe('end_turn');
+    });
+
+    it('write proposal (memory) mid-loop → surfaces a pending pill, feeds a synthetic tool_result, loop does NOT block', async () => {
+      let call = 0;
+      let secondTurnMessages: Array<{ role: string; content: Array<{ type: string; content?: string }> }> = [];
+      mockAnthropicApi.sendMessage.and.callFake((_key, params) => {
+        call++;
+        if (call === 1) {
+          return of(message('tool_use', [
+            toolUseBlock('tu-w', 'memory', { command: 'create', path: '/memories/x.md', file_text: 'noted' }),
+          ]));
+        }
+        secondTurnMessages = JSON.parse(JSON.stringify(params.messages)) as typeof secondTurnMessages;
+        return of(message('end_turn', [textBlock('continued without persisting')]));
+      });
+
+      const events = await collect();
+
+      // The write proposal was NOT auto-executed (no dispatch for 'memory').
+      expect(mockToolRegistry.dispatch).not.toHaveBeenCalledWith('memory', jasmine.anything());
+      // A synthetic 'not yet persisted' tool_result was fed for the proposal.
+      const synthetic = secondTurnMessages
+        .flatMap(m => m.content)
+        .find(b => b.type === 'tool_result' && (b.content ?? '').includes('NOT yet persisted'));
+      expect(synthetic).toBeTruthy();
+      // The pending pill was persisted (status='pending') on the conversation.
+      const conv = mockAppData.chatConversations.find(c => c.id === CONV_ID)!;
+      const pending = conv.messages.flatMap(m => m.blocks).find(
+        b => b.type === 'tool_use' && (b as ToolUseBlock).name === 'memory' && (b as ToolUseBlock).status === 'pending',
+      );
+      expect(pending).toBeTruthy();
+      // The loop finished cleanly (did not block).
+      const done = events.find(e => e.kind === 'done') as { kind: 'done'; stopReason: string };
+      expect(done.stopReason).toBe('end_turn');
+    });
+
+    it('maxAgentTurns reached → emits turn_limit and makes ONE final create WITHOUT tools (D-04)', async () => {
+      mockAISettings.getToolSettings.and.returnValue(of({ ...mockToolSettings, maxAgentTurns: 2 }));
+      // Every turn returns tool_use → the cap is hit.
+      mockAnthropicApi.sendMessage.and.callFake(() =>
+        of(message('tool_use', [toolUseBlock(`tu-${Math.random()}`, 'query_weight_entries', { from: '2026' })])),
+      );
+
+      const events = await collect();
+
+      expect(events.some(e => e.kind === 'turn_limit')).toBeTrue();
+      // 2 in-loop turns + 1 final best-effort create.
+      expect(mockAnthropicApi.sendMessage).toHaveBeenCalledTimes(3);
+      const finalArgs = mockAnthropicApi.sendMessage.calls.mostRecent().args[1] as unknown as Record<string, unknown>;
+      expect('tools' in finalArgs).toBeFalse();
+      expect(finalArgs['tools']).toBeUndefined();
+    });
+
+    it('unsubscribe sets cancelled → the loop stops re-calling the mock', async () => {
+      // Every turn returns tool_use, so an un-cancelled loop would call
+      // sendMessage many times. We unsubscribe immediately and assert the
+      // count stays bounded (the cancelled flag breaks the for-loop).
+      mockAnthropicApi.sendMessage.and.callFake(() =>
+        of(message('tool_use', [toolUseBlock(`tu-${Math.random()}`, 'query_weight_entries', { from: '2026' })])),
+      );
+
+      const sub: Subscription = service.runAgenticLoop(CONV_ID, 'sk-ant-test-key').subscribe();
+      sub.unsubscribe();
+
+      // Let pending microtasks/timers flush.
+      await new Promise(r => setTimeout(r, 30));
+      // A runaway loop (cap 10) would reach ~10 calls; cancellation keeps it tiny.
+      expect(mockAnthropicApi.sendMessage.calls.count()).toBeLessThan(3);
+    });
+
+    it('SDK error → routes to the RxJS error channel', async () => {
+      mockAnthropicApi.sendMessage.and.callFake(() => {
+        throw new Error('boom');
+      });
+
+      await expectAsync(collect()).toBeRejectedWithError('boom');
     });
   });
 });
