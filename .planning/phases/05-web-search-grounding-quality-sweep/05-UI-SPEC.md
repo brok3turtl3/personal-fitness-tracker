@@ -1,7 +1,7 @@
 ---
 phase: 5
 slug: web-search-grounding-quality-sweep
-status: draft
+status: approved
 shadcn_initialized: false
 preset: none
 created: 2026-05-31
