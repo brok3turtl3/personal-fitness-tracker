@@ -7,7 +7,6 @@ import { AISettingsService } from './ai-settings.service';
 import { FitnessContextService } from './fitness-context.service';
 import { ToolRegistryService } from './tool-registry.service';
 import { toAnthropicContent, fromAnthropicMessage } from './chat-block-serializer';
-import type { MessageParam, ContentBlockParam } from '@anthropic-ai/sdk/resources/messages';
 import {
   ChatBlock,
   ChatConversation,
@@ -56,6 +55,27 @@ interface WireToolResult {
 interface WireMessage {
   content: Array<{ type: string; [k: string]: unknown }>;
   stop_reason: string | null;
+}
+
+/**
+ * Local structural alias for an SDK `ContentBlockParam` (D-17). We deliberately
+ * do NOT import (even `import type`) from the Anthropic SDK here — this file is
+ * not one of the two sanctioned SDK importers (`anthropic-api.service.ts` +
+ * `chat-block-serializer.ts`). Even a type-only import creates a compile-time
+ * coupling to the SDK type surface and would be caught by the chokepoint guard.
+ * This shape is structurally assignable to the SDK param at the transport
+ * boundary, where the cast happens.
+ */
+type ContentBlockParam = { type: string; [k: string]: unknown };
+
+/**
+ * Local structural alias for an SDK `MessageParam` (D-17). Same rationale as
+ * `ContentBlockParam` above — SDK-agnostic, assignable at the transport
+ * chokepoint in `anthropic-api.service.ts`.
+ */
+interface MessageParam {
+  role: 'user' | 'assistant';
+  content: string | ContentBlockParam[];
 }
 
 const MESSAGE_WINDOW_SIZE = 20;
@@ -185,12 +205,16 @@ export class ChatService {
               switchMap(systemPrompt => {
                 const apiMessages = this.buildApiMessages(conversation);
 
+                // Cast at the transport boundary (D-17): the local SDK-agnostic
+                // MessageParam[] / SystemTextBlock[] shapes are structurally
+                // assignable to the SDK params; anthropic-api.service.ts owns
+                // the real SDK types.
                 return this.anthropicApi.sendMessage(apiKey, {
                   model,
                   max_tokens: maxTokens,
                   system: systemPrompt,
                   messages: apiMessages
-                });
+                } as never);
               }),
               switchMap(response => {
                 const assistantBlocks = fromAnthropicMessage(response);
@@ -495,7 +519,7 @@ export class ChatService {
         this.anthropicApi.countTokens(apiKey, {
           model,
           system: system as never,
-          messages,
+          messages: messages as never,
           tools: tools as never,
         }),
       );
@@ -830,10 +854,12 @@ export class ChatService {
       const others = content.filter(b => b.type !== 'tool_result');
 
       if (others.length) {
-        messages.push({ role: msg.role, content: others });
+        // `others` are SDK content blocks from the serializer; assignable to
+        // the local SDK-agnostic ContentBlockParam[] at this boundary.
+        messages.push({ role: msg.role, content: others as unknown as ContentBlockParam[] });
       }
       if (toolResults.length) {
-        messages.push({ role: 'user', content: toolResults });
+        messages.push({ role: 'user', content: toolResults as unknown as ContentBlockParam[] });
       }
     }
 
