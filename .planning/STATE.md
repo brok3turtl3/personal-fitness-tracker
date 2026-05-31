@@ -85,6 +85,13 @@ Plan: Wave 1 done (01–03) + 04-04 (agentic loop) + 04-05 (citation UI) + 04-06
 
 ## Accumulated Context
 
+### Pending Todos (4) — `.planning/todos/pending/`
+
+- **Run security verification for Phase 4** (warning) — `/gsd-secure-phase 4`; no `04-SECURITY.md` yet despite enforcement ON.
+- **Complete Phase 4 visual UAT** (warning) — 3 browser-only items, canonical tracker `04-HUMAN-UAT.md`; `/gsd-verify-work 4`.
+- **Clarify meal-note redaction granularity** (product question, from CR-04) — does the toggle mean per-entry free-text notes vs the aggregate kcal line?
+- **Surface block-action errors in chat-page** (info, IN-01) — approve/discard/edit failures `console.error` only, not shown to user.
+
 ### Decisions Locked In (from PROJECT.md, REQUIREMENTS.md, research)
 
 - **No clinical disclaimers on AI output.** Source attribution + per-claim confidence labels (`strong | moderate | weak | animal-only | anecdotal | speculative`) is the chosen mechanism. Low-confidence states must be visually distinct (color + icon, not just text).
