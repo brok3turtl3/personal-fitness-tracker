@@ -258,8 +258,8 @@ export class ChatService {
    * tool_use that has no paired tool_result (which would brick the
    * conversation via Anthropic 400).
    *
-   * The result string is COMPUTED ELSEWHERE (PendingApprovalService →
-   * ToolRegistryService) and passed in. SC5: this method imports no tool
+   * The result string is COMPUTED ELSEWHERE (PendingApprovalService → the
+   * tool registry) and passed in. SC5: this method imports no tool
    * executor; chat.service.ts stays grep-clean.
    */
   approveToolUseBlock(

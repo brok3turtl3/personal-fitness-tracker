@@ -6,6 +6,7 @@ import { RouterLink } from '@angular/router';
 import { ChatService } from '../../services/chat.service';
 import { AISettingsService } from '../../services/ai-settings.service';
 import { StorageService } from '../../services/storage.service';
+import { PendingApprovalService } from '../../services/pending-approval.service';
 import { ChatBlock, ChatConversation, ChatMessage, ToolUseBlock } from '../../models/ai-chat.model';
 import { AnthropicApiError } from '../../services/anthropic-api.service';
 import { generateId } from '../../shared/id';
@@ -199,7 +200,8 @@ export class ChatPageComponent implements OnInit {
   constructor(
     private chatService: ChatService,
     private aiSettingsService: AISettingsService,
-    private storageService: StorageService
+    private storageService: StorageService,
+    private pendingApprovalService: PendingApprovalService
   ) {}
 
   ngOnInit(): void {

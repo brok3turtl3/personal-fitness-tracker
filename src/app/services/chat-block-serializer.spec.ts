@@ -27,7 +27,9 @@ describe('chat-block-serializer', () => {
       expect((wire[0] as { type: 'text'; text: string }).text).toBe('Hello world');
     });
 
-    it('tool_use status=approved emits clean wire shape (no status, no editedFromText)', () => {
+    it('tool_use status=approved emits clean wire shape (no status, no editedFromText) when paired', () => {
+      // 03-07 guard: an approved tool_use only emits a wire tool_use when a
+      // paired tool_result for its id exists; include one so we test stripping.
       const blocks: ChatBlock[] = [
         {
           type: 'tool_use',
@@ -36,9 +38,10 @@ describe('chat-block-serializer', () => {
           input: { command: 'create', path: '/memories/notes.md', file_text: 'hi' },
           status: 'approved',
         },
+        { type: 'tool_result', tool_use_id: 'tool_abc', content: 'File created successfully' },
       ];
       const wire = toAnthropicContent(blocks);
-      expect(wire.length).toBe(1);
+      expect(wire.length).toBe(2);
       expect(wire[0].type).toBe('tool_use');
       const w = wire[0] as unknown as Record<string, unknown>;
       expect(w['id']).toBe('tool_abc');
@@ -47,7 +50,7 @@ describe('chat-block-serializer', () => {
       expect('editedFromText' in w).toBeFalse();
     });
 
-    it('tool_use status=edited emits clean wire shape', () => {
+    it('tool_use status=edited emits clean wire shape when paired', () => {
       const blocks: ChatBlock[] = [
         {
           type: 'tool_use',
@@ -57,9 +60,10 @@ describe('chat-block-serializer', () => {
           status: 'edited',
           editedFromText: 'original content',
         },
+        { type: 'tool_result', tool_use_id: 'tool_def', content: 'File created successfully' },
       ];
       const wire = toAnthropicContent(blocks);
-      expect(wire.length).toBe(1);
+      expect(wire.length).toBe(2);
       expect(wire[0].type).toBe('tool_use');
       const w = wire[0] as unknown as Record<string, unknown>;
       expect('status' in w).toBeFalse();
