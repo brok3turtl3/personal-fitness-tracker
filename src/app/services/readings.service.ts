@@ -144,6 +144,80 @@ export class ReadingsService {
   }
 
   /**
+   * Update an existing blood pressure reading in place.
+   * Re-runs {@link validateBloodPressure}; preserves the original `id` +
+   * `createdAt` and the `'blood_pressure'` discriminant, refreshes `updatedAt`.
+   * Storage is left untouched on validation failure or a missing id.
+   */
+  updateBloodPressure(id: string, data: CreateBloodPressure): Observable<BloodPressureReading> {
+    const validationResult = validateBloodPressure(data);
+
+    if (!validationResult.valid) {
+      return throwError(() => new ReadingsValidationError(validationResult.errors));
+    }
+
+    return this.replaceReading(id, existing => ({
+      ...existing,
+      type: 'blood_pressure',
+      date: data.date,
+      systolic: data.systolic,
+      diastolic: data.diastolic,
+      notes: data.notes,
+      id: existing.id,
+      createdAt: existing.createdAt,
+      updatedAt: new Date().toISOString()
+    }));
+  }
+
+  /**
+   * Update an existing blood glucose reading in place.
+   * Re-runs {@link validateGlucose}; preserves identity and the
+   * `'blood_glucose'` discriminant, refreshes `updatedAt`.
+   */
+  updateBloodGlucose(id: string, data: CreateBloodGlucose): Observable<BloodGlucoseReading> {
+    const validationResult = validateGlucose(data);
+
+    if (!validationResult.valid) {
+      return throwError(() => new ReadingsValidationError(validationResult.errors));
+    }
+
+    return this.replaceReading(id, existing => ({
+      ...existing,
+      type: 'blood_glucose',
+      date: data.date,
+      glucoseMmol: data.glucoseMmol,
+      notes: data.notes,
+      id: existing.id,
+      createdAt: existing.createdAt,
+      updatedAt: new Date().toISOString()
+    }));
+  }
+
+  /**
+   * Update an existing ketone reading in place.
+   * Re-runs {@link validateKetone}; preserves identity and the `'ketone'`
+   * discriminant, refreshes `updatedAt`.
+   */
+  updateKetone(id: string, data: CreateKetone): Observable<KetoneReading> {
+    const validationResult = validateKetone(data);
+
+    if (!validationResult.valid) {
+      return throwError(() => new ReadingsValidationError(validationResult.errors));
+    }
+
+    return this.replaceReading(id, existing => ({
+      ...existing,
+      type: 'ketone',
+      date: data.date,
+      ketoneMmol: data.ketoneMmol,
+      notes: data.notes,
+      id: existing.id,
+      createdAt: existing.createdAt,
+      updatedAt: new Date().toISOString()
+    }));
+  }
+
+  /**
    * Get a single reading by ID.
    */
   getReading(id: string): Observable<HealthReading | null> {
@@ -177,6 +251,38 @@ export class ReadingsService {
         };
 
         return this.storageService.saveData(updatedData).pipe(map(() => true));
+      })
+    );
+  }
+
+  /**
+   * Internal helper to update a reading in place by id.
+   * Finds the reading by `id`, builds the replacement via the per-type
+   * `build` callback (which re-pins identity and the literal discriminant),
+   * copy-array-replaces, and saves. No runtime `type` dispatch, no cast.
+   */
+  private replaceReading<T extends HealthReading>(
+    id: string,
+    build: (existing: HealthReading) => T
+  ): Observable<T> {
+    return this.storageService.getData().pipe(
+      switchMap(data => {
+        if (!data) {
+          return throwError(() => new Error('Storage not initialized'));
+        }
+
+        const idx = data.healthReadings.findIndex(reading => reading.id === id);
+        if (idx < 0) {
+          return throwError(() => new Error('Reading not found'));
+        }
+
+        const updated = build(data.healthReadings[idx]);
+        const healthReadings = [...data.healthReadings];
+        healthReadings[idx] = updated;
+
+        return this.storageService.saveData({ ...data, healthReadings }).pipe(
+          map(() => updated)
+        );
       })
     );
   }
