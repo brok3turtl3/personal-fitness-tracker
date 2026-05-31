@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-05-03T10:11:41.279Z"
+last_updated: "2026-05-31T12:31:00.000Z"
 progress:
   total_phases: 5
   completed_phases: 1
@@ -93,6 +93,7 @@ Plan: 1 of 5
 - **Pattern 2 Form A is the codebase-wide subscription-cleanup pattern.** Every feature component declares `private destroyRef = inject(DestroyRef)` as a field initializer and pipes every `.subscribe(...)` through `takeUntilDestroyed(this.destroyRef)`. Bare `takeUntilDestroyed()` (no arg) inside method bodies is forbidden — it triggers NG0203 at runtime (Pitfall 1).
 - **Settings page is error-state-only.** No `<app-empty-state>` — settings is a configuration form, not a data list (RESEARCH §Open Q 2).
 - **Phase 1 chat-page nested subscribes are preserved with takeUntilDestroyed only.** No switchMap refactor in Phase 1 — that's deferred to Phase 3 per CONTEXT.md.
+- **Dev-seed pending pill lands on init, not on user click (Plan 03-06 gap closure).** `chat-page` ngOnInit now auto-selects the most-recent conversation (or seed-gated auto-creates one) BEFORE consuming the dev-seed sentinel, so the seed is never destroyed before a pending pill can render. Auto-create is gated on a non-null seed to preserve the Phase 1 empty-state characterization spec. StorageService untouched (minimum surface area).
 
 ### Active Decisions Pending
 
@@ -132,6 +133,10 @@ Plan: 1 of 5
 ### Blockers
 
 None.
+
+### Recent Sessions (Phase 03 gap closure)
+
+- **2026-05-31T12:28Z–12:31Z** — Executed plan 03-06 (gap closure, UAT Test 2). TDD. 3 commits on `main` (b89e3c5 test/RED, ef9ca46 fix/GREEN, + docs commit). Modified 2 files (chat-page.component.ts, chat-page.component.spec.ts). Reordered `ngOnInit` → new private `initializeActiveConversationAndConsumeSeed()`: load conversations → capture `consumeDevSeed()` locally → auto-select most-recent (append seeded pill) OR seed-gated auto-create OR no-op (empty list + no seed → empty-state preserved). Extracted shared `appendSeededPill()`; `consumeDevSeedIfPresent()` preserved as delegating re-entry point. Chose diagnosis option #1 (defer consumption) over option #2 (peekDevSeed) — zero StorageService change. 4 new regression specs (the mandatory one drives ngOnInit end-to-end with NO manual activeConversationId). Targeted chat-page: 18/18. Full Karma: **491 SUCCESS** (+4). Production build: exit 0 (pre-existing 4.67 kB budget warning). SC5 grep gate green (zero ToolRegistryService/MemoryToolExecutor in chat-page.component.ts). No deviations. **UAT Test 2 ready for operator re-run; Test 3 unblocked.** Threat-model: T-3-06-RG mitigate (grep green), T-3-06-AC mitigate (auto-create seed-gated), T-3-06-SD mitigate (create-error → empty-state fallback), T-3-06-RACE accept (dev-only sentinel).
 
 ### Notable Files Already Mapped
 
