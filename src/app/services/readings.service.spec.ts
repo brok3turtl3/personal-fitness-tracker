@@ -389,6 +389,199 @@ describe('ReadingsService', () => {
     });
   });
 
+  describe('updateBloodPressure', () => {
+    const ORIGINAL_CREATED = '2024-12-01T08:00:00.000Z';
+
+    it('should preserve id + createdAt + type, refresh updatedAt, overwrite editable fields', (done) => {
+      const original = createStoredBP({
+        id: 'bp-edit',
+        systolic: 120,
+        diastolic: 80,
+        createdAt: ORIGINAL_CREATED,
+        updatedAt: ORIGINAL_CREATED
+      });
+      mockAppData.healthReadings = [original];
+      storageServiceSpy.getData.and.returnValue(of(mockAppData));
+
+      const input = createValidBP({ systolic: 135, diastolic: 88, notes: 'after coffee' });
+
+      service.updateBloodPressure('bp-edit', input).subscribe(result => {
+        expect(result.id).toBe(original.id);
+        expect(result.createdAt).toBe(original.createdAt);
+        expect(result.updatedAt).not.toBe(original.updatedAt);
+        expect(result.type).toBe('blood_pressure');
+        expect(result.systolic).toBe(135);
+        expect(result.diastolic).toBe(88);
+        expect(result.notes).toBe('after coffee');
+
+        const savedData = storageServiceSpy.saveData.calls.mostRecent().args[0];
+        const stored = savedData.healthReadings.find(r => r.id === 'bp-edit') as BloodPressureReading;
+        expect(stored.systolic).toBe(135);
+        done();
+      });
+    });
+
+    it('should reject systolic <= diastolic and NOT persist', (done) => {
+      mockAppData.healthReadings = [createStoredBP({ id: 'bp-edit', createdAt: ORIGINAL_CREATED })];
+      storageServiceSpy.getData.and.returnValue(of(mockAppData));
+
+      service.updateBloodPressure('bp-edit', createValidBP({ systolic: 80, diastolic: 90 })).subscribe({
+        next: () => fail('Expected error'),
+        error: (err: ReadingsValidationError) => {
+          expect(err).toBeInstanceOf(ReadingsValidationError);
+          expect(storageServiceSpy.saveData).not.toHaveBeenCalled();
+          done();
+        }
+      });
+    });
+
+    it('should error on missing id and NOT persist', (done) => {
+      mockAppData.healthReadings = [createStoredBP({ id: 'other' })];
+      storageServiceSpy.getData.and.returnValue(of(mockAppData));
+
+      service.updateBloodPressure('missing-id', createValidBP()).subscribe({
+        next: () => fail('Expected error'),
+        error: (err: Error) => {
+          expect(err.message).toBe('Reading not found');
+          expect(storageServiceSpy.saveData).not.toHaveBeenCalled();
+          done();
+        }
+      });
+    });
+
+    it('should error when storage not initialized', (done) => {
+      storageServiceSpy.getData.and.returnValue(of(null));
+
+      service.updateBloodPressure('bp-edit', createValidBP()).subscribe({
+        next: () => fail('Expected error'),
+        error: (err: Error) => {
+          expect(err.message).toBe('Storage not initialized');
+          done();
+        }
+      });
+    });
+
+    it('should not touch a co-stored glucose reading when editing a BP reading', (done) => {
+      const bp = createStoredBP({ id: 'bp-edit', systolic: 120, diastolic: 80 });
+      const glucose = createStoredGlucose({ id: 'glucose-keep', glucoseMmol: 5.5 });
+      mockAppData.healthReadings = [bp, glucose];
+      storageServiceSpy.getData.and.returnValue(of(mockAppData));
+
+      service.updateBloodPressure('bp-edit', createValidBP({ systolic: 140, diastolic: 90 })).subscribe(() => {
+        const savedData = storageServiceSpy.saveData.calls.mostRecent().args[0];
+        const keptGlucose = savedData.healthReadings.find(r => r.id === 'glucose-keep') as BloodGlucoseReading;
+        expect(keptGlucose).toBeDefined();
+        expect(keptGlucose.type).toBe('blood_glucose');
+        expect(keptGlucose.glucoseMmol).toBe(5.5);
+        done();
+      });
+    });
+  });
+
+  describe('updateBloodGlucose', () => {
+    const ORIGINAL_CREATED = '2024-12-01T08:00:00.000Z';
+
+    it('should preserve identity + type, refresh updatedAt, overwrite editable fields', (done) => {
+      const original = createStoredGlucose({
+        id: 'glucose-edit',
+        glucoseMmol: 5.5,
+        createdAt: ORIGINAL_CREATED,
+        updatedAt: ORIGINAL_CREATED
+      });
+      mockAppData.healthReadings = [original];
+      storageServiceSpy.getData.and.returnValue(of(mockAppData));
+
+      service.updateBloodGlucose('glucose-edit', createValidGlucose({ glucoseMmol: 6.2 })).subscribe(result => {
+        expect(result.id).toBe(original.id);
+        expect(result.createdAt).toBe(original.createdAt);
+        expect(result.updatedAt).not.toBe(original.updatedAt);
+        expect(result.type).toBe('blood_glucose');
+        expect(result.glucoseMmol).toBe(6.2);
+        done();
+      });
+    });
+
+    it('should reject out-of-range glucose (40) and NOT persist', (done) => {
+      mockAppData.healthReadings = [createStoredGlucose({ id: 'glucose-edit', createdAt: ORIGINAL_CREATED })];
+      storageServiceSpy.getData.and.returnValue(of(mockAppData));
+
+      service.updateBloodGlucose('glucose-edit', createValidGlucose({ glucoseMmol: 40 })).subscribe({
+        next: () => fail('Expected error'),
+        error: (err: ReadingsValidationError) => {
+          expect(err).toBeInstanceOf(ReadingsValidationError);
+          expect(storageServiceSpy.saveData).not.toHaveBeenCalled();
+          done();
+        }
+      });
+    });
+
+    it('should error on missing id and NOT persist', (done) => {
+      mockAppData.healthReadings = [createStoredGlucose({ id: 'other' })];
+      storageServiceSpy.getData.and.returnValue(of(mockAppData));
+
+      service.updateBloodGlucose('missing-id', createValidGlucose()).subscribe({
+        next: () => fail('Expected error'),
+        error: (err: Error) => {
+          expect(err.message).toBe('Reading not found');
+          expect(storageServiceSpy.saveData).not.toHaveBeenCalled();
+          done();
+        }
+      });
+    });
+  });
+
+  describe('updateKetone', () => {
+    const ORIGINAL_CREATED = '2024-12-01T08:00:00.000Z';
+
+    it('should preserve identity + type, refresh updatedAt, overwrite editable fields', (done) => {
+      const original = createStoredKetone({
+        id: 'ketone-edit',
+        ketoneMmol: 0.5,
+        createdAt: ORIGINAL_CREATED,
+        updatedAt: ORIGINAL_CREATED
+      });
+      mockAppData.healthReadings = [original];
+      storageServiceSpy.getData.and.returnValue(of(mockAppData));
+
+      service.updateKetone('ketone-edit', createValidKetone({ ketoneMmol: 1.8 })).subscribe(result => {
+        expect(result.id).toBe(original.id);
+        expect(result.createdAt).toBe(original.createdAt);
+        expect(result.updatedAt).not.toBe(original.updatedAt);
+        expect(result.type).toBe('ketone');
+        expect(result.ketoneMmol).toBe(1.8);
+        done();
+      });
+    });
+
+    it('should reject out-of-range ketones (11) and NOT persist', (done) => {
+      mockAppData.healthReadings = [createStoredKetone({ id: 'ketone-edit', createdAt: ORIGINAL_CREATED })];
+      storageServiceSpy.getData.and.returnValue(of(mockAppData));
+
+      service.updateKetone('ketone-edit', createValidKetone({ ketoneMmol: 11 })).subscribe({
+        next: () => fail('Expected error'),
+        error: (err: ReadingsValidationError) => {
+          expect(err).toBeInstanceOf(ReadingsValidationError);
+          expect(storageServiceSpy.saveData).not.toHaveBeenCalled();
+          done();
+        }
+      });
+    });
+
+    it('should error on missing id and NOT persist', (done) => {
+      mockAppData.healthReadings = [createStoredKetone({ id: 'other' })];
+      storageServiceSpy.getData.and.returnValue(of(mockAppData));
+
+      service.updateKetone('missing-id', createValidKetone()).subscribe({
+        next: () => fail('Expected error'),
+        error: (err: Error) => {
+          expect(err.message).toBe('Reading not found');
+          expect(storageServiceSpy.saveData).not.toHaveBeenCalled();
+          done();
+        }
+      });
+    });
+  });
+
   describe('getReading', () => {
     it('should return reading when ID exists', (done) => {
       const existingBP = createStoredBP({ id: 'existing-id' });
