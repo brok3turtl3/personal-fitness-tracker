@@ -3,12 +3,12 @@ status: partial
 phase: 03-ai-memory-tool-plumbing
 source: [03-VERIFICATION.md]
 started: 2026-05-03T18:00:00Z
-updated: 2026-05-03T18:00:00Z
+updated: 2026-05-31T12:00:00Z
 ---
 
 ## Current Test
 
-[awaiting human testing]
+[testing complete]
 
 ## Tests
 
@@ -18,7 +18,7 @@ updated: 2026-05-03T18:00:00Z
 
 **expected:** The system prompt contains the profile block under `## User Profile`, with the saved Goals text wrapped in `<user_profile_goals>...</user_profile_goals>` delimiters. Changing the text in `/settings/profile` and sending another chat message reflects the new text immediately (no caching, no reload required).
 
-**result:** [pending]
+**result:** pass
 
 ---
 
@@ -28,7 +28,9 @@ updated: 2026-05-03T18:00:00Z
 
 **expected:** Pending pill renders with header "AI wants to remember this:", three action buttons ("Save to memory", "Edit proposal", "Discard proposal"). Primary action receives auto-focus. Clicking "Save to memory" shows the ✓ Saved badge. After page refresh, the resolved badge is still shown (state persisted).
 
-**result:** [pending]
+**result:** issue
+**reported:** "I am not seeing the a pending memory pill in any of the chat streams after I click the 'Seed pending momory proposal' button. I do get a confirmation saying it was succesful though"
+**severity:** major
 
 ---
 
@@ -38,7 +40,10 @@ updated: 2026-05-03T18:00:00Z
 
 **expected:** Empty-state message appears before any approval. After approval, the seeded memory file appears in the path-tree with `aria-label="{path}, N bytes"`, an expandable inline preview shows the seeded content, and Edit + Delete actions are functional. Delete with confirm removes the entry.
 
-**result:** [pending]
+**result:** blocked
+**blocked_by:** prior-test
+**reason:** "Empty-state ('No memory files yet') confirmed working. Inspect/edit/delete portion cannot be verified because Test 2 dev-seed mechanism is broken — no memory can be persisted to inspect."
+**partial_pass:** Empty-state behavior verified
 
 ---
 
@@ -48,17 +53,26 @@ updated: 2026-05-03T18:00:00Z
 
 **expected:** Confirm or revise the Phase 3 sign-off decision: ROADMAP SC4 second-half ("any AI tool-call argument is re-validated through the same domain validators that guard direct user input") is partially deferred to Phase 4. In Phase 3, the agentic loop never fires (SC5 enforced — `chat.service.ts` has zero references to `ToolRegistryService`/`MemoryToolExecutor`), so tool dispatch is never executed in production. The current `ToolRegistryService.dispatch()` re-validates `typeof input === 'object' && input !== null`; per-tool zod schemas + reuse of `validators.ts` domain functions are scheduled for Phase 4 when the loop activates.
 
-**result:** [pending]
+**result:** pass
+**decision:** Deferral to Phase 4 confirmed by user. Per-tool zod schemas + domain-validator reuse will be implemented in Phase 4 when the agentic loop is activated; gap is non-exploitable in Phase 3 because the loop is disabled at the type level.
 
 ---
 
 ## Summary
 
 total: 4
-passed: 0
-issues: 0
-pending: 4
+passed: 2
+issues: 1
+pending: 0
 skipped: 0
-blocked: 0
+blocked: 1
 
 ## Gaps
+
+- truth: "Dev-seed pending memory proposal appears as a pending pill in the chat stream with header 'AI wants to remember this:' and three action buttons."
+  status: failed
+  reason: "User reported: I am not seeing the a pending memory pill in any of the chat streams after I click the 'Seed pending momory proposal' button. I do get a confirmation saying it was succesful though"
+  severity: major
+  test: 2
+  artifacts: []
+  missing: []
