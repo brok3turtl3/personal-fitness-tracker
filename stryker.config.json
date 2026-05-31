@@ -11,5 +11,10 @@
   "reporters": ["html", "clear-text", "progress"],
   "concurrency": 2,
   "mutate": ["src/app/services/validators.ts"],
-  "coverageAnalysis": "perTest"
+  "coverageAnalysis": "perTest",
+  "thresholds": {
+    "high": 20,
+    "low": 9,
+    "break": 9
+  }
 }
