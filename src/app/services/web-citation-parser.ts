@@ -32,19 +32,14 @@
  * degrades to an unbadged, unlinked claim (05-AI-SPEC §4b(a)).
  */
 import type { TextCitation } from '@anthropic-ai/sdk/resources/messages';
+import type { GroundedCitation } from '../models/ai-chat.model';
 
 /**
- * Local structural shape — what the renderer sees. NO SDK types past this
- * point (D-17). Mirrors `ClaimSpan` in ai-chat.model.ts.
+ * Re-export the local SDK-free citation shape. It is DEFINED in
+ * `ai-chat.model.ts` (the single source of truth, avoids a model→service
+ * import — D-17); the parser re-exports it for ergonomic consumption.
  */
-export interface GroundedCitation {
-  /** GUARANTEED https: (gated below). */
-  readonly url: string;
-  /** Falls back to the host when the API title is null/blank. Never blank. */
-  readonly title: string;
-  /** The cited_text excerpt, for the footnote tooltip. Coerced from null. */
-  readonly citedText: string;
-}
+export type { GroundedCitation } from '../models/ai-chat.model';
 
 /**
  * Narrow + https-gate the SDK citation union into local GroundedCitation[].

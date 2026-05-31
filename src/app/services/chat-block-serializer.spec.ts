@@ -4,6 +4,7 @@ import type {
   ContentBlockParam,
   Message,
 } from '@anthropic-ai/sdk/resources/messages';
+import { F2, F10, F11, F13_TURN1 } from './web-citation-parser.fixtures';
 
 /**
  * Spec for chat-block-serializer.ts pure module (Plan 03-02 Task 2).
@@ -353,6 +354,110 @@ describe('chat-block-serializer', () => {
       const blocks = fromAnthropicMessage(msg);
       expect(blocks.length).toBe(1);
       expect(blocks[0]).toEqual({ type: 'text', text: '[unsupported block type: thinking]' });
+    });
+  });
+
+  describe('Phase 5 — server-tool block passthrough + grounded citations (Pitfall 1, D-02/D-03)', () => {
+    it('F2: a web_search_tool_result survives as a TYPED block, NOT an [unsupported block type] placeholder', () => {
+      const blocks = fromAnthropicMessage(F2);
+      // Pitfall 1 eliminated: no unsupported-placeholder for any server-tool block.
+      const placeholders = blocks.filter(
+        (b) => b.type === 'text' && b.text.startsWith('[unsupported block type'),
+      );
+      expect(placeholders.length).toBe(0);
+
+      const result = blocks.find((b) => b.type === 'web_search_tool_result');
+      expect(result).toBeTruthy();
+      const r = result as Extract<ChatBlock, { type: 'web_search_tool_result' }>;
+      expect(r.toolUseId).toBe('srvtoolu_F2');
+      expect(Array.isArray(r.content)).toBeTrue();
+      const arr = r.content as Array<{ type: string; url: string; encryptedContent: string }>;
+      expect(arr[0].type).toBe('web_search_result');
+      expect(arr[0].url).toBe('https://example.org/rt-guidelines');
+      expect(arr[0].encryptedContent).toBe('enc_F2_result_0');
+    });
+
+    it('F2: server_tool_use survives as a typed block carrying id/name/input', () => {
+      const blocks = fromAnthropicMessage(F2);
+      const stu = blocks.find((b) => b.type === 'server_tool_use');
+      expect(stu).toBeTruthy();
+      const s = stu as Extract<ChatBlock, { type: 'server_tool_use' }>;
+      expect(s.id).toBe('srvtoolu_F2');
+      expect(s.name).toBe('web_search');
+      expect(s.input).toEqual({ query: 'resistance training frequency guidelines' });
+    });
+
+    it('F2: a grounded text block carries narrowed GroundedCitation[] (https-gated)', () => {
+      const blocks = fromAnthropicMessage(F2);
+      const grounded = blocks.find(
+        (b): b is Extract<ChatBlock, { type: 'text' }> =>
+          b.type === 'text' && !!b.citations && b.citations.length > 0,
+      );
+      expect(grounded).toBeTruthy();
+      expect(grounded!.citations!.length).toBe(1);
+      expect(grounded!.citations![0].url).toBe('https://example.org/rt-guidelines');
+      expect(grounded!.citations![0].title).toBe('Resistance Training Frequency — 2024 Guidelines');
+    });
+
+    it('F10: server_tool_use + web_search_tool_result both survive (no placeholder)', () => {
+      const blocks = fromAnthropicMessage(F10);
+      expect(blocks.some((b) => b.type === 'server_tool_use')).toBeTrue();
+      expect(blocks.some((b) => b.type === 'web_search_tool_result')).toBeTrue();
+      expect(
+        blocks.some((b) => b.type === 'text' && b.text.startsWith('[unsupported block type')),
+      ).toBeFalse();
+    });
+
+    it('F11: a web_search_tool_result_error union is preserved (D-05/E4)', () => {
+      const blocks = fromAnthropicMessage(F11);
+      const result = blocks.find((b) => b.type === 'web_search_tool_result');
+      const r = result as Extract<ChatBlock, { type: 'web_search_tool_result' }>;
+      expect(Array.isArray(r.content)).toBeFalse();
+      const err = r.content as { type: string; errorCode: string };
+      expect(err.type).toBe('web_search_tool_result_error');
+      expect(err.errorCode).toBe('max_uses_exceeded');
+    });
+
+    it('F13 round-trip: encrypted_content + encrypted_index are byte-stable after from→to (E3)', () => {
+      // from→persist→to round-trip must keep the result block's encrypted_content
+      // byte-identical; encrypted_index lives only inside the SDK citation, which
+      // the narrowed GroundedCitation deliberately drops — the result block is the
+      // multi-turn resolution carrier (Pitfall 1).
+      const persisted = fromAnthropicMessage(F13_TURN1);
+      const wire = toAnthropicContent(persisted);
+
+      const wireResult = wire.find((b) => b.type === 'web_search_tool_result');
+      expect(wireResult).toBeTruthy();
+      const wr = wireResult as unknown as {
+        tool_use_id: string;
+        content: Array<{ encrypted_content: string; url: string; title: string }>;
+      };
+      expect(wr.tool_use_id).toBe('srvtoolu_F13');
+      expect(wr.content[0].encrypted_content).toBe('ENC_CONTENT_F13_BYTE_STABLE');
+      // Deep-equal the original wire result content (byte-stable).
+      const originalResultBlock = F13_TURN1.content.find(
+        (b) => b.type === 'web_search_tool_result',
+      ) as unknown as { content: Array<{ encrypted_content: string; url: string; title: string }> };
+      expect(wr.content[0].encrypted_content).toBe(
+        originalResultBlock.content[0].encrypted_content,
+      );
+      expect(wr.content[0].url).toBe(originalResultBlock.content[0].url);
+
+      // server_tool_use replays verbatim.
+      const wireStu = wire.find((b) => b.type === 'server_tool_use');
+      expect(wireStu).toBeTruthy();
+      expect((wireStu as { id: string }).id).toBe('srvtoolu_F13');
+    });
+
+    it('round-trips a persisted error-union result block back to the wire error shape', () => {
+      const persisted = fromAnthropicMessage(F11);
+      const wire = toAnthropicContent(persisted);
+      const wireResult = wire.find((b) => b.type === 'web_search_tool_result');
+      const wr = wireResult as unknown as {
+        content: { type: string; error_code: string };
+      };
+      expect(wr.content.type).toBe('web_search_tool_result_error');
+      expect(wr.content.error_code).toBe('max_uses_exceeded');
     });
   });
 });

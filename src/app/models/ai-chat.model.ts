@@ -1,14 +1,87 @@
 export type ChatRole = 'user' | 'assistant';
 
 /**
+ * A grounded web-search citation, narrowed + `https:`-gated from the SDK
+ * `TextCitation` union by `web-citation-parser.ts` at the D-17 transport
+ * chokepoint (Phase 5, D-03/D-09).
+ *
+ * Persistence + render shape — SDK-agnostic per AI-SPEC.md §3 Pitfall #2. This
+ * is the ONLY object the renderer is allowed to turn into an `<a href>`; the
+ * `url` is GUARANTEED `https:`. Lives here (NOT in the service) so the model
+ * stays the single source of truth and avoids a model→service import (D-17).
+ * `web-citation-parser.ts` imports this type from the model.
+ */
+export interface GroundedCitation {
+  /** GUARANTEED https: (gated by web-citation-parser). */
+  readonly url: string;
+  /** Falls back to the host when the API title is null/blank. Never blank. */
+  readonly title: string;
+  /** The cited_text excerpt, for the footnote tooltip. Coerced from null. */
+  readonly citedText: string;
+}
+
+/**
  * Plain text content in a chat message.
  *
  * Persistence shape — SDK-agnostic per AI-SPEC.md §3 Pitfall #2. Bridges to
  * the Anthropic wire format via `chat-block-serializer.ts` (D-16).
+ *
+ * Phase 5 (D-03): `citations` carries the grounded web-search citations that
+ * back THIS text block. Already narrowed + https-gated to the local
+ * `GroundedCitation` shape — the renderer needs no SDK type to emit footnotes.
+ * Absent/empty ⇒ an un-grounded claim (plain inert text, no link).
  */
 export interface TextBlock {
   type: 'text';
   text: string;
+  /** Phase 5: grounded web-search citations backing this block (D-03/D-09). */
+  citations?: GroundedCitation[];
+}
+
+/**
+ * A single web-search result, persisted SDK-agnostically from the wire
+ * `WebSearchResultBlock`. `encryptedContent` MUST round-trip byte-stable so
+ * multi-turn citation resolution keeps working (Pitfall 1, F13).
+ *
+ * Persistence shape — SDK-agnostic per AI-SPEC.md §3 Pitfall #2.
+ */
+export interface WebSearchResultPersisted {
+  type: 'web_search_result';
+  url: string;
+  title: string;
+  /** Opaque server token — passed through verbatim, never decoded (Pitfall 1). */
+  encryptedContent: string;
+  pageAge?: string;
+}
+
+/**
+ * Anthropic-executed `web_search` server tool invocation, persisted verbatim
+ * (Phase 5, D-02). The client NEVER dispatches this — Anthropic runs the
+ * search server-side and returns the paired `web_search_tool_result`.
+ *
+ * Persistence shape — SDK-agnostic per AI-SPEC.md §3 Pitfall #2.
+ */
+export interface ServerToolUsePersistedBlock {
+  type: 'server_tool_use';
+  id: string;
+  name: string;
+  input: unknown;
+}
+
+/**
+ * The server-side web-search result block, persisted verbatim (Phase 5, D-02).
+ * `content` is either the array of results OR an honest error union (HTTP 200 +
+ * `web_search_tool_result_error`, D-05/E4). Preserved so `encrypted_content`
+ * survives reload for multi-turn resolution (Pitfall 1, F13).
+ *
+ * Persistence shape — SDK-agnostic per AI-SPEC.md §3 Pitfall #2.
+ */
+export interface WebSearchToolResultPersistedBlock {
+  type: 'web_search_tool_result';
+  toolUseId: string;
+  content:
+    | WebSearchResultPersisted[]
+    | { type: 'web_search_tool_result_error'; errorCode: string };
 }
 
 /**
@@ -61,7 +134,12 @@ export interface ToolResultBlock {
  * format (drops persistence-only fields, normalizes tool_use blocks with
  * `status='pending'` to plain text per D-16).
  */
-export type ChatBlock = TextBlock | ToolUseBlock | ToolResultBlock;
+export type ChatBlock =
+  | TextBlock
+  | ToolUseBlock
+  | ToolResultBlock
+  | ServerToolUsePersistedBlock
+  | WebSearchToolResultPersistedBlock;
 
 /**
  * One message inside a ChatConversation.
