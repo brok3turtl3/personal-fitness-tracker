@@ -11,7 +11,7 @@
 
 - [x] **Phase 1: Foundations** — Test scaffolds, shared utilities, subscription hygiene, schema-migration discipline. No feature work; everything later phases stand on. (FOUND-01..07) — completed 2026-05-02
 - [ ] **Phase 2: Diet UX Overhaul** — Multi-unit foods, frictionless meal logging, daily totals, charts integration, V5→V6 schema. (DIET-01..10) [parallel with Phase 3]
-- [ ] **Phase 3: AI Memory + Tool Plumbing** — V4→V5 schema, memory tool, user profile, tool registry, settings UI. Plumbing only — no behavior change for the user yet. (CHAT-01, CHAT-03, CHAT-04, CHAT-11, CHAT-12) [parallel with Phase 2]
+- [x] **Phase 3: AI Memory + Tool Plumbing** — V4→V5 schema, memory tool, user profile, tool registry, settings UI. Plumbing only — no behavior change for the user yet. (CHAT-01, CHAT-03, CHAT-04, CHAT-11, CHAT-12) [parallel with Phase 2] (completed 2026-05-31)
 - [ ] **Phase 4: Agentic Loop + Citation UI** — Activate the `while(stop_reason=='tool_use')` loop, data-query tools, slim system prompt, block-aware chat rendering, confidence badges. (CHAT-02, CHAT-05, CHAT-06, CHAT-07, CHAT-08, CHAT-09, CHAT-10)
 - [ ] **Phase 5: Web Search Grounding + Quality Sweep** — Web search server tool with grounded citations, then the final quality pass (CRUD parity, quota detection, multi-tab safety, CSP, archival, 401 rotation, a11y, mutation tests). (RESCH-01..03, QUAL-01..10)
 
@@ -130,7 +130,7 @@
 |-------|----------------|--------|-----------|
 | 1. Foundations | 10/10 | Complete | 2026-05-02 |
 | 2. Diet UX Overhaul | 0/? | Not started | - |
-| 3. AI Memory + Tool Plumbing | 0/? | Not started | - |
+| 3. AI Memory + Tool Plumbing | 7/7 | Complete    | 2026-05-31 |
 | 4. Agentic Loop + Citation UI | 0/? | Not started | - |
 | 5. Web Search Grounding + Quality Sweep | 0/? | Not started | - |
 

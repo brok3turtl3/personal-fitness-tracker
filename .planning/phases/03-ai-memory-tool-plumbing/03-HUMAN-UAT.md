@@ -1,5 +1,5 @@
 ---
-status: diagnosed
+status: resolved
 phase: 03-ai-memory-tool-plumbing
 source: [03-VERIFICATION.md]
 started: 2026-05-03T18:00:00Z
@@ -72,7 +72,7 @@ partial: 1
 
 - id: SC3-NO-PERSIST
   truth: "Approving a pending memory pill persists the file to AppData.memoryFiles so it appears in /settings/memory."
-  status: failed
+  status: resolved
   severity: major
   test: 3
   reason: "Operator approved a seeded pill (in-chat ✓ confirmation) but /settings/memory still shows 'no memory files yet'."
@@ -81,7 +81,7 @@ partial: 1
   debug_session: ".planning/debug/dev-seed-approval-no-persist-and-unpaired-tooluse.md"
 - id: SC3-UNPAIRED-TOOLUSE
   truth: "Approving a tool_use never leaves the conversation API-invalid; the next message round-trips."
-  status: failed
+  status: resolved
   severity: major
   test: 2
   reason: "After approval, the next chat message returns Anthropic 400 'tool_use ids were found without tool_result blocks immediately after'."
@@ -99,3 +99,7 @@ partial: 1
   resolved_by: "03-06 (commit ef9ca46)"
   verification: "Code + spec verified (5/5 must-haves at code level, 03-VERIFICATION.md). Final operator browser re-run of Tests 2 and 3 still pending."
   debug_session: ".planning/debug/dev-seed-pending-pill-not-rendering.md"
+
+---
+
+**Operator approval — 2026-05-31.** All UAT items passed in live testing. SC3 (persist + paired tool_result) closed by plan 03-07; the follow-up Anthropic 400 ("tool_result blocks can only be in user messages") closed by commit 49e275b (buildApiMessages now emits tool_result in a user turn, with same-role coalescing). Phase 3 marked complete.

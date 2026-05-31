@@ -44,8 +44,8 @@ Requirements for the refinement milestone. Each maps to roadmap phases (filled i
 - [ ] **CHAT-08**: Source attribution clearly distinguishes "from your data" vs "from research" in the rendered output
 - [ ] **CHAT-09**: AI never renders free-generated citations as links — only API-structured citations (`web_search_result_location`, `search_result` blocks) become hyperlinks
 - [ ] **CHAT-10**: Token usage is real (not heuristic): `messages.countTokens` replaces `text.length / 4`; `cache_control: { type: 'ephemeral' }` is applied to the system prompt; `FitnessContextService` produces a thin (~500 token) header instead of stuffing full data
-- [ ] **CHAT-11**: Prompt-injection defense — system prompt uses delimiter pattern around user-entered content; tool-call arguments are re-validated through existing domain validators before execution
-- [ ] **CHAT-12**: `/settings` exposes AI tool toggles (data-query, memory, web-search), memory inspector (read/delete files), agent-turn cap, and web-search usage cap
+- [x] **CHAT-11**: Prompt-injection defense — system prompt uses delimiter pattern around user-entered content; tool-call arguments are re-validated through existing domain validators before execution
+- [x] **CHAT-12**: `/settings` exposes AI tool toggles (data-query, memory, web-search), memory inspector (read/delete files), agent-turn cap, and web-search usage cap
 
 ### RESCH — AI research grounding (web search)
 
@@ -148,8 +148,8 @@ Mapped by the roadmapper.
 | CHAT-08 | Phase 4 | Pending |
 | CHAT-09 | Phase 4 | Pending |
 | CHAT-10 | Phase 4 | Pending |
-| CHAT-11 | Phase 3 | Pending |
-| CHAT-12 | Phase 3 | Pending |
+| CHAT-11 | Phase 3 | Complete |
+| CHAT-12 | Phase 3 | Complete |
 | RESCH-01 | Phase 5 | Pending |
 | RESCH-02 | Phase 5 | Pending |
 | RESCH-03 | Phase 5 | Pending |
