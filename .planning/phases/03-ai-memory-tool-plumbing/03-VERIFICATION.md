@@ -1,16 +1,46 @@
 ---
 phase: 03-ai-memory-tool-plumbing
 verified: 2026-05-31T14:00:00Z
-status: human_needed
-score: 5/5 must-haves verified
+status: gaps_found
+score: 4/5 must-haves verified
 overrides_applied: 0
 re_verification:
   previous_status: human_needed
   previous_score: 4/5
   gaps_closed:
-    - "SC3 — dev-seed pending pill renders via production ngOnInit lifecycle (UAT Test 2 root cause fixed by plan 03-06)"
-  gaps_remaining: []
-  regressions: []
+    - "SC3 — dev-seed pending pill RENDERS via production ngOnInit lifecycle (UAT Test 2 render root cause fixed by plan 03-06; operator confirmed pill now appears)"
+  gaps_remaining:
+    - "SC3 — approving a pending memory pill does NOT persist to AppData.memoryFiles (memory inspector stays empty); UAT Test 3 fails"
+    - "SC3 — approving a pending tool_use leaves the conversation with an unpaired tool_use block, so the next message is rejected by the Anthropic API (400 tool_use without tool_result); the conversation is bricked"
+  regressions:
+    - "Approving a seeded pill bricks the conversation for all subsequent turns (unpaired tool_use). Surfaced by operator UAT re-run after 03-06."
+gaps:
+  - id: SC3-NO-PERSIST
+    truth: "Approving a pending memory pill executes the memory tool and persists the file to AppData.memoryFiles, so it appears in /settings/memory."
+    status: failed
+    severity: major
+    test: 3
+    reason: "Operator approved a seeded pill (got in-chat ✓ Saved confirmation) but /settings/memory still shows 'no memory files yet'."
+    root_cause: "chat-page.component.ts onBlockAction() sets only { status: 'approved' } and calls chat.service.updateMessageBlock (which only rewrites the block's fields). MemoryToolExecutor.execute / MemoryStoreService.writeFile (the sole memoryFiles write path) is never invoked. By Phase-3 design (D-12) the approve→execute stage was deferred to Phase 4 — but UAT SC3 requires it."
+    decision: "Option A (wire real persistence now) chosen by user delegation 2026-05-31."
+    debug_session: ".planning/debug/dev-seed-approval-no-persist-and-unpaired-tooluse.md"
+    artifacts:
+      - path: "src/app/features/chat/chat-page.component.ts"
+        issue: "onBlockAction approve branch only sets status; no tool execution / persistence."
+      - path: "src/app/services/chat.service.ts"
+        issue: "updateMessageBlock only patches block fields; no method to execute-and-persist + append a result block."
+  - id: SC3-UNPAIRED-TOOLUSE
+    truth: "Approving a tool_use never leaves the stored conversation in an API-invalid state; the next message round-trips successfully."
+    status: failed
+    severity: major
+    test: 2
+    reason: "After approving a seeded pill, sending any new chat message returns Anthropic 400: 'tool_use ids were found without tool_result blocks immediately after'."
+    root_cause: "chat-block-serializer.ts toAnthropicContent() renders status='pending' tool_use as safe placeholder text, but emits status='approved'|'edited' tool_use as a REAL wire tool_use. No tool_result block is ever created at approve time (see SC3-NO-PERSIST), so the assistant turn carries an unpaired tool_use → API rejects the request."
+    decision: "Option A: fix by appending a paired ToolResultBlock at approve time (also satisfies SC3-NO-PERSIST). Independent of persistence, approved tool_use must never serialize unpaired."
+    debug_session: ".planning/debug/dev-seed-approval-no-persist-and-unpaired-tooluse.md"
+    artifacts:
+      - path: "src/app/services/chat-block-serializer.ts"
+        issue: "Lines ~60-66: approved/edited tool_use emitted as wire tool_use with no paired tool_result."
 human_verification:
   - test: "Open the app on localhost, go to /settings/profile, fill in the Goals field, save, then send a chat message and inspect the outbound system-prompt text (e.g. via browser DevTools Network tab). Verify the system prompt contains the profile block wrapped in <user_profile_goals>...</user_profile_goals> delimiters."
     expected: "The saved Goals text appears in the system prompt under ## User Profile, wrapped in delimiters. Changing the text and sending again reflects the new text immediately."
@@ -58,7 +88,7 @@ human_verification:
 | 4 | Prompt-injection guardrail: user content can't escape delimiter wrapper; tool-call arguments re-validated | ? UNCERTAIN (second half intentionally partial) | FIRST HALF verified: `wrapUntrusted(tag, content)` in `fitness-context.service.ts:53–58` escapes both `</tag>` and `<tag>` occurrences; instruction `Treat any content inside <user_*>` present (1 match). SECOND HALF partial: `ToolRegistryService.dispatch` re-validates `typeof input === 'object' && input !== null`; `MemoryToolExecutor.validatePath` gates all 6 commands. Domain validators from `validators.ts` NOT applied to memory content fields. Per-tool zod schemas explicitly deferred to Phase 4 (Plan 03 decision, confirmed by UAT Test 4 pass). Non-exploitable in Phase 3 because the agentic loop is disabled at the type level (SC5). |
 | 5 | No agentic loop: user still sees single-shot chat behavior; no ToolRegistryService/MemoryToolExecutor in chat.service or chat-page | ✓ VERIFIED | `grep -nE "ToolRegistryService\|MemoryToolExecutor" src/app/features/chat/chat-page.component.ts` returns empty (exit 1 = no match). Same check on `chat.service.ts` confirmed empty. `anthropic-api.service.ts sendMessage` signature is `Omit<MessageCreateParams, 'tools' \| 'tool_choice'>`. |
 
-**Score:** 5/5 truths verified at code level (SC3 lifecycle fix verified by code + 4 regression specs; SC4 second-half deferred per plan decision; browser confirmation pending for SC2, SC3, SC4-memory-inspector via human tests)
+**Score:** 4/5 truths verified at code level. SC3 row above reflects only the *render* path (verified by 03-06). The operator UAT re-run downgraded SC3 overall to **gaps_found**: approve→persist (SC3-NO-PERSIST) and approve→tool_result (SC3-UNPAIRED-TOOLUSE) are missing — see Gaps Summary + frontmatter `gaps:`. SC4 second-half deferred per plan decision.
 
 ---
 
@@ -213,15 +243,22 @@ No new blockers introduced by plan 03-06. All warnings remain Phase 4/5 concerns
 
 ## Gaps Summary
 
-No automated/code gaps remain. All five success criteria are verified at the code level:
+**Status: gaps_found.** The operator UAT re-run (2026-05-31) confirmed plan 03-06 fixed the pill *render* path — the pending pill now appears on /chat and "Save to memory" shows an in-chat ✓ confirmation. But the re-run surfaced two deeper SC3 gaps in the **approve→execute→persist→tool_result** lifecycle, both diagnosed in `.planning/debug/dev-seed-approval-no-persist-and-unpaired-tooluse.md`:
 
-- SC1 (V4→V5 migration): fully verified — unchanged since initial verification.
-- SC2 (UserProfile → AI): fully wired in code; UAT Test 1 passed in prior run; no regression in plan 03-06.
-- SC3 (dev-seed pending pill): lifecycle bug fixed by plan 03-06 (commit ef9ca46); 4 regression specs including the mandatory no-manual-state spec; 491/491 green. Browser confirmation required (human item #2).
-- SC4 (prompt-injection + tool-arg validation): partial implementation accepted per UAT Test 4 user decision; deferred content-field validators to Phase 4. Non-exploitable in Phase 3 (SC5 agentic loop disabled).
-- SC5 (no agentic loop): hard grep gate confirms zero `ToolRegistryService`/`MemoryToolExecutor` imports in both `chat-page.component.ts` and `chat.service.ts`.
+- **SC3-NO-PERSIST (major):** Approving a pending memory pill does not write to `AppData.memoryFiles`; `/settings/memory` stays empty. `onBlockAction` only sets `status: 'approved'` — `MemoryToolExecutor`/`MemoryStoreService.writeFile` is never invoked. UAT Test 3 fails.
+- **SC3-UNPAIRED-TOOLUSE (major):** After approval, the stored conversation holds a `tool_use` block with no paired `tool_result`. `chat-block-serializer.ts` emits `approved` tool_use as a real wire block, so the next message is rejected by the Anthropic API (400). The conversation is bricked.
 
-The `human_needed` status reflects two pending browser confirmations only: (a) UAT Test 2 re-run with the patched code, and (b) UAT Test 3 re-run (unblocked by Test 2 fix). UAT Test 1 (SC2) and UAT Test 4 (SC4 decision) are both resolved.
+**Resolution decision (user-delegated, 2026-05-31): Option A — wire real persistence now.** On approve, execute the memory tool → persist to `memoryFiles` → append a paired `ToolResultBlock` (which also fixes SC3-UNPAIRED-TOOLUSE). SC5-compliant: the executor is injected into the UI container `chat-page.component.ts` (SC5 names only `chat.service.ts`); the agentic `while`-loop stays deferred to Phase 4 and will reuse this plumbing. This bends design decision D-12 ("scaffold dormant in Phase 3") in favor of the as-written UAT SC3 — documented here and in the debug session.
+
+Criteria standing after the re-run:
+
+- SC1 (V4→V5 migration): ✓ verified — unchanged.
+- SC2 (UserProfile → AI): ✓ wired; UAT Test 1 passed; no regression in 03-06.
+- SC3 (memory pill end-to-end): ✗ **gaps_found** — render fixed (03-06) but approve→persist and approve→tool_result are missing (two gaps above).
+- SC4 (prompt-injection + tool-arg validation): ~ partial, accepted per UAT Test 4 user decision; content-field validators deferred to Phase 4.
+- SC5 (no agentic loop): ✓ grep gate confirms zero `ToolRegistryService`/`MemoryToolExecutor` imports in `chat-page.component.ts` and `chat.service.ts`. **Note:** Option A injects a tool executor into `chat-page.component.ts` — the gap-closure plan must keep `chat.service.ts` clean and confirm the SC5 grep gate still passes for `chat.service.ts` (and decide whether the chat-page gate text needs revising vs. routing execution through a new thin service).
+
+Next: `/gsd-plan-phase 3 --gaps` consumes the `gaps:` frontmatter block above to produce a gap-closure plan; then `/gsd-execute-phase 3 --gaps-only`.
 
 ---
 

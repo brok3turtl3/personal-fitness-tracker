@@ -1,5 +1,5 @@
 ---
-status: partial
+status: diagnosed
 phase: 03-ai-memory-tool-plumbing
 source: [03-VERIFICATION.md]
 started: 2026-05-03T18:00:00Z
@@ -8,7 +8,7 @@ updated: 2026-05-31T00:00:00Z
 
 ## Current Test
 
-[awaiting operator browser re-run of Tests 2 and 3 after gap-closure plan 03-06]
+[operator re-run complete — pill now RENDERS (03-06 confirmed), but approval does not persist and bricks the chat; two new SC3 gaps diagnosed; Option A chosen for gap closure]
 
 ## Tests
 
@@ -28,8 +28,9 @@ updated: 2026-05-31T00:00:00Z
 
 **expected:** Pending pill renders with header "AI wants to remember this:", three action buttons ("Save to memory", "Edit proposal", "Discard proposal"). Primary action receives auto-focus. Clicking "Save to memory" shows the ✓ Saved badge. After page refresh, the resolved badge is still shown (state persisted).
 
-**result:** pending
-**note:** Lifecycle bug fixed in gap-closure plan 03-06 (commit ef9ca46). `chat-page` ngOnInit now auto-selects (or seed-gated auto-creates) an active conversation BEFORE consuming the dev-seed sentinel, so the pill is appended on the next /chat visit. Regression spec drives ngOnInit end-to-end (chat-page.component.spec.ts) and passes (491/491 full Karma suite). Awaiting operator browser re-run to confirm in-browser render + persistence.
+**result:** partial_pass
+**note:** Plan 03-06 (commit ef9ca46) fixed the RENDER path — operator confirms the pending pill now appears on /chat and clicking "Save to memory" shows an in-chat ✓ confirmation. BUT (a) the memory is NOT persisted (see Test 3), and (b) approving leaves the conversation with an unpaired tool_use block so the NEXT chat message fails with an Anthropic 400 ("tool_use ids were found without tool_result blocks immediately after"). Render is closed; the approve→persist→tool_result lifecycle is not. New gaps SC3-NO-PERSIST + SC3-UNPAIRED-TOOLUSE — see 03-VERIFICATION.md `gaps:` and debug session.
+**operator_quote:** "I now got the pill in the chat and accepted the save and got confirmation it was saved in the chat but when I go back to AI memory page it still says 'no memory files yet'. And also, when I tried to say something in the chat after that I got 'messages.6: tool_use ids were found without tool_result blocks immediately after ...'."
 
 ---
 
@@ -39,8 +40,10 @@ updated: 2026-05-31T00:00:00Z
 
 **expected:** Empty-state message appears before any approval. After approval, the seeded memory file appears in the path-tree with `aria-label="{path}, N bytes"`, an expandable inline preview shows the seeded content, and Edit + Delete actions are functional. Delete with confirm removes the entry.
 
-**result:** pending
-**note:** Unblocked by plan 03-06 — Test 2 now produces a real pending pill the user can approve, so the persisted-memory inspection flow can finally be exercised. Empty-state behavior was already confirmed working in the prior run.
+**result:** issue
+**reported:** "when I go back to AI memory page it still says 'no memory files yet'" — approval produced an in-chat confirmation but no persisted memory file.
+**severity:** major
+**root_cause:** SC3-NO-PERSIST — onBlockAction approve branch never executes the memory tool; MemoryStoreService.writeFile is never called. See 03-VERIFICATION.md `gaps:` + `.planning/debug/dev-seed-approval-no-persist-and-unpaired-tooluse.md`.
 
 ---
 
@@ -59,12 +62,32 @@ updated: 2026-05-31T00:00:00Z
 
 total: 4
 passed: 2
-issues: 0
-pending: 2
+issues: 1
+pending: 0
 skipped: 0
 blocked: 0
+partial: 1
 
 ## Gaps
+
+- id: SC3-NO-PERSIST
+  truth: "Approving a pending memory pill persists the file to AppData.memoryFiles so it appears in /settings/memory."
+  status: failed
+  severity: major
+  test: 3
+  reason: "Operator approved a seeded pill (in-chat ✓ confirmation) but /settings/memory still shows 'no memory files yet'."
+  root_cause: "chat-page.component.ts onBlockAction approve branch only sets { status: 'approved' }; MemoryToolExecutor.execute / MemoryStoreService.writeFile is never invoked."
+  decision: "Option A — wire real persistence at approve time (user-delegated 2026-05-31)."
+  debug_session: ".planning/debug/dev-seed-approval-no-persist-and-unpaired-tooluse.md"
+- id: SC3-UNPAIRED-TOOLUSE
+  truth: "Approving a tool_use never leaves the conversation API-invalid; the next message round-trips."
+  status: failed
+  severity: major
+  test: 2
+  reason: "After approval, the next chat message returns Anthropic 400 'tool_use ids were found without tool_result blocks immediately after'."
+  root_cause: "chat-block-serializer.ts emits status='approved' tool_use as a real wire block; no paired tool_result is ever created at approve time."
+  decision: "Option A — append a paired ToolResultBlock at approve time (also resolves SC3-NO-PERSIST)."
+  debug_session: ".planning/debug/dev-seed-approval-no-persist-and-unpaired-tooluse.md"
 
 - truth: "Dev-seed pending memory proposal appears as a pending pill in the chat stream with header 'AI wants to remember this:' and three action buttons."
   status: resolved
