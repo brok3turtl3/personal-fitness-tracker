@@ -20,7 +20,10 @@ findings:
   warning: 4
   info: 1
   total: 9
-status: issues_found
+findings_resolved: 8
+findings_open: 1
+status: resolved
+resolution_updated: 2026-05-31
 ---
 
 # Phase 04: Code Review Report
@@ -28,7 +31,47 @@ status: issues_found
 **Reviewed:** 2026-05-31
 **Depth:** standard
 **Files Reviewed:** 11
-**Status:** issues_found
+**Status:** resolved — 8/9 findings fixed (2026-05-31); 1 INFO deferred. See Resolution Ledger below.
+
+## Resolution Ledger (updated 2026-05-31)
+
+8 of 9 findings were fixed and committed atomically after this review. The original finding
+detail is preserved below for context; this table is the source of truth for what is resolved
+vs. outstanding.
+
+| Finding | Severity | Status | Commit | Note |
+|---------|----------|--------|--------|------|
+| CR-01 `pause_turn` defeats maxAgentTurns cap | Blocker | ✅ Fixed | `001c9ee` | Bounded consecutive pause_turn (ceiling 3, reset on tool_use); spec proves perpetual pause_turn terminates |
+| CR-02 SDK chokepoint violation in chat.service.ts | Blocker | ✅ Fixed | `d77b37c` | Replaced `import type` from @anthropic-ai/sdk with local structural aliases; grep clean |
+| CR-03 grading prompt source taxonomy mismatch | Blocker | ✅ Fixed | `6d84574` | GRADING_INSTRUCTIONS now emits `[source: data\|research]`, matching parser SOURCE_VALUES |
+| CR-04 redactMealNotes setting ignored | Blocker | ✅ Fixed | `e26cc56` | `nutritionFacts()` gated on `!redactMealNotes` — see open product question OQ-1 below |
+| WR-01 mealsByDay UTC+ off-by-one | Warning | ✅ Fixed | `3b83a1e` | Local-calendar-day cursor instead of toISOString().slice(0,10) |
+| WR-02 tool toggles never filter tools[] | Warning | ✅ Fixed | `2ab06e0` | runAgenticLoop filters by enableMemoryTool / enableDataQueryTools |
+| WR-03 approxMessageTokens formula inverted | Warning | ✅ Fixed | `77dfc53` | words * 0.75 (was / 0.75) |
+| WR-04 wrapUntrusted variant-tag bypass | Warning | ✅ Fixed | `513b7ef` | Case-insensitive regex matches attribute/whitespace tag variants |
+| IN-01 block-action errors logged not surfaced | Info | ⏳ Deferred | — | Out of scope for the fix pass; see Outstanding below |
+
+Post-fix gate: full Karma suite **584/584 green**, production build exit 0.
+
+## Outstanding for Future Work
+
+These were intentionally NOT addressed in Phase 4 and are not yet captured elsewhere — pick up in
+Phase 5 (quality sweep) or a follow-up:
+
+- **IN-01 (INFO) — block-action errors swallowed.** `chat-page.component.ts:353,356,390` call
+  `console.error` on approve/discard/edit failures but never set `errorMessage`, so the user sees
+  nothing. Low severity; surface via the existing inline error banner. Touches three error paths.
+- **OQ-1 (product question, from CR-04) — meal-note redaction granularity.** The "Send meal notes
+  to AI" toggle's UI copy implies stripping *free-text per-entry meal notes*, but
+  `FitnessContextService.nutritionFacts()` only ever emitted a single total-kcal line (now gated by
+  the toggle). If the product intent is finer-grained per-entry note stripping, that is a separate
+  change — confirm intended behavior before Phase 5 closes.
+- **Security verification not yet run.** Security enforcement is ON (ASVS L1) and the plan threat
+  models were implemented, but no `04-SECURITY.md` exists. Run `/gsd-secure-phase 4` to formally
+  verify the four modeled threats (citation-link guard, read-only tool surface, prompt-injection
+  containment, maxAgentTurns resource cap).
+- **3 visual UAT items** — tracked separately in `04-HUMAN-UAT.md` (badge rendering, disclosure
+  collapse/expand, cap behavior). Run `/gsd-verify-work 4` against a running browser.
 
 ## Summary
 
