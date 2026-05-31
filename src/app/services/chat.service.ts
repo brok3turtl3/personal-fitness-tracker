@@ -970,7 +970,28 @@ export class ChatService {
 
             const updatedConv = { ...data.chatConversations[convIndex] };
             updatedConv.summary = summaryText;
-            updatedConv.summarizedMessageCount = totalMessages - MESSAGE_WINDOW_SIZE;
+
+            // QUAL-05 / D-13: MOVE the just-summarized pre-summary messages out
+            // of the hot AppData conversation slice into the per-conversation
+            // archive key (through the StorageService chokepoint — ChatService
+            // never touches localStorage directly). The summary text retains
+            // their content; the raw messages are archived (a move, not a
+            // delete) so the active conversation stays small. After the move,
+            // the remaining active messages are entirely un-summarized, so
+            // summarizedMessageCount resets to 0 (the prior absolute offset no
+            // longer indexes the shrunk array).
+            //
+            // Best-effort archive: archiveMessages swallows quota/serialization
+            // failures, so a failed archive never blocks summarization. Re-read
+            // messagesToSummarize from the freshly-fetched conversation to keep
+            // the slice consistent with the data we are about to persist.
+            const freshMessages = updatedConv.messages;
+            const archiveSlice = freshMessages.slice(0, freshMessages.length - MESSAGE_WINDOW_SIZE);
+            if (archiveSlice.length > 0) {
+              this.storageService.archiveMessages(conversationId, archiveSlice);
+              updatedConv.messages = freshMessages.slice(freshMessages.length - MESSAGE_WINDOW_SIZE);
+            }
+            updatedConv.summarizedMessageCount = 0;
 
             const updatedConversations = [...data.chatConversations];
             updatedConversations[convIndex] = updatedConv;

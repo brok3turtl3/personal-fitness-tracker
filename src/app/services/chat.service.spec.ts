@@ -68,12 +68,16 @@ describe('ChatService', () => {
   beforeEach(() => {
     mockAppData = createEmptyAppData();
 
-    mockStorageService = jasmine.createSpyObj('StorageService', ['getData', 'saveData']);
+    mockStorageService = jasmine.createSpyObj('StorageService', [
+      'getData', 'saveData', 'archiveMessages', 'loadArchivedMessages', 'hasArchivedMessages',
+    ]);
     mockStorageService.getData.and.callFake(() => of(mockAppData));
     mockStorageService.saveData.and.callFake((data: AppData) => {
       mockAppData = data;
       return of(undefined);
     });
+    mockStorageService.loadArchivedMessages.and.returnValue([]);
+    mockStorageService.hasArchivedMessages.and.returnValue(false);
 
     mockAnthropicApi = jasmine.createSpyObj('AnthropicApiService', ['sendMessage', 'countTokens']);
     mockAnthropicApi.sendMessage.and.returnValue(of(mockApiResponse));
@@ -1051,5 +1055,104 @@ describe('ChatService', () => {
 
       await expectAsync(collect()).toBeRejectedWithError('boom');
     });
+  });
+
+  describe('summarization archival (QUAL-05, D-13)', () => {
+    const MESSAGE_WINDOW_SIZE = 20;
+
+    function textMessage(id: string, text: string): ChatMessage {
+      return {
+        id,
+        role: 'user',
+        blocks: [{ type: 'text', text }],
+        tokenEstimate: 1,
+        createdAt: '2026-05-31T00:00:00.000Z',
+      };
+    }
+
+    function conversationWith(count: number): ChatConversation {
+      const messages: ChatMessage[] = [];
+      for (let i = 0; i < count; i++) {
+        messages.push(textMessage(`m${i}`, `message ${i}`));
+      }
+      return {
+        id: 'conv-sum',
+        title: 'T',
+        messages,
+        summarizedMessageCount: 0,
+        createdAt: '2026-05-31T00:00:00.000Z',
+        updatedAt: '2026-05-31T00:00:00.000Z',
+      };
+    }
+
+    function seed(conversation: ChatConversation): void {
+      mockAppData.chatConversations = [conversation];
+    }
+
+    it('moves pre-summary messages to the archive and shrinks the active slice, keeping the summary', async () => {
+      // 30 messages → 10 outside the 20-message window get summarized + archived.
+      const conv = conversationWith(30);
+      seed(conv);
+
+      // The summarization call returns a summary text.
+      mockApiResponseSummary('Condensed summary of the earlier conversation.');
+
+      await firstValueFrom(
+        (service as unknown as {
+          maybeSummarize: (
+            id: string, c: ChatConversation, key: string, model: string, max: number,
+          ) => ReturnType<ChatService['createConversation']>;
+        }).maybeSummarize('conv-sum', conv, 'sk-ant-test-key', 'claude-sonnet-4-6', 4096),
+      );
+
+      // Pre-summary messages (the first 10) were archived through the chokepoint.
+      expect(mockStorageService.archiveMessages).toHaveBeenCalledTimes(1);
+      const [archivedConvId, archivedMessages] =
+        mockStorageService.archiveMessages.calls.mostRecent().args;
+      expect(archivedConvId).toBe('conv-sum');
+      expect(archivedMessages.length).toBe(30 - MESSAGE_WINDOW_SIZE);
+      expect(archivedMessages[0].id).toBe('m0');
+      expect(archivedMessages[archivedMessages.length - 1].id).toBe('m9');
+
+      // Active slice shrank to the window tail; summary retained; counter reset.
+      const persisted = mockAppData.chatConversations[0];
+      expect(persisted.messages.length).toBe(MESSAGE_WINDOW_SIZE);
+      expect(persisted.messages[0].id).toBe('m10');
+      expect(persisted.summary).toBe('Condensed summary of the earlier conversation.');
+      expect(persisted.summarizedMessageCount).toBe(0);
+    });
+
+    it('does not summarize or archive when within the window threshold', async () => {
+      // 22 messages → unsummarized (22) <= MESSAGE_WINDOW_SIZE + 5 (25) → no-op.
+      const conv = conversationWith(22);
+      seed(conv);
+
+      await firstValueFrom(
+        (service as unknown as {
+          maybeSummarize: (
+            id: string, c: ChatConversation, key: string, model: string, max: number,
+          ) => ReturnType<ChatService['createConversation']>;
+        }).maybeSummarize('conv-sum', conv, 'sk-ant-test-key', 'claude-sonnet-4-6', 4096),
+      );
+
+      expect(mockStorageService.archiveMessages).not.toHaveBeenCalled();
+      expect(mockAppData.chatConversations[0].messages.length).toBe(22);
+    });
+
+    function mockApiResponseSummary(text: string): void {
+      mockAnthropicApi.sendMessage.and.returnValue(of({
+        id: 'msg_sum',
+        type: 'message',
+        role: 'assistant',
+        content: [{ type: 'text', text, citations: null }],
+        model: 'claude-sonnet-4-6',
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: {
+          input_tokens: 50, output_tokens: 30,
+          cache_creation_input_tokens: null, cache_read_input_tokens: null,
+        },
+      } as unknown as Message));
+    }
   });
 });

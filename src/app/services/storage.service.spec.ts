@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { StorageService, StorageError } from './storage.service';
 import { AppData, STORAGE_KEY, CURRENT_SCHEMA_VERSION } from '../models/app-data.model';
-import { DEFAULT_AI_TOOL_SETTINGS } from '../models/ai-chat.model';
+import { ChatMessage, DEFAULT_AI_TOOL_SETTINGS } from '../models/ai-chat.model';
 import { DEFAULT_USER_PROFILE } from '../models/user-profile.model';
 import { firstValueFrom } from 'rxjs';
 
@@ -782,6 +782,85 @@ describe('StorageService', () => {
       // Foreign keys must still be present.
       expect(localStorageMock['fitness_tracker_data_other']).toBe('"foreign-1"');
       expect(localStorageMock['some.other.app.backup']).toBe('"foreign-2"');
+    });
+  });
+
+  describe('chat archival keys (QUAL-05, D-13)', () => {
+    const ARCHIVE_PREFIX = 'fitness_tracker_archive_';
+
+    function msg(id: string, text: string): ChatMessage {
+      return {
+        id,
+        role: 'user',
+        blocks: [{ type: 'text', text }],
+        tokenEstimate: 0,
+        createdAt: '2026-05-31T00:00:00.000Z',
+      };
+    }
+
+    it('archive -> load round-trips the messages under the fitness_tracker_archive_ prefix', () => {
+      const convId = 'conv-1';
+      service.archiveMessages(convId, [msg('m1', 'hello'), msg('m2', 'world')]);
+
+      // Key uses the documented prefix.
+      const key = `${ARCHIVE_PREFIX}${convId}`;
+      expect(localStorageMock[key]).toBeTruthy();
+
+      const loaded = service.loadArchivedMessages(convId);
+      expect(loaded.length).toBe(2);
+      expect(loaded[0].id).toBe('m1');
+      expect((loaded[0].blocks[0] as { text: string }).text).toBe('hello');
+      expect(loaded[1].id).toBe('m2');
+    });
+
+    it('appends across multiple archiveMessages calls (chronological accumulation)', () => {
+      const convId = 'conv-append';
+      service.archiveMessages(convId, [msg('a', '1')]);
+      service.archiveMessages(convId, [msg('b', '2'), msg('c', '3')]);
+
+      const loaded = service.loadArchivedMessages(convId);
+      expect(loaded.map(m => m.id)).toEqual(['a', 'b', 'c']);
+    });
+
+    it('archiveMessages is a no-op on an empty array (no key written)', () => {
+      const convId = 'conv-empty';
+      service.archiveMessages(convId, []);
+      expect(localStorageMock[`${ARCHIVE_PREFIX}${convId}`]).toBeUndefined();
+    });
+
+    it('loadArchivedMessages returns [] when the key is absent', () => {
+      expect(service.loadArchivedMessages('never-archived')).toEqual([]);
+    });
+
+    it('loadArchivedMessages returns [] (no throw) on malformed JSON', () => {
+      const convId = 'conv-bad';
+      localStorageMock[`${ARCHIVE_PREFIX}${convId}`] = 'not-json{{';
+      expect(() => service.loadArchivedMessages(convId)).not.toThrow();
+      expect(service.loadArchivedMessages(convId)).toEqual([]);
+    });
+
+    it('loadArchivedMessages returns [] when the parsed value is not an array', () => {
+      const convId = 'conv-obj';
+      localStorageMock[`${ARCHIVE_PREFIX}${convId}`] = JSON.stringify({ not: 'an array' });
+      expect(service.loadArchivedMessages(convId)).toEqual([]);
+    });
+
+    it('archiveMessages swallows a quota/serialization error (best-effort, no throw)', () => {
+      (localStorage.setItem as jasmine.Spy).and.throwError('QuotaExceededError');
+      expect(() => service.archiveMessages('conv-q', [msg('m', 'x')])).not.toThrow();
+    });
+
+    it('hasArchivedMessages reflects presence', () => {
+      const convId = 'conv-has';
+      expect(service.hasArchivedMessages(convId)).toBe(false);
+      service.archiveMessages(convId, [msg('m', 'x')]);
+      expect(service.hasArchivedMessages(convId)).toBe(true);
+    });
+
+    it('hasArchivedMessages is false for an empty-array payload', () => {
+      const convId = 'conv-emptyarr';
+      localStorageMock[`${ARCHIVE_PREFIX}${convId}`] = '[]';
+      expect(service.hasArchivedMessages(convId)).toBe(false);
     });
   });
 

@@ -8,7 +8,7 @@ import {
   createEmptyAppData
 } from '../models/app-data.model';
 import { SavedFood } from '../models/diet.model';
-import { DEFAULT_AI_TOOL_SETTINGS } from '../models/ai-chat.model';
+import { ChatMessage, DEFAULT_AI_TOOL_SETTINGS } from '../models/ai-chat.model';
 import { DEFAULT_USER_PROFILE } from '../models/user-profile.model';
 import {
   LegacyAppDataV0,
@@ -434,6 +434,87 @@ export class StorageService {
     if (!navigator.storage?.estimate) return null; // older browsers — graceful null
     const { usage = 0, quota = 0 } = await navigator.storage.estimate();
     return quota > 0 ? (usage / quota) * 100 : null;
+  }
+
+  // ========================================================================
+  // Lazy per-conversation chat archival (QUAL-05, D-13 — Phase 5)
+  // ------------------------------------------------------------------------
+  // Pre-summary chat messages move OUT of the hot `AppData` conversation slice
+  // into a per-conversation archive key so the active conversation stays small
+  // (cap-pressure relief, D-13). Archival is a MOVE, not a delete — nothing is
+  // lost. The chat archival affordance (05-08) loads these on demand. ALL
+  // localStorage access stays inside StorageService (the chokepoint); ChatService
+  // calls these methods, never localStorage directly. The pattern mirrors the
+  // sanctioned writeBackup/getBackup/consumeDevSeed best-effort, never-throw shape.
+  // ========================================================================
+
+  /**
+   * LocalStorage key prefix for lazy per-conversation chat archives (D-13).
+   * Format: `fitness_tracker_archive_{conversationId}`. A SEPARATE key per
+   * conversation, NOT under STORAGE_KEY — archived messages are not migrated
+   * and never participate in the active-data load path.
+   */
+  private static readonly ARCHIVE_KEY_PREFIX = 'fitness_tracker_archive_';
+
+  private static archiveKey(conversationId: string): string {
+    return `${StorageService.ARCHIVE_KEY_PREFIX}${conversationId}`;
+  }
+
+  /**
+   * Append pre-summary messages to a conversation's archive key (QUAL-05,
+   * D-13). Reads the existing archived array (oldest-first), appends the new
+   * messages, and writes it back. Best-effort: a quota/serialization failure
+   * is swallowed (mirrors writeBackup — Pitfall 4) so a summarization can never
+   * be wedged by a failed archive write. A no-op on an empty `messages` array.
+   *
+   * Order semantics: archives accumulate in chronological summarization order
+   * (each summarization appends the next-oldest batch), so a later on-demand
+   * load returns the full pre-summary history oldest-first.
+   */
+  archiveMessages(conversationId: string, messages: ChatMessage[]): void {
+    if (!messages.length) return;
+    try {
+      const existing = this.loadArchivedMessages(conversationId);
+      const merged = [...existing, ...messages];
+      localStorage.setItem(
+        StorageService.archiveKey(conversationId),
+        JSON.stringify(merged),
+      );
+    } catch {
+      /* swallow — best-effort archive, see Pitfall 4 */
+    }
+  }
+
+  /**
+   * Load a conversation's archived pre-summary messages on demand (QUAL-05,
+   * D-13). Returns `[]` when the key is absent, the payload is malformed, the
+   * parsed value is not an array, or LocalStorage access throws. NEVER throws
+   * — matches getBackup's fail-soft contract so the 05-08 affordance can call
+   * it freely without a try/catch.
+   */
+  loadArchivedMessages(conversationId: string): ChatMessage[] {
+    try {
+      const raw = localStorage.getItem(StorageService.archiveKey(conversationId));
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? (parsed as ChatMessage[]) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Cheap presence check for the archival affordance (05-08) — true iff the
+   * conversation has a non-empty archive key. Never throws; a LocalStorage
+   * access failure reports `false`.
+   */
+  hasArchivedMessages(conversationId: string): boolean {
+    try {
+      const raw = localStorage.getItem(StorageService.archiveKey(conversationId));
+      return !!raw && raw !== '[]';
+    } catch {
+      return false;
+    }
   }
 
   // ========================================================================
