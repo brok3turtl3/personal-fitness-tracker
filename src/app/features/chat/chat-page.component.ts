@@ -210,28 +210,74 @@ export class ChatPageComponent implements OnInit {
           .subscribe(valid => {
             this.hasApiKey = valid;
             if (valid) {
-              this.loadConversations();
-              // After conversations load, attempt to consume any dev-seed
-              // sentinel left by /settings/ai (D-12). Best-effort — null
-              // sentinel is the no-op path.
-              this.consumeDevSeedIfPresent();
+              this.initializeActiveConversationAndConsumeSeed();
             }
           });
       });
   }
 
   /**
-   * Read-and-remove the dev-seed sentinel from StorageService (D-12 reader
-   * side; Plan 03-05 Task 3). If a sentinel is present AND an active
-   * conversation exists, append a synthetic assistant message containing a
-   * pending tool_use block (memory or update_profile, depending on kind).
-   * Public on the component surface so specs can drive it deterministically.
+   * Init-time orchestration: load conversations, auto-select the most-recent
+   * (or auto-create one if a dev seed is present and no conversations exist),
+   * then consume the dev-seed sentinel. Fixes UAT Test 2 (plan 03-06 gap
+   * closure): the previous `loadConversations(); consumeDevSeedIfPresent();`
+   * pair ran the seed consumer before any activeConversationId was assigned,
+   * silently destroying the sentinel.
+   *
+   * Auto-create is GATED on a non-null dev seed — without that gate, the
+   * Phase 1 empty-state characterization spec ("renders <app-empty-state>
+   * when no conversations exist") would break.
    */
-  consumeDevSeedIfPresent(): void {
-    const seed = this.storageService.consumeDevSeed();
-    if (!seed) return;
-    if (!this.activeConversationId) return;
+  private initializeActiveConversationAndConsumeSeed(): void {
+    this.chatService.getConversations()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(convs => {
+        this.conversations = convs;
 
+        // Capture the seed first so we can decide whether to auto-create.
+        // consumeDevSeed() is read-and-remove — once we call it we MUST act
+        // on the value (or accept it's destroyed). The capture-then-branch
+        // sequence below ensures we never destroy a seed we can't honor.
+        const seed = this.storageService.consumeDevSeed();
+
+        if (convs.length > 0) {
+          // Auto-select most-recent (getConversations sorts by updatedAt DESC).
+          const first = convs[0];
+          this.activeConversationId = first.id;
+          this.activeConversation = first;
+          if (seed) {
+            this.appendSeededPill(first.id, seed);
+          }
+        } else if (seed) {
+          // Empty list + non-null seed → auto-create so the pill has a home.
+          this.chatService.createConversation()
+            .pipe(takeUntilDestroyed(this.destroyRef))
+            .subscribe({
+              next: conv => {
+                this.conversations = [conv];
+                this.activeConversationId = conv.id;
+                this.activeConversation = conv;
+                this.appendSeededPill(conv.id, seed);
+              },
+              error: err => console.error('[chat-page] auto-create conversation failed', err),
+            });
+        }
+        // Empty list + no seed → leave activeConversation null; empty-state
+        // surface renders (Phase 1 spec preserved).
+      });
+  }
+
+  /**
+   * Build the synthetic pending ToolUseBlock for the supplied dev-seed kind
+   * and append it to the active conversation via chat.service. Extracted from
+   * the previous body of consumeDevSeedIfPresent() so both the init path AND
+   * the legacy direct-call path (kept for backwards compat with existing
+   * specs) share a single block builder.
+   */
+  private appendSeededPill(
+    conversationId: string,
+    seed: { kind: 'memory' | 'profile'; at: string },
+  ): void {
     const block: ToolUseBlock = seed.kind === 'memory'
       ? {
           type: 'tool_use',
@@ -255,19 +301,34 @@ export class ChatPageComponent implements OnInit {
           status: 'pending',
         };
 
-    this.chatService.appendAssistantBlocks(this.activeConversationId, [block])
+    this.chatService.appendAssistantBlocks(conversationId, [block])
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: () => {
           // Refresh active conversation to surface the new pill in the stream.
-          if (this.activeConversationId) {
-            this.chatService.getConversation(this.activeConversationId)
-              .pipe(takeUntilDestroyed(this.destroyRef))
-              .subscribe(conv => { this.activeConversation = conv; });
-          }
+          this.chatService.getConversation(conversationId)
+            .pipe(takeUntilDestroyed(this.destroyRef))
+            .subscribe(conv => { this.activeConversation = conv; });
         },
         error: (err) => console.error('[chat-page] dev-seed append failed', err),
       });
+  }
+
+  /**
+   * Read-and-remove the dev-seed sentinel and append a synthetic pending
+   * pill to the active conversation (D-12). PUBLIC because existing specs
+   * drive it directly. In production, the init path now invokes the
+   * equivalent flow (via initializeActiveConversationAndConsumeSeed) BEFORE
+   * the user clicks anything — see plan 03-06 for the UAT Test 2 gap fix.
+   *
+   * Kept on the component surface (a) for spec ergonomics and (b) as a
+   * defensive re-entry point if init ever fails to consume the seed.
+   */
+  consumeDevSeedIfPresent(): void {
+    const seed = this.storageService.consumeDevSeed();
+    if (!seed) return;
+    if (!this.activeConversationId) return;
+    this.appendSeededPill(this.activeConversationId, seed);
   }
 
   /**
