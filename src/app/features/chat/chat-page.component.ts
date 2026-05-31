@@ -72,12 +72,42 @@ import { ErrorStateComponent } from '../../shared/error-state.component';
               </div>
             }
 
-            @if (loopError) {
+            @if (apiKeyRejected) {
+              <!--
+                QUAL-07: a 401 from Anthropic surfaces a specific "rotate /
+                re-enter key" prompt (LOCKED 05-UI-SPEC copy) with a focal
+                "Go to settings" path to /settings/ai — never a console-only
+                error. Secondary Retry re-runs the loop once the key is fixed.
+                <app-error-state> provides role="alert" aria-live="assertive".
+              -->
+              <app-error-state
+                title="Your API key was rejected"
+                [message]="'Anthropic returned a 401. Your key may be expired, revoked, or mistyped. Re-enter it in settings, then try again.'"
+                (retry)="onRetryLoop()"
+              >
+                <a routerLink="/settings/ai" class="btn-primary">Go to settings</a>
+              </app-error-state>
+            } @else if (loopError) {
               <app-error-state
                 title="The AI request didn't go through"
                 [message]="'Something interrupted the request. Check your connection and API key, then try again.'"
                 (retry)="onRetryLoop()"
               />
+            }
+
+            @if (blockActionError) {
+              <!--
+                QUAL-09 (folded IN-01): an approve/discard/edit failure is now
+                user-visible via <app-error-state> (LOCKED copy) instead of a
+                console.error-only swallow. {action} ∈ save this to memory /
+                discard this / apply this edit.
+              -->
+              <app-error-state
+                title="That action didn't go through"
+                [message]="blockActionError"
+              >
+                <button type="button" class="btn-secondary" (click)="blockActionError = ''">Dismiss</button>
+              </app-error-state>
             }
 
             @if (errorMessage) {
@@ -166,7 +196,8 @@ import { ErrorStateComponent } from '../../shared/error-state.component';
       display: inline-block;
       padding: 0.625rem 1.5rem;
       margin-top: 1rem;
-      background: #3498db;
+      /* QUAL-08: #2471a3 → white text 5.30:1 (was #3498db 3.15:1). */
+      background: #2471a3;
       color: white;
       text-decoration: none;
       border-radius: 4px;
@@ -174,7 +205,7 @@ import { ErrorStateComponent } from '../../shared/error-state.component';
     }
 
     .btn-primary:hover {
-      background: #2980b9;
+      background: #1d5a82;
     }
 
     .no-conversation {
@@ -182,7 +213,8 @@ import { ErrorStateComponent } from '../../shared/error-state.component';
       align-items: center;
       justify-content: center;
       flex: 1;
-      color: #999;
+      /* QUAL-08: #5f6c6d → 5.45:1 on white (was #999 2.85:1). */
+      color: #5f6c6d;
     }
 
     .error-banner {
@@ -253,6 +285,21 @@ export class ChatPageComponent implements OnInit {
    * rotate-key UX — 04-UI-SPEC).
    */
   loopError = false;
+
+  /**
+   * QUAL-07: true when the in-flight loop failed with a 401 (rejected API key).
+   * Drives the LOCKED rotate-key <app-error-state> with a `Go to settings`
+   * focal action — distinct from the generic `loopError` transport surface.
+   */
+  apiKeyRejected = false;
+
+  /**
+   * QUAL-09 (folded IN-01): LOCKED block-action failure body, set when an
+   * approve/discard/edit persistence call errors. Renders the
+   * "That action didn't go through" <app-error-state> instead of a
+   * console.error-only swallow. Empty when no block action has failed.
+   */
+  blockActionError = '';
 
   /** Last user message text — re-sent when the user clicks Retry on a loop error. */
   private lastUserMessage = '';
@@ -351,10 +398,10 @@ export class ChatPageComponent implements OnInit {
                     .pipe(takeUntilDestroyed(this.destroyRef))
                     .subscribe(conv => { this.activeConversation = conv; });
                 },
-                error: (err: unknown) => console.error('[chat-page] approve persist failed', err),
+                error: (err: unknown) => this.surfaceBlockActionError('save this to memory', err),
               });
           },
-          error: (err: unknown) => console.error('[chat-page] approve execute failed', err),
+          error: (err: unknown) => this.surfaceBlockActionError('save this to memory', err),
         });
       return;
     }
@@ -388,8 +435,24 @@ export class ChatPageComponent implements OnInit {
             .pipe(takeUntilDestroyed(this.destroyRef))
             .subscribe(conv => { this.activeConversation = conv; });
         },
-        error: (err) => console.error('[chat-page] block-action update failed', err),
+        error: (err: unknown) =>
+          this.surfaceBlockActionError(action === 'edit' ? 'apply this edit' : 'discard this', err),
       });
+  }
+
+  /**
+   * QUAL-09 (folded IN-01): surface an approve/discard/edit failure to the user
+   * via the "That action didn't go through" <app-error-state> with the LOCKED
+   * body `We couldn't {action} just now. Try again.` — replacing the prior
+   * console.error-only swallow that left the user with no feedback (T-05-09-02).
+   * A dev-diagnostic console.error is kept for the developer console.
+   */
+  private surfaceBlockActionError(
+    action: 'save this to memory' | 'discard this' | 'apply this edit',
+    err: unknown,
+  ): void {
+    this.blockActionError = `We couldn't ${action} just now. Try again.`;
+    console.error('[chat-page] block-action failed', action, err);
   }
 
   private findToolUseBlock(messageId: string, blockIndex: number): ToolUseBlock | null {
@@ -535,6 +598,7 @@ export class ChatPageComponent implements OnInit {
     this.turnLimitNotice = '';
     this.terminalNotice = '';
     this.loopError = false;
+    this.apiKeyRejected = false;
   }
 
   /**
@@ -601,16 +665,20 @@ export class ChatPageComponent implements OnInit {
   }
 
   /**
-   * Map a loop transport failure. The existing 401 mapping is PRESERVED on the
-   * inline banner (Phase 5 owns the rotate-key UX); any other error surfaces a
-   * recoverable <app-error-state> with Retry (never console-only — T-04-06-04).
+   * Map a loop transport failure (QUAL-07). A 401 (rejected API key) surfaces a
+   * specific rotate-key <app-error-state> with a `Go to settings` focal action
+   * (the user's path out — 05-UI-SPEC), NOT the old inline "Invalid API key"
+   * banner and never a console-only error. Any other error surfaces the generic
+   * recoverable <app-error-state> with Retry (T-04-06-04).
    */
   private handleLoopError(err: unknown): void {
     this.sending = false;
     if (err instanceof AnthropicApiError && err.statusCode === 401) {
-      this.errorMessage = 'Invalid API key. Please update it in Settings.';
+      this.apiKeyRejected = true;
       this.loopError = false;
+      this.errorMessage = '';
     } else {
+      this.apiKeyRejected = false;
       this.loopError = true;
     }
     // Refresh so any persisted partial transcript (user turn, tool rows) shows.

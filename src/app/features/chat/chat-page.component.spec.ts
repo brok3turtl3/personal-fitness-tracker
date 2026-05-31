@@ -9,7 +9,7 @@
  */
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { Subject, of } from 'rxjs';
+import { Subject, of, throwError } from 'rxjs';
 
 import { ChatPageComponent } from './chat-page.component';
 import { ChatService } from '../../services/chat.service';
@@ -121,9 +121,15 @@ function makeSpies(opts: {
   const storageService = jasmine.createSpyObj<StorageService>('StorageService', [
     'initialize', 'getData', 'saveData', 'getBackup',
     'setDevSeed', 'consumeDevSeed',
+    // Archival surface (05-05) is read by the child <app-chat-message-list> via
+    // inject(StorageService); the spy must cover it or every chat-page render
+    // throws `hasArchivedMessages is not a function`.
+    'hasArchivedMessages', 'loadArchivedMessages', 'archiveMessages',
   ]);
   storageService.initialize.and.returnValue(of(undefined));
   storageService.consumeDevSeed.and.returnValue(opts.devSeed ?? null);
+  storageService.hasArchivedMessages.and.returnValue(false);
+  storageService.loadArchivedMessages.and.returnValue([]);
 
   const pendingApproval = jasmine.createSpyObj<PendingApprovalService>('PendingApprovalService', [
     'executeApprovedToolUse',
@@ -699,7 +705,7 @@ describe('ChatPageComponent (characterization)', () => {
       expect(fixture.componentInstance.turnLimitNotice).toBe('');
     });
 
-    it('a 401 AnthropicApiError still routes to the inline 401 banner (existing behavior preserved)', async () => {
+    it('a 401 AnthropicApiError surfaces the QUAL-07 rotate-key <app-error-state> with a Go-to-settings path', async () => {
       const conv = createValidConversation({ id: 'c-1' });
       const events = new Subject<ChatTurnEvent>();
       const spies = makeSpies({ hasApiKey: true, conversations: [conv], activeConversation: conv });
@@ -714,10 +720,48 @@ describe('ChatPageComponent (characterization)', () => {
       events.error(new AnthropicApiError('Unauthorized', 401));
       fixture.detectChanges();
 
-      expect(fixture.componentInstance.errorMessage).toContain('Invalid API key');
+      // QUAL-07: 401 → rotate-key state, NOT the generic transport loopError.
+      expect(fixture.componentInstance.apiKeyRejected).toBeTrue();
       expect(fixture.componentInstance.loopError).toBeFalse();
+
       const compiled = fixture.nativeElement as HTMLElement;
-      expect(compiled.querySelector('.error-banner[role="alert"]')).toBeTruthy();
+      // <app-error-state> renders role="alert" on its inner <section>.
+      const errorState = Array.from(compiled.querySelectorAll('app-error-state'))
+        .find(el => el.textContent?.includes('Your API key was rejected'));
+      expect(errorState).withContext('rotate-key error-state rendered').toBeTruthy();
+      expect(errorState!.querySelector('[role="alert"]')).withContext('role=alert present').toBeTruthy();
+      // LOCKED 05-UI-SPEC copy.
+      expect(errorState?.textContent).toContain('Your API key was rejected');
+      expect(errorState?.textContent).toContain('Re-enter it in settings');
+      // Focal "Go to settings" action routes to /settings/ai.
+      const goToSettings = Array.from(errorState!.querySelectorAll('a'))
+        .find(a => a.textContent?.trim() === 'Go to settings');
+      expect(goToSettings).withContext('Go to settings link present').toBeTruthy();
+      expect(goToSettings?.getAttribute('href')).toContain('/settings/ai');
+    });
+
+    it('a 401 rotate-key surface has no serious/critical axe violations (incl. color-contrast)', async () => {
+      // Isolate the 401 <app-error-state> surface (empty transcript) so axe scores
+      // the rotate-key prompt itself. The user-bubble contrast (white on #2471a3,
+      // 5.30:1) is covered by the initial-load a11y test; rendering both a bubble
+      // and the error-state sibling confuses axe's background attribution in the
+      // headless flex layout (it mis-reads the bubble bg as the error-state's
+      // #fff5f5) — a known axe limitation, not a real defect.
+      const conv = createValidConversation({ id: 'c-1' });
+      const events = new Subject<ChatTurnEvent>();
+      const spies = makeSpies({ hasApiKey: true, conversations: [conv], activeConversation: conv });
+      spies.chatService.runAgenticLoop.and.returnValue(events.asObservable());
+      await configureBed(spies);
+
+      const fixture = TestBed.createComponent(ChatPageComponent);
+      fixture.detectChanges();
+      selectActive(fixture, 'c-1');
+      fixture.componentInstance.onSendMessage('hi');
+      events.error(new AnthropicApiError('Unauthorized', 401));
+      fixture.detectChanges();
+
+      // QUAL-08: contrast deferral lifted on the rotate-key surface.
+      await expectNoSeriousA11yViolations(fixture.nativeElement);
     });
 
     it('a generic transport error surfaces <app-error-state> with Retry (T-04-06-04)', async () => {
@@ -746,6 +790,99 @@ describe('ChatPageComponent (characterization)', () => {
       spies.chatService.runAgenticLoop.and.returnValue(retryEvents.asObservable());
       fixture.componentInstance.onRetryLoop();
       expect(spies.chatService.runAgenticLoop).toHaveBeenCalledWith('c-1', 'sk-ant-test-key');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Plan 05-09 Task 1 — QUAL-09 (folded IN-01): block-action failures surface
+  // via <app-error-state> with LOCKED copy, not console.error-only.
+  // ---------------------------------------------------------------------------
+  describe('block-action error surfacing (plan 05-09, QUAL-09 / IN-01)', () => {
+    function makeMemoryToolUseLocal(): ToolUseBlock {
+      return {
+        type: 'tool_use',
+        id: 'tu-1',
+        name: 'memory',
+        input: { command: 'create', path: '/memories/x.md', file_text: 'X' },
+        status: 'pending',
+      };
+    }
+
+    async function setupWithPendingBlock(): Promise<{
+      fixture: ReturnType<typeof TestBed.createComponent<ChatPageComponent>>;
+      spies: ChatSpies;
+    }> {
+      const message: ChatMessage = {
+        id: 'm-1',
+        role: 'assistant',
+        blocks: [makeMemoryToolUseLocal()],
+        tokenEstimate: 5,
+        createdAt: '2026-04-15T10:00:00.000Z',
+      };
+      const conv = createValidConversation({ id: 'c-1', messages: [message] });
+      const spies = makeSpies({ hasApiKey: true, conversations: [conv], activeConversation: conv });
+      await configureBed(spies);
+      const fixture = TestBed.createComponent(ChatPageComponent);
+      fixture.detectChanges();
+      fixture.componentInstance.onSelectConversation('c-1');
+      fixture.detectChanges();
+      return { fixture, spies };
+    }
+
+    it('a failed discard surfaces the LOCKED <app-error-state> (not console-only)', async () => {
+      const { fixture, spies } = await setupWithPendingBlock();
+      spies.chatService.updateMessageBlock.and.returnValue(
+        throwError(() => new Error('disk full')),
+      );
+
+      fixture.componentInstance.onBlockAction({ messageId: 'm-1', blockIndex: 0, action: 'discard' });
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.blockActionError).toBe("We couldn't discard this just now. Try again.");
+      const compiled = fixture.nativeElement as HTMLElement;
+      const errorState = Array.from(compiled.querySelectorAll('app-error-state'))
+        .find(el => el.textContent?.includes("That action didn't go through"));
+      expect(errorState).withContext('block-action error-state rendered').toBeTruthy();
+    });
+
+    it('a failed edit surfaces the LOCKED "apply this edit" copy', async () => {
+      const { fixture, spies } = await setupWithPendingBlock();
+      spies.chatService.updateMessageBlock.and.returnValue(
+        throwError(() => new Error('disk full')),
+      );
+
+      fixture.componentInstance.onBlockAction({
+        messageId: 'm-1', blockIndex: 0, action: 'edit', editedText: 'amended',
+      });
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.blockActionError).toBe("We couldn't apply this edit just now. Try again.");
+    });
+
+    it('a failed approve-persist surfaces the LOCKED "save this to memory" copy', async () => {
+      const { fixture, spies } = await setupWithPendingBlock();
+      spies.chatService.approveToolUseBlock.and.returnValue(
+        throwError(() => new Error('disk full')),
+      );
+
+      fixture.componentInstance.onBlockAction({ messageId: 'm-1', blockIndex: 0, action: 'approve' });
+      // Flush the executeApprovedToolUse Promise → from(...) microtask.
+      await Promise.resolve();
+      await Promise.resolve();
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.blockActionError).toBe("We couldn't save this to memory just now. Try again.");
+    });
+
+    it('the block-action error surface has no serious/critical axe violations', async () => {
+      const { fixture, spies } = await setupWithPendingBlock();
+      spies.chatService.updateMessageBlock.and.returnValue(
+        throwError(() => new Error('disk full')),
+      );
+      fixture.componentInstance.onBlockAction({ messageId: 'm-1', blockIndex: 0, action: 'discard' });
+      fixture.detectChanges();
+
+      await expectNoSeriousA11yViolations(fixture.nativeElement);
     });
   });
 });
