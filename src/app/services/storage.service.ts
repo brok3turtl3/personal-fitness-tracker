@@ -15,6 +15,7 @@ import {
   LegacyAppDataV2,
   LegacyAppDataV3,
   LegacyAppDataV4,
+  LegacyAppDataV5,
   LegacySavedFoodV2,
 } from './legacy-schemas';
 
@@ -427,11 +428,15 @@ export class StorageService {
       ? this.migrateV3ToV4(v3)
       : (data as LegacyAppDataV4);
 
-    const v5: AppData = (fromVersion < 5)
+    const v5: LegacyAppDataV5 = (fromVersion < 5)
       ? this.migrateV4ToV5(v4)
+      : (data as LegacyAppDataV5);
+
+    const v6: AppData = (fromVersion < 6)
+      ? this.migrateV5ToV6(v5)
       : (data as AppData);
 
-    return v5;
+    return v6;
   }
 
   /**
@@ -524,7 +529,7 @@ export class StorageService {
    * block rather than dropped or thrown on. Order: build new ChatMessage
    * literal with `blocks` → never mutate the legacy object in place.
    */
-  private migrateV4ToV5(data: LegacyAppDataV4): AppData {
+  private migrateV4ToV5(data: LegacyAppDataV4): LegacyAppDataV5 {
     const migratedConversations = data.chatConversations.map(conv => ({
       id: conv.id,
       title: conv.title,
@@ -561,6 +566,41 @@ export class StorageService {
       memoryFiles: {},
       userProfile: { ...DEFAULT_USER_PROFILE },
       aiToolSettings: { ...DEFAULT_AI_TOOL_SETTINGS },
+      lastModified: data.lastModified,
+    };
+  }
+
+  /**
+   * Migration from version 5 to version 6 (Phase 5, RESEARCH A3, FOUND-07).
+   *
+   * The persisted `ChatBlock` union now admits the web-search variants
+   * (`server_tool_use`, `web_search_tool_result`) and optional
+   * `TextBlock.citations`. These are ADDITIVE — existing V5 chat blocks
+   * (text-only / Phase-4 tool_use) are already valid V6 blocks. The web-search
+   * settings flags (`enableWebSearch`, `webSearchMaxUses`) already live in the
+   * `AIToolSettings` slice from V5, so there is no settings transform either.
+   *
+   * The transform is therefore a no-op on existing data: it carries every field
+   * through unchanged and only stamps `schemaVersion: 6`. Defensive `?? []`
+   * coercion (mirrors the V0→V1 / V2→V3 template) guards a malformed V5 whose
+   * top-level arrays are missing — coerced to `[]` rather than throwing, so an
+   * un-migrated V5 chat loads unchanged with a pre-migration backup written by
+   * the surrounding `initialize()` flow (backward compat).
+   */
+  private migrateV5ToV6(data: LegacyAppDataV5): AppData {
+    return {
+      schemaVersion: 6,
+      cardioSessions: data.cardioSessions ?? [],
+      weightEntries: data.weightEntries ?? [],
+      healthReadings: data.healthReadings ?? [],
+      savedFoods: data.savedFoods ?? [],
+      mealEntries: data.mealEntries ?? [],
+      aiSettings: data.aiSettings,
+      // V5 chat blocks are already valid V6 blocks (additive union); pass through.
+      chatConversations: data.chatConversations ?? [],
+      memoryFiles: data.memoryFiles ?? {},
+      userProfile: data.userProfile,
+      aiToolSettings: data.aiToolSettings,
       lastModified: data.lastModified,
     };
   }

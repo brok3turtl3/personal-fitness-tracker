@@ -186,7 +186,7 @@ describe('StorageService migrations (fixture-driven)', () => {
       await firstValueFrom(service.initialize());
       const data = await firstValueFrom(service.getData());
 
-      expect(data?.schemaVersion).toBe(5);
+      expect(data?.schemaVersion).toBe(6);
       // Cardio + weight carried forward unchanged. Compare via JSON round-trip
       // to bypass the strict-TS narrowing on JSON-imported fixtures (the
       // imported type widens enums like CardioType to plain `string`).
@@ -214,7 +214,7 @@ describe('StorageService migrations (fixture-driven)', () => {
       await firstValueFrom(service.initialize());
       const data = await firstValueFrom(service.getData());
 
-      expect(data?.schemaVersion).toBe(5);
+      expect(data?.schemaVersion).toBe(6);
       // No fields drop, blocks survive intact.
       expect(data?.chatConversations[0].messages[0].blocks).toEqual([
         { type: 'text', text: 'Hi' },
@@ -230,7 +230,7 @@ describe('StorageService migrations (fixture-driven)', () => {
       await firstValueFrom(service.initialize());
       const data = await firstValueFrom(service.getData());
 
-      expect(data?.schemaVersion).toBe(5);
+      expect(data?.schemaVersion).toBe(6);
       const msg = data!.chatConversations[0].messages[0];
       expect(msg.blocks.length).toBe(1);
       const block = msg.blocks[0] as TextBlock;
@@ -267,7 +267,7 @@ describe('StorageService migrations (fixture-driven)', () => {
       await firstValueFrom(service.initialize());
       const data = await firstValueFrom(service.getData());
 
-      expect(data?.schemaVersion).toBe(5);
+      expect(data?.schemaVersion).toBe(6);
       const block = data!.chatConversations[0].messages[0].blocks[0] as TextBlock;
       expect(block.type).toBe('text');
       // 123 (number) → '123' (string). NEVER a non-string block.text.
@@ -280,12 +280,135 @@ describe('StorageService migrations (fixture-driven)', () => {
       await firstValueFrom(service.initialize());
       const data = await firstValueFrom(service.getData());
 
-      expect(data?.schemaVersion).toBe(5);
+      expect(data?.schemaVersion).toBe(6);
       const msg = data!.chatConversations[0].messages[0];
       expect(msg.tokenEstimate).toBe(0);
       // Content 'Hello' lifted into a single text block.
       const block = msg.blocks[0] as TextBlock;
       expect(block.text).toBe('Hello');
+    });
+  });
+
+  describe('V5 → V6 migration (Phase 5, RESEARCH A3, FOUND-07 backward compat)', () => {
+    /**
+     * A well-formed V5 AppData whose chat blocks are all text-only — NO
+     * citations, NO server-tool variants (the pre-web-search shape). This is
+     * exactly what an un-migrated V5 store looks like on disk; it MUST load
+     * unchanged at V6 (additive union ⇒ no data transform).
+     */
+    function makeV5Store() {
+      return {
+        schemaVersion: 5,
+        cardioSessions: [],
+        weightEntries: [],
+        healthReadings: [],
+        savedFoods: [],
+        mealEntries: [],
+        aiSettings: { apiKey: 'sk-ant-v5', maxResponseTokens: 4096 },
+        chatConversations: [
+          {
+            id: 'conv-v5',
+            title: 'Pre-web-search chat',
+            messages: [
+              {
+                id: 'm1',
+                role: 'user',
+                blocks: [{ type: 'text', text: 'What is progressive overload?' }],
+                tokenEstimate: 5,
+                createdAt: '2026-01-01T00:00:00.000Z',
+              },
+              {
+                id: 'm2',
+                role: 'assistant',
+                blocks: [{ type: 'text', text: 'Gradually increasing demands over time.' }],
+                tokenEstimate: 8,
+                createdAt: '2026-01-01T00:00:01.000Z',
+              },
+            ],
+            summarizedMessageCount: 0,
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:01.000Z',
+          },
+        ],
+        memoryFiles: { '/memories/notes.md': 'prefers metric' },
+        userProfile: DEFAULT_USER_PROFILE,
+        aiToolSettings: DEFAULT_AI_TOOL_SETTINGS,
+        lastModified: '2026-01-01T00:00:01.000Z',
+      };
+    }
+
+    it('a V5 store with text-only chat blocks loads unchanged at V6 (blocks + memory + settings preserved)', async () => {
+      localStorageMock[STORAGE_KEY] = JSON.stringify(makeV5Store());
+      await firstValueFrom(service.initialize());
+      const data = await firstValueFrom(service.getData());
+
+      expect(data?.schemaVersion).toBe(6);
+      // Chat blocks preserved verbatim — no citations injected, no blocks dropped.
+      expect(data?.chatConversations.length).toBe(1);
+      const conv = data!.chatConversations[0];
+      expect(conv.id).toBe('conv-v5');
+      expect(conv.messages.length).toBe(2);
+      expect(conv.messages[0].blocks).toEqual([
+        { type: 'text', text: 'What is progressive overload?' },
+      ]);
+      expect(conv.messages[1].blocks).toEqual([
+        { type: 'text', text: 'Gradually increasing demands over time.' },
+      ]);
+      // No web-search citations were fabricated onto an un-grounded V5 text block.
+      const firstBlock = conv.messages[0].blocks[0] as TextBlock;
+      expect('citations' in firstBlock).toBeFalse();
+      // V5-only slices carried through unchanged.
+      expect(data?.memoryFiles).toEqual({ '/memories/notes.md': 'prefers metric' });
+      expect(data?.aiSettings?.apiKey).toBe('sk-ant-v5');
+      expect(data?.aiToolSettings).toEqual(DEFAULT_AI_TOOL_SETTINGS);
+    });
+
+    it('migrating a V5 store writes a pre-migration backup keyed v5 (FOUND-07)', async () => {
+      localStorageMock[STORAGE_KEY] = JSON.stringify(makeV5Store());
+      await firstValueFrom(service.initialize());
+
+      const backupKeys = Object.keys(localStorageMock).filter(k =>
+        k.startsWith(BACKUP_PREFIX),
+      );
+      expect(backupKeys.length).toBe(1);
+      // Backup is keyed at the FROM-version (v5) so the user can recover the
+      // pre-migration data if V6 ever proves bad.
+      expect(backupKeys[0]).toMatch(
+        /^fitness_tracker_data\.backup\.v5\.\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.\d{3}Z$/,
+      );
+    });
+
+    it('a V5 store with a MISSING top-level array coerces to [] (defensive, not thrown)', async () => {
+      const malformed = makeV5Store() as Record<string, unknown>;
+      delete malformed['mealEntries']; // V5 with a missing array
+      localStorageMock[STORAGE_KEY] = JSON.stringify(malformed);
+
+      // Defensive coercion: must not throw.
+      await firstValueFrom(service.initialize());
+      const data = await firstValueFrom(service.getData());
+
+      expect(data?.schemaVersion).toBe(6);
+      expect(data?.mealEntries).toEqual([]);
+      // Other fields still preserved.
+      expect(data?.chatConversations.length).toBe(1);
+    });
+
+    it('a V6 store is idempotent (already current — no re-transform)', async () => {
+      const v6 = makeV5Store() as Record<string, unknown>;
+      v6['schemaVersion'] = 6;
+      localStorageMock[STORAGE_KEY] = JSON.stringify(v6);
+      await firstValueFrom(service.initialize());
+      const data = await firstValueFrom(service.getData());
+
+      expect(data?.schemaVersion).toBe(6);
+      expect(data?.chatConversations[0].messages[0].blocks).toEqual([
+        { type: 'text', text: 'What is progressive overload?' },
+      ]);
+      // A V6 store at-version skips migration ⇒ no backup written.
+      const backupKeys = Object.keys(localStorageMock).filter(k =>
+        k.startsWith(BACKUP_PREFIX),
+      );
+      expect(backupKeys.length).toBe(0);
     });
   });
 

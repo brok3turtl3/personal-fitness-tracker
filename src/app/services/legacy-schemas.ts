@@ -16,7 +16,12 @@ import { CardioSession } from '../models/cardio-session.model';
 import { WeightEntry } from '../models/weight-entry.model';
 import { HealthReading } from '../models/health-reading.model';
 import { SavedFood, MealEntry } from '../models/diet.model';
-import type { AISettings } from '../models/ai-chat.model';
+import type {
+  AISettings,
+  AIToolSettings,
+  ChatBlock,
+} from '../models/ai-chat.model';
+import type { UserProfile } from '../models/user-profile.model';
 
 /**
  * Pre-versioning shape. No `schemaVersion` field.
@@ -134,5 +139,63 @@ export interface LegacyAppDataV4 {
   mealEntries: MealEntry[];
   aiSettings?: AISettings;
   chatConversations: LegacyChatConversationV4[];
+  lastModified: string;
+}
+
+/**
+ * V5 chat message shape (Phase 5 V5→V6 analog of LegacyChatMessageV4).
+ *
+ * V5 ChatMessage already carries `blocks: ChatBlock[]` (the V4→V5 cut-over,
+ * D-15) — but those blocks pre-date Phase 5's web-search additions: NO
+ * `server_tool_use` / `web_search_tool_result` variants, NO `citations` on text
+ * blocks. The V5→V6 hop is additive on the union, so the existing blocks are
+ * already valid V6 — `ChatBlock[]` types them faithfully (the new variants are
+ * union members; the existing text-only blocks remain assignable).
+ */
+export interface LegacyChatMessageV5 {
+  id: string;
+  role: 'user' | 'assistant';
+  /** V5 blocks — pre-web-search. Assignable to the V6 ChatBlock union (additive). */
+  blocks: ChatBlock[];
+  tokenEstimate: number;
+  createdAt: string;
+}
+
+/**
+ * V5 chat conversation shape: messages carry `blocks` (pre-web-search).
+ */
+export interface LegacyChatConversationV5 {
+  id: string;
+  title: string;
+  messages: LegacyChatMessageV5[];
+  summary?: string;
+  summarizedMessageCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * V5 shape (Phase 3 baseline): memoryFiles, userProfile, aiToolSettings present;
+ * ChatMessage.blocks present (pre-web-search). No top-level slice changes in
+ * V5→V6 — the migration is additive on the existing chat-block union, so the V5
+ * shape is structurally a valid V6 modulo the bumped schemaVersion.
+ *
+ * Phase 5 (RESEARCH §Schema-migration A3): we plan V6 regardless because the
+ * persisted `ChatBlock` shape now admits new variants + `citations` — bumping the
+ * version + writing a backward-compat fixture is the FOUND-07 discipline even when
+ * the data transform is a no-op for existing fields.
+ */
+export interface LegacyAppDataV5 {
+  schemaVersion: 5;
+  cardioSessions: CardioSession[];
+  weightEntries: WeightEntry[];
+  healthReadings: HealthReading[];
+  savedFoods: SavedFood[];
+  mealEntries: MealEntry[];
+  aiSettings?: AISettings;
+  chatConversations: LegacyChatConversationV5[];
+  memoryFiles: Record<string, string>;
+  userProfile: UserProfile;
+  aiToolSettings: AIToolSettings;
   lastModified: string;
 }

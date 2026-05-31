@@ -15,7 +15,7 @@ import { UserProfile, DEFAULT_USER_PROFILE } from './user-profile.model';
  * Stored as a single JSON object in LocalStorage.
  */
 export interface AppData {
-  /** Schema version for migration support. Current: 5 */
+  /** Schema version for migration support. Current: 6 */
   schemaVersion: number;
 
   /** All cardio workout sessions */
@@ -52,8 +52,17 @@ export interface AppData {
   lastModified: string;
 }
 
-/** Current schema version */
-export const CURRENT_SCHEMA_VERSION = 5;
+/**
+ * Current schema version.
+ *
+ * V6 (Phase 5, RESEARCH A3): the persisted `ChatBlock` union now admits the
+ * web-search variants (`server_tool_use`, `web_search_tool_result`) and
+ * `TextBlock.citations`. The V5→V6 transform is a no-op on existing fields
+ * (the new shapes are additive/optional), but the version bump + backward-compat
+ * fixture is the FOUND-07 discipline. NOTE: Phase 2's diet schema work must
+ * now retarget V6→V7.
+ */
+export const CURRENT_SCHEMA_VERSION = 6;
 
 /** LocalStorage key for app data */
 export const STORAGE_KEY = 'fitness_tracker_data';
