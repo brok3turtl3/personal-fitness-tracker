@@ -75,8 +75,11 @@ describe('ChatService', () => {
       return of(undefined);
     });
 
-    mockAnthropicApi = jasmine.createSpyObj('AnthropicApiService', ['sendMessage']);
+    mockAnthropicApi = jasmine.createSpyObj('AnthropicApiService', ['sendMessage', 'countTokens']);
     mockAnthropicApi.sendMessage.and.returnValue(of(mockApiResponse));
+    // Under TOKEN_WINDOW_SIZE → the loop's countTokens-driven window check is a
+    // no-op in these specs (window/summarize decision driven by countTokens, D-15).
+    mockAnthropicApi.countTokens.and.returnValue(of(500));
 
     mockAISettings = jasmine.createSpyObj('AISettingsService', ['getSettings', 'getToolSettings']);
     mockAISettings.getSettings.and.returnValue(of(mockSettings));
@@ -853,9 +856,19 @@ describe('ChatService', () => {
 
       // Two sends: the paused one + the resumed one.
       expect(mockAnthropicApi.sendMessage).toHaveBeenCalledTimes(2);
-      // Resume re-sends the same messages array (paused assistant turn pushed,
-      // no tool_result fabricated between them).
-      expect(sentMessages[1]).toEqual(sentMessages[0]);
+      // Resume re-sends the conversation INCLUDING the paused assistant turn,
+      // unmodified — i.e. the prior messages plus exactly the one paused
+      // assistant turn, with NO fabricated tool_result inserted between them.
+      const first = sentMessages[0] as Array<{ role: string }>;
+      const second = sentMessages[1] as Array<{ role: string; content: Array<{ type: string }> }>;
+      expect(second.length).toBe(first.length + 1);
+      // The only added turn is the paused assistant turn (no user tool_result).
+      const added = second[second.length - 1];
+      expect(added.role).toBe('assistant');
+      const noToolResultInjected = second.every(
+        m => !(m.role === 'user' && m.content.some(b => b.type === 'tool_result')),
+      );
+      expect(noToolResultInjected).toBeTrue();
       const done = events.find(e => e.kind === 'done') as { kind: 'done'; stopReason: string };
       expect(done.stopReason).toBe('end_turn');
     });

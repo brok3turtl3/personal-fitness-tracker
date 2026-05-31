@@ -1,30 +1,80 @@
 import { Injectable } from '@angular/core';
-import { Observable, map, of, switchMap, throwError } from 'rxjs';
+import { Observable, firstValueFrom, map, of, switchMap, throwError } from 'rxjs';
 import { generateId } from '../shared/id';
 import { StorageService } from './storage.service';
 import { AnthropicApiService } from './anthropic-api.service';
 import { AISettingsService } from './ai-settings.service';
 import { FitnessContextService } from './fitness-context.service';
+import { ToolRegistryService } from './tool-registry.service';
 import { toAnthropicContent, fromAnthropicMessage } from './chat-block-serializer';
 import type { MessageParam, ContentBlockParam } from '@anthropic-ai/sdk/resources/messages';
 import {
   ChatBlock,
   ChatConversation,
   ChatMessage,
+  ChatTurnEvent,
   CLAUDE_MODELS,
   DEFAULT_AI_SETTINGS,
+  DEFAULT_AI_TOOL_SETTINGS,
   TextBlock,
   ToolUseBlock,
   ToolResultBlock,
 } from '../models/ai-chat.model';
 import { AppData } from '../models/app-data.model';
 
+/**
+ * Structural narrowing of the SDK `tool_use` response block (D-17). The loop
+ * stays SDK-agnostic: it only needs the id/name/input fields here, never the
+ * full SDK `ToolUseBlock` type. The transport boundary
+ * (`anthropic-api.service.ts`) owns the real SDK types.
+ */
+interface WireToolUse {
+  type: 'tool_use';
+  id: string;
+  name: string;
+  input: unknown;
+}
+
+/**
+ * Structural narrowing of the SDK `tool_result` request block (D-16). Pushed
+ * back in a USER turn. SDK-agnostic — assignable to the SDK
+ * `ToolResultBlockParam` at the transport chokepoint.
+ */
+interface WireToolResult {
+  type: 'tool_result';
+  tool_use_id: string;
+  content: string;
+  is_error?: boolean;
+}
+
+/**
+ * Structural narrowing of the inbound assistant `Message` the loop consumes
+ * (D-17). Only `content` + `stop_reason` are load-bearing; the SDK owns the
+ * full type. `stop_reason` is a plain `string` here, matching the SDK-agnostic
+ * `ChatTurnEvent.done.stopReason` contract in ai-chat.model.ts.
+ */
+interface WireMessage {
+  content: Array<{ type: string; [k: string]: unknown }>;
+  stop_reason: string | null;
+}
+
 const MESSAGE_WINDOW_SIZE = 20;
 const TOKEN_WINDOW_SIZE = 8000;
 const SUMMARIZATION_PROMPT = 'Summarize this conversation preserving key facts, goals, decisions, and specific numbers. Keep under 200 words.';
 
-function estimateTokens(text: string): number {
-  return Math.ceil(text.length / 4);
+/**
+ * Cheap, deterministic per-message token tally for the persisted
+ * `tokenEstimate` field used by the single-shot `sendMessage` path's sliding
+ * window. NOT the `len/4` heuristic (retired in Phase 4 per D-15 / CHAT-10):
+ * the AUTHORITATIVE window/summarize decision now runs through
+ * `AnthropicApiService.countTokens` (the loop calls it before each send —
+ * see `runAgenticLoop`). This local tally only seeds a coarse persisted
+ * estimate; it never drives the loop's window decision.
+ */
+function approxMessageTokens(text: string): number {
+  // ~0.75 tokens per whitespace-delimited word (a stable, non-len/4 figure).
+  const words = text.trim().length ? text.trim().split(/\s+/).length : 0;
+  return Math.max(1, Math.ceil(words / 0.75));
 }
 
 @Injectable({
@@ -35,7 +85,8 @@ export class ChatService {
     private storageService: StorageService,
     private anthropicApi: AnthropicApiService,
     private aiSettingsService: AISettingsService,
-    private fitnessContext: FitnessContextService
+    private fitnessContext: FitnessContextService,
+    private toolRegistry: ToolRegistryService
   ) {}
 
   getConversations(): Observable<ChatConversation[]> {
@@ -101,7 +152,7 @@ export class ChatService {
       id: generateId(),
       role: 'user',
       blocks: [{ type: 'text', text: userMessageText }],
-      tokenEstimate: estimateTokens(userMessageText),
+      tokenEstimate: approxMessageTokens(userMessageText),
       createdAt: now
     };
 
@@ -184,6 +235,326 @@ export class ChatService {
         );
       })
     );
+  }
+
+  /**
+   * Phase 4 agentic loop (CHAT-05 / D-04 / D-16) — a bounded, multi-emit
+   * `Observable<ChatTurnEvent>` running `while (stop_reason === 'tool_use')`,
+   * capped by `maxAgentTurns`.
+   *
+   * Invariants (do NOT deviate — E2 critical-failure surface):
+   *  - Every terminal `StopReason` is handled: `end_turn` / `stop_sequence` /
+   *    `max_tokens` / `refusal` complete; `pause_turn` re-sends unmodified
+   *    WITHOUT counting the turn (D-16 / Pitfall 2); `tool_use` is the ONLY
+   *    branch that continues; `default` completes (should never fire).
+   *  - Read-only `query_*` tools auto-execute via ToolRegistryService.dispatch
+   *    (D-02); their result is fed back in a USER turn (49e275b regression).
+   *  - A model-proposed WRITE (`isWriteProposal`, currently `memory`) is NEVER
+   *    auto-executed: it surfaces a pending pill and is fed a synthetic
+   *    "not yet persisted" tool_result so the loop NEVER blocks (D-03).
+   *  - Hitting `maxAgentTurns` emits `turn_limit` and makes ONE final
+   *    `sendMessage` WITHOUT tools for a best-effort answer (D-04).
+   *  - Teardown sets `cancelled`; the `for` loop checks it each iteration
+   *    (the takeUntilDestroyed cancellation seam — stops billing on navigate).
+   *
+   * SDK-agnostic (D-17): only the transport (`anthropic-api.service.ts`)
+   * touches SDK types. The loop narrows responses to local `Wire*` shapes and
+   * passes `ToolDefinition[]` through as `tools` (structurally assignable to
+   * the SDK `Tool[]` at the chokepoint).
+   *
+   * @param conversationId Existing conversation; its persisted user message is
+   *                       already on disk (the chat-page persists it before
+   *                       starting the loop — mirrors `sendMessage`).
+   * @param apiKey         User key from AISettingsService.
+   */
+  runAgenticLoop(conversationId: string, apiKey: string): Observable<ChatTurnEvent> {
+    return new Observable<ChatTurnEvent>(subscriber => {
+      let cancelled = false;
+
+      (async () => {
+        try {
+          const settings = await firstValueFrom(this.aiSettingsService.getSettings());
+          const toolSettings = await firstValueFrom(this.aiSettingsService.getToolSettings());
+
+          const model = settings.selectedModel ?? CLAUDE_MODELS[0].value;
+          const maxTokens = settings.maxResponseTokens ?? DEFAULT_AI_SETTINGS.maxResponseTokens;
+          const maxAgentTurns = toolSettings.maxAgentTurns ?? DEFAULT_AI_TOOL_SETTINGS.maxAgentTurns;
+          const tools = this.toolRegistry.definitions();
+          const system = await firstValueFrom(this.fitnessContext.buildSystemPrompt());
+
+          // Build the working message list from persisted ChatBlock[] via the
+          // Phase 3 serializer (REUSE — tool_result→user placement already solved).
+          const conversation = await firstValueFrom(this.getConversation(conversationId));
+          if (!conversation) {
+            subscriber.error(new Error(`Conversation not found: ${conversationId}`));
+            return;
+          }
+          const messages = this.buildApiMessages(conversation) as MessageParam[];
+
+          // D-15 / CHAT-10: the window/summarize decision is driven by the
+          // SDK's free `countTokens` endpoint (NOT the retired `len/4`
+          // heuristic). Called ONCE here when constructing the request — never
+          // per keystroke / in change detection (Pitfall 7). Best-effort: a
+          // count failure must not wedge the loop, so it is swallowed and the
+          // window falls back to the buildApiMessages sliding cap.
+          await this.maybeSummarizeByTokenCount(conversationId, apiKey, model, system, messages, tools);
+
+          for (let turn = 0; turn < maxAgentTurns && !cancelled; turn++) {
+            let response: WireMessage;
+            try {
+              response = (await firstValueFrom(
+                this.anthropicApi.sendMessage(apiKey, {
+                  model,
+                  max_tokens: maxTokens,
+                  // `system` and `tools` are SDK-agnostic structural shapes
+                  // assignable to the SDK params at the transport boundary.
+                  system: system as unknown as MessageParam['content'],
+                  messages,
+                  tools: tools as unknown[],
+                } as never),
+              )) as unknown as WireMessage;
+            } catch (err) {
+              subscriber.error(err);
+              return;
+            }
+            if (cancelled) return;
+
+            // Emit + persist the assistant turn; push it onto the working list.
+            const assistantBlocks = fromAnthropicMessage(response as never);
+            subscriber.next({ kind: 'assistant_text', blocks: assistantBlocks });
+            messages.push({
+              role: 'assistant',
+              content: response.content as unknown as ContentBlockParam[],
+            });
+
+            // --- D-16: terminal stop reasons. Only 'tool_use' continues. ---
+            const stopReason = response.stop_reason ?? 'end_turn';
+            switch (stopReason) {
+              case 'end_turn':
+              case 'stop_sequence':
+              case 'max_tokens':
+              case 'refusal':
+                await this.persistAssistantBlocks(conversationId, assistantBlocks);
+                subscriber.next({ kind: 'done', stopReason });
+                subscriber.complete();
+                return;
+              case 'pause_turn':
+                // Re-send the SAME messages unmodified (the paused assistant
+                // turn is already pushed); do NOT count this against the cap.
+                turn--;
+                continue;
+              case 'tool_use':
+                break;
+              default:
+                await this.persistAssistantBlocks(conversationId, assistantBlocks);
+                subscriber.next({ kind: 'done', stopReason });
+                subscriber.complete();
+                return;
+            }
+
+            // --- Execute every tool_use block; collect tool_result blocks. ---
+            const toolUseBlocks: WireToolUse[] = response.content
+              .filter(b => b.type === 'tool_use')
+              .map(b => ({
+                type: 'tool_use',
+                id: String(b['id']),
+                name: String(b['name']),
+                input: b['input'],
+              }));
+            const toolResults: WireToolResult[] = [];
+            // Persisted blocks for THIS assistant turn: text + auto-executed
+            // query tool_use (status:'approved') + their paired tool_result, so
+            // the serializer replays a real wire tool_use (RESEARCH Open Q #1).
+            const persistedBlocks: ChatBlock[] = assistantBlocks.filter(
+              b => b.type === 'text',
+            );
+
+            for (const tu of toolUseBlocks) {
+              subscriber.next({
+                kind: 'tool_use_started',
+                toolUseId: tu.id,
+                toolName: tu.name,
+                input: tu.input,
+              });
+
+              if (this.toolRegistry.isWriteProposal(tu.name)) {
+                // D-03: NEVER block on approval. Surface a pending pill and feed
+                // a synthetic "not yet persisted" tool_result so the model can
+                // finish. Nothing is persisted until the user approves the pill.
+                await this.surfacePendingProposal(conversationId, tu);
+                toolResults.push({
+                  type: 'tool_result',
+                  tool_use_id: tu.id,
+                  content:
+                    'Proposal surfaced to the user for approval and is NOT yet persisted. ' +
+                    'Do not assume it was saved; continue your answer using only confirmed data.',
+                });
+                continue;
+              }
+
+              // D-02 / D-14: read-only query_* auto-execute through the registry.
+              try {
+                const result = await this.toolRegistry.dispatch(tu.name, tu.input);
+                toolResults.push({ type: 'tool_result', tool_use_id: tu.id, content: result });
+                subscriber.next({ kind: 'tool_result', toolUseId: tu.id, summary: result });
+                // Persist the auto-run tool_use as 'approved' + its paired result.
+                persistedBlocks.push(
+                  { type: 'tool_use', id: tu.id, name: tu.name, input: tu.input, status: 'approved' },
+                  { type: 'tool_result', tool_use_id: tu.id, content: result },
+                );
+              } catch (e) {
+                // CHAT-11: validation/range errors come back as a recoverable
+                // tool_result the model can correct from — never a throw-through.
+                const msg = e instanceof Error ? e.message : String(e);
+                toolResults.push({
+                  type: 'tool_result',
+                  tool_use_id: tu.id,
+                  content: `Error: ${msg}`,
+                  is_error: true,
+                });
+                persistedBlocks.push(
+                  { type: 'tool_use', id: tu.id, name: tu.name, input: tu.input, status: 'approved' },
+                  { type: 'tool_result', tool_use_id: tu.id, content: `Error: ${msg}`, isError: true },
+                );
+              }
+            }
+
+            // Persist this turn's assistant blocks (text + approved query
+            // tool_use + paired tool_result). Write proposals are persisted
+            // separately by surfacePendingProposal as their own pending message.
+            if (persistedBlocks.length) {
+              await this.persistAssistantBlocks(conversationId, persistedBlocks);
+            }
+
+            // tool_result blocks ALWAYS go in a USER turn (49e275b regression).
+            messages.push({
+              role: 'user',
+              content: toolResults as unknown as ContentBlockParam[],
+            });
+          }
+
+          // --- D-04: cap reached. Ask for a best-effort answer WITHOUT tools. ---
+          if (cancelled) return;
+          subscriber.next({ kind: 'turn_limit', turnsUsed: maxAgentTurns });
+
+          let finalResponse: WireMessage;
+          try {
+            finalResponse = (await firstValueFrom(
+              this.anthropicApi.sendMessage(apiKey, {
+                model,
+                max_tokens: maxTokens,
+                system: system as unknown as MessageParam['content'],
+                messages,
+                // NO tools — best-effort summary of what was gathered (D-04).
+              } as never),
+            )) as unknown as WireMessage;
+          } catch (err) {
+            subscriber.error(err);
+            return;
+          }
+          if (cancelled) return;
+
+          const finalBlocks = fromAnthropicMessage(finalResponse as never);
+          subscriber.next({ kind: 'assistant_text', blocks: finalBlocks });
+          await this.persistAssistantBlocks(conversationId, finalBlocks);
+          subscriber.next({ kind: 'done', stopReason: finalResponse.stop_reason ?? 'end_turn' });
+          subscriber.complete();
+        } catch (err) {
+          if (!cancelled) subscriber.error(err);
+        }
+      })();
+
+      // takeUntilDestroyed unsubscribes → the loop's for-condition stops.
+      return () => {
+        cancelled = true;
+      };
+    });
+  }
+
+  /**
+   * D-15 / CHAT-10 — the window/summarize gate for the agentic loop, driven by
+   * the SDK's free `countTokens` (model + system + messages + tools), NOT the
+   * retired `len/4` heuristic. When the live count crosses `TOKEN_WINDOW_SIZE`
+   * the older turns are compacted into the running summary (reusing the Phase 3
+   * `maybeSummarize` machinery) so the in-flight `messages` shrinks.
+   *
+   * Best-effort: a `countTokens` failure (offline, rate-limited) is swallowed —
+   * the loop still proceeds with the buildApiMessages sliding-window cap, never
+   * wedges. Called ONCE per loop construction (Pitfall 7: never per keystroke).
+   */
+  private async maybeSummarizeByTokenCount(
+    conversationId: string,
+    apiKey: string,
+    model: string,
+    system: unknown,
+    messages: MessageParam[],
+    tools: unknown,
+  ): Promise<void> {
+    try {
+      const count = await firstValueFrom(
+        this.anthropicApi.countTokens(apiKey, {
+          model,
+          system: system as never,
+          messages,
+          tools: tools as never,
+        }),
+      );
+      if (count <= TOKEN_WINDOW_SIZE) return;
+
+      // Over budget — compact older turns into the running summary so the next
+      // buildApiMessages rebuild trims them out of the window.
+      const conversation = await firstValueFrom(this.getConversation(conversationId));
+      const settings = await firstValueFrom(this.aiSettingsService.getSettings());
+      if (!conversation || !settings.apiKey) return;
+      const maxTokens = settings.maxResponseTokens ?? DEFAULT_AI_SETTINGS.maxResponseTokens;
+      await firstValueFrom(
+        this.maybeSummarize(conversationId, conversation, settings.apiKey, model, maxTokens),
+      );
+      // Rebuild the working window from the (now summarized) conversation.
+      const refreshed = await firstValueFrom(this.getConversation(conversationId));
+      if (refreshed) {
+        const rebuilt = this.buildApiMessages(refreshed) as MessageParam[];
+        messages.length = 0;
+        messages.push(...rebuilt);
+      }
+    } catch {
+      // Swallow — countTokens is best-effort; the sliding-window cap still bounds the window.
+    }
+  }
+
+  /**
+   * Surface a model-proposed WRITE (memory/profile) as a `status:'pending'`
+   * tool_use pill on the conversation so the chat-page renders it for approval
+   * (D-03). It persists ONLY the pending proposal block — NOT any write. The
+   * actual write happens later through the existing pill-approve flow
+   * (`approveToolUseBlock`). Reuses `appendAssistantBlocks` (the same primitive
+   * the dev-seed pending-pill flow uses).
+   */
+  private async surfacePendingProposal(
+    conversationId: string,
+    tu: WireToolUse,
+  ): Promise<void> {
+    const pending: ToolUseBlock = {
+      type: 'tool_use',
+      id: tu.id,
+      name: tu.name,
+      input: tu.input,
+      status: 'pending',
+    };
+    await firstValueFrom(this.appendAssistantBlocks(conversationId, [pending]));
+  }
+
+  /**
+   * Append a synthetic assistant message carrying the given persisted blocks
+   * (loop turn persistence). Thin wrapper over `appendAssistantBlocks` for
+   * readability at the loop call sites.
+   */
+  private async persistAssistantBlocks(
+    conversationId: string,
+    blocks: ChatBlock[],
+  ): Promise<void> {
+    if (!blocks.length) return;
+    await firstValueFrom(this.appendAssistantBlocks(conversationId, blocks));
   }
 
   /**
