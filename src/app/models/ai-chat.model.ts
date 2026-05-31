@@ -31,6 +31,14 @@ export interface ToolUseBlock {
   status: 'pending' | 'approved' | 'discarded' | 'edited';
   /** Persistence-only: original AI text when status='edited'. Stripped before API call. */
   editedFromText?: string;
+  /**
+   * Persistence-only: ISO-8601 timestamp recorded when the proposal was
+   * resolved (approved / discarded / edited). Stripped before the API call.
+   * The pending pill renders this real timestamp on its resolved badge
+   * (Plan 04-06). Absent on legacy blocks → the pill omits the timestamp
+   * rather than fabricate one.
+   */
+  resolvedAt?: string;
 }
 
 /**

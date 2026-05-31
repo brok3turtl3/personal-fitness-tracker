@@ -264,6 +264,29 @@ describe('PendingPillComponent', () => {
     expect(badge?.textContent).toContain('Discarded');
   });
 
+  // ---------- 14b. Real resolvedAt timestamp (plan 04-06) ----------
+  it('renders the real persisted resolvedAt timestamp on the resolved badge', async () => {
+    const fixture = await createFixture(
+      memoryPendingBlock({ status: 'approved', resolvedAt: '2026-05-31T14:30:00.000Z' }),
+    );
+
+    const badge = fixture.nativeElement.querySelector('.pill-resolved .badge-time') as HTMLElement | null;
+    expect(badge).toBeTruthy();
+    // The component formats the ISO string via toLocaleString — assert it is
+    // derived from the persisted value, not a fabricated `new Date()`.
+    expect(badge?.textContent?.trim())
+      .toBe(new Date('2026-05-31T14:30:00.000Z').toLocaleString());
+  });
+
+  it('omits the timestamp when a legacy resolved block has no resolvedAt (no fabricated time)', async () => {
+    const fixture = await createFixture(memoryPendingBlock({ status: 'approved' }));
+
+    const time = fixture.nativeElement.querySelector('.pill-resolved .badge-time');
+    expect(time).toBeNull();
+    // The badge itself still renders the label.
+    expect(fixture.nativeElement.querySelector('.pill-resolved')?.textContent).toContain('Saved');
+  });
+
   // ---------- 15. Focal point — primary action receives focus on entering pending state ----------
   it('primary action receives focus on entering pending state', async () => {
     const fixture = await createFixture(memoryPendingBlock());

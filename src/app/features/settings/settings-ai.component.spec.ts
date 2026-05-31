@@ -162,44 +162,23 @@ describe('SettingsAiComponent', () => {
     expect(c.toolSettingsForm.get('maxAgentTurns')?.valid).toBeTrue();
   });
 
-  it('isLocalhost=true renders the Developer tools section + 2 seed buttons', async () => {
+  // ---------------------------------------------------------------------------
+  // Plan 04-06 Task 2 — the dev-only "Seed pending proposal" buttons + their
+  // setDevSeed handlers were REMOVED. Real write proposals now surface through
+  // the live agentic loop; the synthetic-pill seeding path is gone end-to-end
+  // so it can never fire alongside a real proposal (T-04-06-03).
+  // ---------------------------------------------------------------------------
+  it('no longer renders the dev seed buttons even on localhost (plan 04-06 removal)', async () => {
     const spies = makeSpies();
     const fixture = await configureBed(spies, { localhost: true });
 
-    const heading = fixture.nativeElement.querySelector('#dev-tools-heading');
-    expect(heading?.textContent?.trim()).toBe('Developer tools');
-
-    const buttons = fixture.nativeElement.querySelectorAll('.dev-tools-actions button');
-    expect(buttons.length).toBe(2);
-    expect((buttons[0] as HTMLButtonElement).textContent?.trim()).toBe('Seed pending memory proposal');
-    expect((buttons[1] as HTMLButtonElement).textContent?.trim()).toBe('Seed pending profile proposal');
-  });
-
-  it('isLocalhost=false hides the Developer tools section (T-3-DEV)', async () => {
-    const spies = makeSpies();
-    const fixture = await configureBed(spies, { localhost: false });
-
-    expect(fixture.nativeElement.querySelector('#dev-tools-heading')).toBeNull();
-    expect(fixture.nativeElement.querySelector('.dev-tools-container')).toBeNull();
-  });
-
-  it('Seed pending memory proposal button calls storageService.setDevSeed("memory")', async () => {
-    const spies = makeSpies();
-    const fixture = await configureBed(spies, { localhost: true });
-    fixture.componentInstance.onSeedMemoryProposal();
-
-    expect(spies.storage.setDevSeed).toHaveBeenCalledWith('memory');
-    expect(fixture.componentInstance.statusMessage).toContain('Seeded pending memory proposal');
-    expect(fixture.componentInstance.statusIsError).toBeFalse();
-  });
-
-  it('Seed pending profile proposal button calls storageService.setDevSeed("profile")', async () => {
-    const spies = makeSpies();
-    const fixture = await configureBed(spies, { localhost: true });
-    fixture.componentInstance.onSeedProfileProposal();
-
-    expect(spies.storage.setDevSeed).toHaveBeenCalledWith('profile');
-    expect(fixture.componentInstance.statusMessage).toContain('Seeded pending profile proposal');
+    expect(fixture.nativeElement.querySelector('.dev-tools-actions')).toBeNull();
+    expect(fixture.nativeElement.textContent).not.toContain('Seed pending memory proposal');
+    expect(fixture.nativeElement.textContent).not.toContain('Seed pending profile proposal');
+    // The seeding handlers no longer exist on the component surface.
+    expect((fixture.componentInstance as unknown as Record<string, unknown>)['onSeedMemoryProposal'])
+      .toBeUndefined();
+    expect(spies.storage.setDevSeed).not.toHaveBeenCalled();
   });
 
   it('onSave persists both aiSettings AND aiToolSettings', async () => {

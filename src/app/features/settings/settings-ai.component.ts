@@ -173,25 +173,6 @@ import { ErrorStateComponent } from '../../shared/error-state.component';
           </div>
         </section>
 
-        @if (isLocalhost) {
-          <section class="settings-section dev-tools-container" role="region" aria-labelledby="dev-tools-heading">
-            <h2 id="dev-tools-heading">Developer tools</h2>
-            <p class="form-helper">These controls are only visible on localhost. They will not appear in a packaged build.</p>
-            <div class="dev-tools-actions">
-              <button
-                type="button"
-                class="btn-secondary"
-                (click)="onSeedMemoryProposal()"
-              >Seed pending memory proposal</button>
-              <button
-                type="button"
-                class="btn-secondary"
-                (click)="onSeedProfileProposal()"
-              >Seed pending profile proposal</button>
-            </div>
-          </section>
-        }
-
         <div class="form-actions">
           <button type="submit" class="btn-primary" [disabled]="settingsForm.invalid || saving">
             {{ saving ? 'Saving...' : 'Save Settings' }}
@@ -512,22 +493,9 @@ export class SettingsAiComponent implements OnInit {
       });
   }
 
-  /**
-   * Dev-only seed handler (D-12, Task 2). Stores a sentinel via the
-   * chokepoint-compliant `StorageService.setDevSeed` method. Plan 03-05
-   * reads the sentinel in chat-page ngOnInit and injects a synthetic
-   * pending pill into the active conversation. Best-effort — quota and
-   * serialization failures are swallowed inside StorageService.
-   */
-  onSeedMemoryProposal(): void {
-    this.storageService.setDevSeed('memory');
-    this.statusMessage = 'Seeded pending memory proposal. Open /chat to view.';
-    this.statusIsError = false;
-  }
-
-  onSeedProfileProposal(): void {
-    this.storageService.setDevSeed('profile');
-    this.statusMessage = 'Seeded pending profile proposal. Open /chat to view.';
-    this.statusIsError = false;
-  }
 }
+// NOTE (plan 04-06): the Phase 3 dev-only "Seed pending proposal" buttons and
+// their `StorageService.setDevSeed` handlers were REMOVED. Real write proposals
+// now surface through the live agentic loop (D-03); the synthetic-pill seeding
+// path is gone end-to-end so it can never fire alongside a real proposal
+// (T-04-06-03). `isLocalhost` is retained for any future localhost-only tools.

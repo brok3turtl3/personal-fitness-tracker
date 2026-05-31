@@ -64,21 +64,27 @@ import { ToolUseBlock } from '../../models/ai-chat.model';
           <div class="pill-resolved" role="status" aria-live="polite">
             <span class="badge-glyph">✓</span>
             <span class="badge-label">Saved</span>
-            <span class="badge-time">{{ resolvedTime() }}</span>
+            @if (resolvedTime()) {
+              <span class="badge-time">{{ resolvedTime() }}</span>
+            }
           </div>
         }
         @case ('edited') {
           <div class="pill-resolved" role="status" aria-live="polite">
             <span class="badge-glyph">✎</span>
             <span class="badge-label">Edited and saved</span>
-            <span class="badge-time">{{ resolvedTime() }}</span>
+            @if (resolvedTime()) {
+              <span class="badge-time">{{ resolvedTime() }}</span>
+            }
           </div>
         }
         @case ('discarded') {
           <div class="pill-resolved" role="status" aria-live="polite">
             <span class="badge-glyph">✗</span>
             <span class="badge-label">Discarded</span>
-            <span class="badge-time">{{ resolvedTime() }}</span>
+            @if (resolvedTime()) {
+              <span class="badge-time">{{ resolvedTime() }}</span>
+            }
           </div>
         }
       }
@@ -289,12 +295,18 @@ export class PendingPillComponent implements OnChanges, AfterViewInit {
   }
 
   /**
-   * Format the resolved-state timestamp. Phase 3 uses `now` because the
-   * pill resolution timestamp is not currently persisted on the block —
-   * Phase 4 will add a `resolvedAt` field and this method will read it.
+   * Format the resolved-state timestamp from the real persisted
+   * `block.resolvedAt` (Plan 04-06). Returns the empty string when the
+   * block has no `resolvedAt` (legacy blocks resolved before the field
+   * existed) — the template omits the timestamp rather than fabricate a
+   * `new Date()` that would lie about when the proposal was resolved.
    */
   resolvedTime(): string {
-    return new Date().toLocaleString();
+    const resolvedAt = this.block?.resolvedAt;
+    if (!resolvedAt) return '';
+    const parsed = new Date(resolvedAt);
+    if (Number.isNaN(parsed.getTime())) return '';
+    return parsed.toLocaleString();
   }
 
   startEdit(): void {
