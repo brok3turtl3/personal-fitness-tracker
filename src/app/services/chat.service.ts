@@ -6,7 +6,7 @@ import { AnthropicApiService } from './anthropic-api.service';
 import { AISettingsService } from './ai-settings.service';
 import { FitnessContextService } from './fitness-context.service';
 import { toAnthropicContent, fromAnthropicMessage } from './chat-block-serializer';
-import type { MessageParam } from '@anthropic-ai/sdk/resources/messages';
+import type { MessageParam, ContentBlockParam } from '@anthropic-ai/sdk/resources/messages';
 import {
   ChatBlock,
   ChatConversation,
@@ -396,11 +396,43 @@ export class ChatService {
       tokenCount += msg.tokenEstimate;
     }
 
+    // Serialize each stored message to wire form. Plan 03-07 co-locates a
+    // tool_result block INSIDE the same ASSISTANT ChatMessage that holds its
+    // tool_use (so chat-block-serializer's same-message pairing guard works).
+    // But Anthropic forbids tool_result blocks in assistant turns — they may
+    // only appear in user turns. So we split each message's content: non-
+    // tool_result blocks stay on the message's own role; tool_result blocks
+    // move to a user turn. We do NOT change persistence; only the wire shape.
     for (const msg of windowMessages) {
-      messages.push({ role: msg.role, content: toAnthropicContent(msg.blocks) });
+      const content = toAnthropicContent(msg.blocks);
+      const toolResults = content.filter(b => b.type === 'tool_result');
+      const others = content.filter(b => b.type !== 'tool_result');
+
+      if (others.length) {
+        messages.push({ role: msg.role, content: others });
+      }
+      if (toolResults.length) {
+        messages.push({ role: 'user', content: toolResults });
+      }
     }
 
-    return messages;
+    // Coalesce consecutive same-role messages into one. The split above can
+    // produce assistant{tool_use} → user{tool_result} → user{new text}; merging
+    // adjacent user turns yields a single user{tool_result, new text} (tool_result
+    // first) and guarantees role alternation on the wire.
+    const coalesced: MessageParam[] = [];
+    for (const m of messages) {
+      const last = coalesced[coalesced.length - 1];
+      if (last && last.role === m.role) {
+        const lastContent = last.content as ContentBlockParam[];
+        const nextContent = m.content as ContentBlockParam[];
+        last.content = [...lastContent, ...nextContent];
+      } else {
+        coalesced.push(m);
+      }
+    }
+
+    return coalesced;
   }
 
   private maybeSummarize(

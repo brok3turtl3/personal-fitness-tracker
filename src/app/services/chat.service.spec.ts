@@ -607,4 +607,91 @@ describe('ChatService', () => {
       }
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // buildApiMessages tool_result placement — SC3 follow-up.
+  //
+  // Plan 03-07 co-locates a tool_result block inside the SAME assistant
+  // ChatMessage that holds its tool_use (so the serializer's same-message
+  // pairing guard works). But Anthropic rejects tool_result blocks inside
+  // assistant turns with: "messages.N: tool_result blocks can only be in user
+  // messages". buildApiMessages must move tool_result blocks to a user turn on
+  // the wire (and coalesce adjacent same-role turns) without touching storage.
+  // ---------------------------------------------------------------------------
+
+  describe('buildApiMessages tool_result placement (SC3 follow-up — Anthropic 400: tool_result only in user turns)', () => {
+    function seedConvWithPairedToolResult(): string {
+      const toolUse: ToolUseBlock = {
+        type: 'tool_use',
+        id: 'tu1',
+        name: 'memory',
+        input: { command: 'create', path: '/memories/x.md', file_text: 'hi' },
+        status: 'approved',
+      };
+      const toolResult = {
+        type: 'tool_result',
+        tool_use_id: 'tu1',
+        content: 'File created successfully at: /memories/x.md',
+      } as ChatBlock;
+      const assistantMsg: ChatMessage = {
+        id: 'm1',
+        role: 'assistant',
+        blocks: [toolUse, toolResult],
+        tokenEstimate: 5,
+        createdAt: '2026-05-31T10:00:00.000Z',
+      };
+      const conv: ChatConversation = {
+        id: 'c1',
+        title: 'Test',
+        messages: [assistantMsg],
+        summarizedMessageCount: 0,
+        createdAt: '2026-05-31T10:00:00.000Z',
+        updatedAt: '2026-05-31T10:00:00.000Z',
+      };
+      mockAppData = { ...mockAppData, chatConversations: [conv] };
+      mockStorageService.getData.and.callFake(() => of(mockAppData));
+      return conv.id;
+    }
+
+    type WireMsg = { role: string; content: Array<{ type: string; id?: string; tool_use_id?: string }> };
+
+    async function outboundMessages(): Promise<WireMsg[]> {
+      const convId = seedConvWithPairedToolResult();
+      await firstValueFrom(service.sendMessage(convId, 'next message'));
+      return mockAnthropicApi.sendMessage.calls.mostRecent().args[1].messages as unknown as WireMsg[];
+    }
+
+    it('no assistant message contains a tool_result block', async () => {
+      const messages = await outboundMessages();
+      const assistantWithToolResult = messages.some(
+        m => m.role === 'assistant' && m.content.some(b => b.type === 'tool_result'),
+      );
+      expect(assistantWithToolResult).toBeFalse();
+    });
+
+    it('the tool_result (tu1) appears in a user message', async () => {
+      const messages = await outboundMessages();
+      const userWithToolResult = messages.some(
+        m => m.role === 'user' &&
+          m.content.some(b => b.type === 'tool_result' && b.tool_use_id === 'tu1'),
+      );
+      expect(userWithToolResult).toBeTrue();
+    });
+
+    it('the matching tool_use (tu1) still appears in an assistant message', async () => {
+      const messages = await outboundMessages();
+      const assistantWithToolUse = messages.some(
+        m => m.role === 'assistant' &&
+          m.content.some(b => b.type === 'tool_use' && b.id === 'tu1'),
+      );
+      expect(assistantWithToolUse).toBeTrue();
+    });
+
+    it('no two adjacent outbound messages share the same role (alternation holds after coalescing)', async () => {
+      const messages = await outboundMessages();
+      for (let i = 1; i < messages.length; i++) {
+        expect(messages[i].role).not.toBe(messages[i - 1].role);
+      }
+    });
+  });
 });
