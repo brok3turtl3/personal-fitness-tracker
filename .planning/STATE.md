@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-05-31T17:43:46.380Z"
+last_updated: "2026-05-31T17:56:31.831Z"
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 23
-  completed_plans: 18
-  percent: 78
+  completed_plans: 19
+  percent: 83
 ---
 
 # State: Personal Fitness Tracker — Refinement Milestone (v2)
@@ -31,12 +31,12 @@ progress:
 ## Current Position
 
 Phase: 04 (agentic-loop-citation-ui) — EXECUTING
-Plan: 1 of 6 complete (Wave 1)
+Plan: 2 of 6 complete (Wave 1)
 **Phase:** 4
-**Plan:** 04-01 complete; next is 04-02 (Wave 1, no dependencies)
+**Plan:** 04-02 complete; next is 04-03 (Wave 1, no dependencies)
 **Status:** Executing Phase 04
-**Resume file:** .planning/phases/04-agentic-loop-citation-ui/04-02-PLAN.md
-**Progress:** [████████░░] 78%
+**Resume file:** .planning/phases/04-agentic-loop-citation-ui/04-03-PLAN.md
+**Progress:** [████████░░] 83%
 
 **Wave structure:**
 
@@ -75,6 +75,7 @@ Plan: 1 of 6 complete (Wave 1)
 | 01-10 | Recovery banner + AppComponent integration + StorageService.getBackup chokepoint method | 7m 54s | 4/4 | 6 (2 created, 4 modified) | 59840ce, 3bbcc04, 7284b48 | 2026-05-02 |
 | 01-08 | Characterization specs for diet/chat/charts/report-page (FOUND-04 + FOUND-05) | 9m 20s | 3/3 (Task 3 verification gate, no commit) | 5 (4 created, 1 modified) | 90df6c7, 258aafd | 2026-05-02 |
 | 04-01 | Type foundation (Confidence/Attribution/ClaimSpan + ChatTurnEvent) + opus-4-8 fix + pure confidence-attribution-parser (TDD) | ~6m | 2/2 | 3 (2 created, 1 modified) | bac46da, 397f9a7, 3c67bf0 | 2026-05-31 |
+| 04-02 | Six bounded read-only query_* tools (DataQueryToolExecutor) + ToolRegistry isWriteProposal (TDD) | ~14m | 2/2 | 4 (2 created, 2 modified) | b785acb, 52ce57e, f5398f0 | 2026-05-31 |
 
 ---
 
@@ -98,6 +99,8 @@ Plan: 1 of 6 complete (Wave 1)
 - **`parseClaimSpans` never fabricates a grade and never throws (Plan 04-01, D-09/E3).** A pure DI-free module gates every `confidence`/`source` assignment behind allow-list `ReadonlySet`s; a malformed/unknown/absent inline token (`[evidence: ???]`, `superstrong`, none) degrades to an unbadged span. NO LLM retry on a garbled token (re-calling would double cost without guaranteeing a token). `stripTokens` uses a fresh `RegExp` to avoid mutating the shared global-regex `lastIndex` (idempotency).
 - **CLAUDE_MODELS corrected to `claude-opus-4-8` (Plan 04-01).** The stale `claude-opus-4-7` entry was fixed; `claude-sonnet-4-6` and `claude-haiku-4-5` left unchanged (already correct).
 - **Dev-seed pending pill lands on init, not on user click (Plan 03-06 gap closure).** `chat-page` ngOnInit now auto-selects the most-recent conversation (or seed-gated auto-creates one) BEFORE consuming the dev-seed sentinel, so the seed is never destroyed before a pending pill can render. Auto-create is gated on a non-null seed to preserve the Phase 1 empty-state characterization spec. StorageService untouched (minimum surface area).
+- **Six `query_*` read tools live in ONE `DataQueryToolExecutor` as six thin per-name `ToolExecutor` adapters (Plan 04-02, CHAT-02).** Fits the existing `register(executor)` API keyed on `definition.name` without a multi-name registry extension. Handlers `firstValueFrom` the domain getters (none take a range), range-filter in memory (D-14), then cap+summarize (aggregate header + most-recent-20 for >60 rows) so a 5-year query stays bounded (E6, ≤4000 chars). Read-only: injects domain services only — no `StorageService`/`localStorage`, no SDK import (D-17). `query_daily_totals` sums `MealEntry.totals` via a local helper, decoupled from `DietService.computeDailyTotals`.
+- **`ToolRegistryService.isWriteProposal(name)` is an explicit `WRITE_PROPOSAL_TOOLS` allow-list ('memory' only) (Plan 04-02, D-02/D-03).** `query_*` and any future read tool default to non-write, so the agentic loop (04-04) auto-executes reads and defers writes to the pending pill — a new read tool can never accidentally bypass the gate. Added SDK-agnostic `ToolDefinition.strict?: boolean` flag for Anthropic strict tool use (mapped to SDK `Tool.strict` at the api chokepoint).
 
 ### Active Decisions Pending
 
@@ -140,6 +143,7 @@ None.
 
 ### Recent Sessions (Phase 04 execution)
 
+- **2026-05-31T17:43Z–17:57Z** — Executed plan 04-02 (Wave 1, type: tdd). 3 commits on `main` (b785acb test/RED; 52ce57e feat/GREEN — DataQueryToolExecutor; f5398f0 feat — ToolRegistry wiring + isWriteProposal). Created `data-query-tool-executor.ts` (+ spec); modified `tool-registry.service.ts` (+ spec). Built six bounded read-only `query_*` tools (`query_cardio_sessions`/`query_weight_entries`/`query_readings`/`query_meals_in_range`/`query_daily_totals`/`query_saved_foods`) as six thin per-name `ToolExecutor` adapters in ONE `@Injectable` executor — injects domain services only (no `StorageService`/`localStorage`, no SDK import). Handlers `firstValueFrom` → in-memory range filter (D-14) → cap+summarize (aggregate header + most-recent-20 for >60 rows). Registered the six alongside memory; added `isWriteProposal(name)` (explicit `WRITE_PROPOSAL_TOOLS` allow-list = 'memory' only, D-02/D-03) and an SDK-agnostic `ToolDefinition.strict` flag. TDD gate honored: RED b785acb (13 FAILED/1 SUCCESS) → GREEN 52ce57e (14 SUCCESS); no REFACTOR. E5 (read-only, no write-shaped method reachable) + E6 (1825-row/5-year weight query ≤4000 chars + summarizes) specs green. Full Karma: **547 SUCCESS** (was 530, +17). Production build: exit 0 (pre-existing 4.87 kB budget warning). Grep gates green (zero `@anthropic-ai/sdk`/`localStorage.*`/`StorageService` in the executor). Three deviations: [Rule 1] reworded JSDoc to keep literal chokepoint grep gates green (same edge case as 04-01); [Rule 3] `query_daily_totals` sums `MealEntry.totals` via a local helper instead of the spied `computeDailyTotals`; [Rule 2] added `ToolDefinition.strict` to support `strict:true` defs. **CHAT-02 marked complete in REQUIREMENTS.md.** Wave 1 of Phase 4 advances (2 of 6 plans done).
 - **2026-05-31T17:37Z–17:43Z** — Executed plan 04-01 (Wave 1, type: tdd). 3 commits on `main` (bac46da feat — span/event types + opus-4-8 fix; 397f9a7 test/RED; 3c67bf0 feat/GREEN — pure parser). Modified `ai-chat.model.ts` (+ `Confidence`/`Attribution`/`ClaimSpan`/`ChatTurnEvent`, corrected `claude-opus-4-7`→`claude-opus-4-8`); created `confidence-attribution-parser.ts` (pure, DI-free, SDK-agnostic, total `parseClaimSpans` — allow-list `ReadonlySet`s gate every assignment, never fabricates a grade, never throws) + spec (19 specs incl. adversarial `[evidence: ???]`, unknown-grade `superstrong`, nested brackets, empty string, idempotency, multi-claim-per-sentence). TDD gate sequence honored: RED 397f9a7 (15 FAILED/4 SUCCESS) → GREEN 3c67bf0 (19 SUCCESS); no REFACTOR needed. Full Karma: **530 SUCCESS** (was 511 Phase 3 baseline, +19). Production build: exit 0 (pre-existing 4.87 kB budget warning, not a regression). D-17 chokepoint preserved (zero `@anthropic-ai/sdk` imports in either file). Two Rule 1 deviations: reworded JSDoc comments containing the literal strings `@anthropic-ai/sdk` and `@Injectable` so the plan's literal grep gates (which must FAIL on those tokens) stay green — documentation-only, no behavior change (same edge case as Plan 01-10). **CHAT-07/08/09 marked complete in REQUIREMENTS.md.** Wave 1 of Phase 4 advances (1 of 6 plans done).
 
 ### Recent Sessions (Phase 03 gap closure)
