@@ -1,7 +1,29 @@
 import { Component, ElementRef, EventEmitter, Input, OnChanges, Output, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ChatMessage } from '../../models/ai-chat.model';
+import { ChatMessage, ClaimSpan, Confidence } from '../../models/ai-chat.model';
+import { parseClaimSpans } from '../../services/confidence-attribution-parser';
 import { PendingPillComponent } from './pending-pill.component';
+
+/**
+ * Citation-link guard (D-13, E1). The SOLE path by which any citation may
+ * become an `<a href>` is a structured Anthropic `TextCitation` block whose
+ * `type` is one of the API-emitted location kinds. Model-authored prose
+ * (author-year strings, bare DOIs, bare URLs) is NEVER a `TextCitation`, so
+ * it can never satisfy this guard and never becomes a hyperlink.
+ *
+ * No tool in Phase 4 produces these citations, so in practice this returns
+ * `false` for everything rendered this phase → zero anchors from prose. The
+ * function ships and is adversarially tested NOW (one phase before web
+ * citations exist) so the guard is proven, not added later under pressure.
+ *
+ * Copied from 04-RESEARCH "citation-link guard" Code Example.
+ */
+export function isLinkableCitation(citation: { type?: string } | undefined | null): boolean {
+  return (
+    citation?.type === 'search_result_location' ||
+    citation?.type === 'web_search_result_location'
+  );
+}
 
 /**
  * Block-aware chat message list (Plan 03-05 Task 3; D-15).
@@ -29,7 +51,7 @@ import { PendingPillComponent } from './pending-pill.component';
           <div class="message-role">{{ msg.role === 'user' ? 'You' : 'AI Assistant' }}</div>
           <div class="message-content">@for (block of msg.blocks; track $index) {
             @switch (block.type) {
-              @case ('text') {<span class="block-text">{{ block.text }}</span>}
+              @case ('text') {<span class="block-text">@for (span of spansFor(msg.id, $index, block.text); track $spanIdx; let $spanIdx = $index) {<span class="claim-span">{{ span.text }}@if (span.confidence) {<span class="confidence-chip" [class.tier-calm]="isCalm(span.confidence)" [class.tier-alert]="!isCalm(span.confidence)" [attr.aria-label]="'Confidence: ' + span.confidence"><span class="chip-glyph" aria-hidden="true">{{ confidenceGlyph(span.confidence) }}</span><span class="chip-label">{{ span.confidence }}</span></span>}@if (span.source === 'data') {<span class="source-chip" aria-label="Source: from your data"><span class="chip-glyph" aria-hidden="true">📈</span><span class="chip-label">your data</span></span>}@if (span.source === 'research') {<span class="source-chip" aria-label="Source: from research — general knowledge, not a live source"><span class="chip-glyph" aria-hidden="true">📚</span><span class="chip-label">research</span></span><span class="research-qualifier">general knowledge — not a live source</span>}</span>{{ ' ' }}}</span>}
               @case ('tool_use') {
                 <app-pending-pill
                   [block]="block"
@@ -119,6 +141,52 @@ import { PendingPillComponent } from './pending-pill.component';
       white-space: pre-wrap;
     }
 
+    /* Confidence + source badges (04-UI-SPEC LOCKED palette). Inline chips
+       after the claim they qualify. Color is one of three channels (color +
+       icon glyph + text label) so a skimming user distinguishes calm vs alert. */
+    .confidence-chip,
+    .source-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 1.2;
+      margin: 0 2px;
+      vertical-align: baseline;
+    }
+
+    /* Badge row wraps on narrow viewports; chips never overflow the bubble. */
+    .claim-span {
+      display: inline;
+      flex-wrap: wrap;
+    }
+
+    .confidence-chip.tier-calm {
+      background: #eef6ec;
+      color: #2e7d32;
+    }
+
+    .confidence-chip.tier-alert {
+      background: #fdf3e7;
+      color: #b9770e;
+    }
+
+    .source-chip {
+      background: #f0f0f0;
+      color: #2c3e50;
+      font-weight: 600;
+    }
+
+    .research-qualifier {
+      font-size: 0.8125rem;
+      font-style: italic;
+      color: #7f8c8d;
+      margin-left: 4px;
+    }
+
     .message-time {
       font-size: 0.7rem;
       opacity: 0.6;
@@ -168,8 +236,52 @@ export class ChatMessageListComponent implements OnChanges {
   }>();
   @ViewChild('scrollContainer') scrollContainer!: ElementRef<HTMLDivElement>;
 
+  /**
+   * Memoized `parseClaimSpans` results, keyed by `${messageId}#${blockIndex}#${text}`.
+   * Parsing runs ONCE per (block, text) when the input changes — never on every
+   * change-detection pass (which a template-bound `parseClaimSpans(...)` would
+   * trigger). The text is part of the key so a streamed/edited block re-parses.
+   */
+  private spanCache = new Map<string, ClaimSpan[]>();
+
+  /** Confidence grades that read as "calm / higher-confidence" (04-UI-SPEC). */
+  private static readonly CALM_GRADES: ReadonlySet<Confidence> = new Set<Confidence>([
+    'strong',
+    'moderate',
+  ]);
+
   ngOnChanges(): void {
+    // Inputs replaced ⇒ drop stale memoized spans (the key includes text, so
+    // collisions are impossible, but this bounds the cache to live blocks).
+    this.spanCache.clear();
     setTimeout(() => this.scrollToBottom(), 0);
+  }
+
+  /**
+   * Parse a text block into ClaimSpan[], memoized. The render binds to this so
+   * each span's text is interpolated via `{{ }}` (auto-escaped) — model prose
+   * can never become markup or an `<a>` (citation guard, D-13).
+   */
+  spansFor(messageId: string, blockIndex: number, text: string): ClaimSpan[] {
+    const key = `${messageId}#${blockIndex}#${text}`;
+    let spans = this.spanCache.get(key);
+    if (!spans) {
+      spans = parseClaimSpans(text);
+      this.spanCache.set(key, spans);
+    }
+    return spans;
+  }
+
+  /** True when a confidence grade is in the calm tier (pale-green badge). */
+  isCalm(confidence: Confidence): boolean {
+    return ChatMessageListComponent.CALM_GRADES.has(confidence);
+  }
+
+  /** LOCKED glyph per grade: ✓ strong, ≈ moderate, ⚠ all alert grades. */
+  confidenceGlyph(confidence: Confidence): string {
+    if (confidence === 'strong') return '✓';
+    if (confidence === 'moderate') return '≈';
+    return '⚠';
   }
 
   emitAction(
