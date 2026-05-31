@@ -173,7 +173,7 @@ Do NOT fabricate citations or links — only structured search results may be li
     if (!toolSettings.redactWeightEntries)  lines.push(this.weightFacts(data.weightEntries));
     if (!toolSettings.redactHealthReadings) lines.push(this.readingFacts(data.healthReadings));
     lines.push(this.cardioFacts(data.cardioSessions));
-    lines.push(this.nutritionFacts(data.mealEntries));
+    if (!toolSettings.redactMealNotes)      lines.push(this.nutritionFacts(data.mealEntries));
     return lines.filter(Boolean).join('\n');
   }
 
