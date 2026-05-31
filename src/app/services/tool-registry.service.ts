@@ -14,6 +14,13 @@ export interface ToolDefinition {
   name: string;
   description?: string;
   input_schema?: unknown;
+  /**
+   * When true, Claude's tool `input` is guaranteed to match `input_schema`
+   * (Anthropic strict tool use). Set on the Phase 4 client `query_*` tools so
+   * malformed args never reach the executor. SDK-agnostic flag — mapped to the
+   * SDK `Tool.strict` at the `anthropic-api.service.ts` chokepoint.
+   */
+  strict?: boolean;
 }
 
 /**
