@@ -293,3 +293,132 @@ describe('ChatMessageListComponent — confidence + source badges (E4, D-08/D-10
     });
   });
 });
+
+describe('ChatMessageListComponent — tool disclosures (E12, D-05/D-06)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  function queryToolUse(id: string, name: string, input: unknown): ToolUseBlock {
+    return { type: 'tool_use', id, name, input, status: 'approved' };
+  }
+
+  it('renders a query_* tool_use as a collapsed <details> (not open by default)', async () => {
+    const tu = queryToolUse('tu-w', 'query_weight_entries', { from: '2026-01-01', to: '2026-05-31' });
+    const tr: ToolResultBlock = {
+      type: 'tool_result',
+      tool_use_id: 'tu-w',
+      content: 'Weight entries: 38 total, span 2026-01-01..2026-05-31. min 180 / max 195.',
+    };
+    const msg = makeMsg('assistant', [tu, tr]);
+    const fixture = await createFixture([msg]);
+    const el: HTMLElement = fixture.nativeElement;
+
+    const details = el.querySelector('details');
+    expect(details).toBeTruthy();
+    expect((details as HTMLDetailsElement).open).toBe(false);
+    expect(el.querySelector('summary')).toBeTruthy();
+  });
+
+  it('resolved summary uses the LOCKED verb with renderer-derived count + range', async () => {
+    const tu = queryToolUse('tu-w', 'query_weight_entries', { from: '2026-01-01', to: '2026-05-31' });
+    const tr: ToolResultBlock = {
+      type: 'tool_result',
+      tool_use_id: 'tu-w',
+      content: 'Weight entries: 38 total, span 2026-01-01..2026-05-31.',
+    };
+    const msg = makeMsg('assistant', [tu, tr]);
+    const fixture = await createFixture([msg]);
+    const summary = fixture.nativeElement.querySelector('summary') as HTMLElement;
+
+    expect(summary.textContent).toContain('Read');
+    expect(summary.textContent).toContain('weight entries');
+    expect(summary.textContent).toContain('38');
+    // Range derived from the tool_use input, NOT model prose.
+    expect(summary.textContent).toContain('2026-01-01');
+    // Accessible name prefix.
+    expect(summary.getAttribute('aria-label')).toContain('Show what the AI looked at:');
+  });
+
+  it('OMITS the · range/count clause when the count is unavailable', async () => {
+    // Result with no parseable "N total" and a tool_use with no from/to range.
+    const tu = queryToolUse('tu-s', 'query_saved_foods', {});
+    const tr: ToolResultBlock = {
+      type: 'tool_result',
+      tool_use_id: 'tu-s',
+      content: 'No saved foods in the library.',
+    };
+    const msg = makeMsg('assistant', [tu, tr]);
+    const fixture = await createFixture([msg]);
+    const summary = fixture.nativeElement.querySelector('summary') as HTMLElement;
+
+    expect(summary.textContent).toContain('saved foods');
+    // No dangling "·" middot when nothing to qualify.
+    expect(summary.textContent).not.toContain('·');
+  });
+
+  it('tool_result expanded body shows Tool / Query / Result in a <pre>', async () => {
+    const tu = queryToolUse('tu-c', 'query_cardio_sessions', { from: '2026-01-01' });
+    const tr: ToolResultBlock = {
+      type: 'tool_result',
+      tool_use_id: 'tu-c',
+      content: 'Cardio sessions: 5 total, span 2026-01-01..2026-02-01. 120 min, 30.0 km combined.',
+    };
+    const msg = makeMsg('assistant', [tu, tr]);
+    const fixture = await createFixture([msg]);
+    const el: HTMLElement = fixture.nativeElement;
+    const details = el.querySelector('details') as HTMLElement;
+
+    expect(details.textContent).toContain('Tool: query_cardio_sessions');
+    expect(details.textContent).toContain('Query:');
+    expect(details.textContent).toContain('Result:');
+    const pre = details.querySelector('pre');
+    expect(pre).toBeTruthy();
+    expect(pre?.textContent).toContain('Cardio sessions: 5 total');
+  });
+
+  it('an in-flight query_* row (no paired result) is role=status, aria-live, non-expandable', async () => {
+    const tu = queryToolUse('tu-w', 'query_weight_entries', { from: '2026-01-01' });
+    const msg = makeMsg('assistant', [tu]); // NO tool_result yet
+    const fixture = await createFixture([msg]);
+    const el: HTMLElement = fixture.nativeElement;
+
+    // No <details> for in-flight (non-expandable).
+    expect(el.querySelector('details')).toBeFalsy();
+    const live = el.querySelector('[role="status"]') as HTMLElement;
+    expect(live).toBeTruthy();
+    expect(live.getAttribute('aria-live')).toBe('polite');
+    // Present-tense LOCKED verb.
+    expect(live.textContent).toContain('Reading your weight entries');
+  });
+
+  it('a memory write-proposal tool_use STILL renders <app-pending-pill> (not a disclosure)', async () => {
+    const memory: ToolUseBlock = {
+      type: 'tool_use',
+      id: 'tu-m',
+      name: 'memory',
+      input: { command: 'create', path: '/memories/x.md', file_text: 'remember' },
+      status: 'pending',
+    };
+    const msg = makeMsg('assistant', [memory]);
+    const fixture = await createFixture([msg]);
+
+    expect(fixture.debugElement.query(By.directive(PendingPillComponent))).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('.pending-pill')).toBeTruthy();
+    // Memory does NOT get a query disclosure.
+    expect(fixture.nativeElement.querySelector('details')).toBeFalsy();
+  });
+
+  it('expectNoSeriousA11yViolations on a tool-disclosure render', async () => {
+    const tu = queryToolUse('tu-w', 'query_weight_entries', { from: '2026-01-01', to: '2026-05-31' });
+    const tr: ToolResultBlock = {
+      type: 'tool_result',
+      tool_use_id: 'tu-w',
+      content: 'Weight entries: 38 total, span 2026-01-01..2026-05-31.',
+    };
+    const inflight = queryToolUse('tu-r', 'query_readings', { from: '2026-01-01' });
+    const messages = [makeMsg('assistant', [tu, tr]), makeMsg('assistant', [inflight])];
+    const fixture = await createFixture(messages);
+    await expectNoSeriousA11yViolations(fixture.nativeElement, {
+      disableRules: ['color-contrast'],
+    });
+  });
+});
