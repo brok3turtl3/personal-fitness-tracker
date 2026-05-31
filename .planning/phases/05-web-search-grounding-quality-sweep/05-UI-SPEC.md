@@ -37,14 +37,14 @@ created: 2026-05-31
 - `<app-chat-message-list>` (`src/app/features/chat/chat-message-list.component.ts`) — the `@switch (block.type)` render is **extended** with a `web_search_tool_result` / `server_tool_use` branch (the live search row + Sources list) and the footnote marker render inside the existing `'text'` branch. The Phase 4 `query_*` disclosure, confidence/source badges, and `parseClaimSpans` memoization are untouched except for the D-04 source-axis upgrade and the D-03 footnote seam.
 - `<app-error-state>` (`src/app/shared/error-state.component.ts`) — the composition surface for the 401 rotate-key prompt (QUAL-07), the quota-blocked write failure (QUAL-02), the chat block-action errors (folded IN-01 → QUAL-09), and the multi-tab banner. `role="alert"` / `aria-live="assertive"` reused as-is.
 - `<app-recovery-banner>` (`src/app/shared/recovery-banner.component.ts`) — the established **app-level banner ahead of `<router-outlet>`** pattern (Phase 1). The quota + multi-tab banners follow its placement and clipboard-copy affordance (`StorageService.getBackup` → copy JSON) reused as the 95%-quota safety valve (D-14).
-- The cardio/weight/readings **entry form + history list** surfaces (`features/{cardio,weight,readings}/*-page.component.ts`) — the existing single-surface form-above-list pattern is toggled into **edit mode** in place (D-11). The form, its validators, and `.error-message` rendering are reused unchanged; only an edit-mode header, a per-row Edit button, and a Cancel action are added.
+- The cardio/weight/readings **entry form + history list** surfaces (`features/{cardio,weight,readings}/*-page.component.ts`) — the existing single-surface form-above-list pattern is toggled into **edit mode** in place (D-11). The form, its validators, and `.error-message` rendering are reused unchanged; only an edit-mode header, a per-row Edit button, and a Discard changes action are added.
 - The `/settings/ai` form (`settings-ai.component.ts`) — already carries the `enableWebSearch` toggle and the `webSearchMaxUses` number field (min=0, max=10). D-06 adds only a cost-context helper line; no new control.
 
 **New surfaces introduced this phase (all inline in component templates / component-scoped styles — no premature extraction):**
 - Live web-search progress row + resolved summary (inline in `chat-message-list` `@switch`) — D-05
 - Grounded inline footnote marker `[n]` + per-message **Sources** list (inline in `chat-message-list`) — D-03
 - Grounded "from research · grounded" source-badge variant carrying the footnote link (extends the Phase 4 source chip) — D-04
-- Edit-mode form header + per-history-row **Edit** button + **Cancel** action (cardio/weight/readings pages) — D-11
+- Edit-mode form header + per-history-row **Edit** button + **Discard changes** action (cardio/weight/readings pages) — D-11
 - App-level quota banner (70% warn / 95% block) — D-14 / QUAL-02
 - App-level multi-tab "data changed elsewhere" banner — QUAL-04
 - 401 "rotate / re-enter key" prompt (composed from `<app-error-state>`) — QUAL-07
@@ -67,7 +67,7 @@ Identical 8-point scale to Phases 3/4, derived from existing `src/styles.css` re
 | 3xl | 64px | reserved — not used in Phase 5 |
 
 **Exceptions:**
-- **44px minimum touch target** for: the live web-search disclosure `<summary>` (reuses the Phase 4 tool-disclosure floor); the per-history-row **Edit** and **Cancel/Save** buttons (so a touch user can reliably hit them — the existing `.btn-sm` is `0.35rem 0.6rem ≈ 28px`, so edit-affordance rows declare `min-height: 44px` on the row, with buttons centered, rather than enlarging `.btn-sm` globally); the banner dismiss/action buttons. This is the single declared 8-point-scale exception (an accessibility touch-target floor), consistent with Phase 4.
+- **44px minimum touch target** for: the live web-search disclosure `<summary>` (reuses the Phase 4 tool-disclosure floor); the per-history-row **Edit** and **Save / Discard changes** buttons (so a touch user can reliably hit them — the existing `.btn-sm` is `0.35rem 0.6rem ≈ 28px`, so edit-affordance rows declare `min-height: 44px` on the row, with buttons centered, rather than enlarging `.btn-sm` globally); the banner dismiss/action buttons. This is the single declared 8-point-scale exception (an accessibility touch-target floor), consistent with Phase 4.
 - Footnote marker `[n]` is rendered inline at body size (no superscript size reduction below the 14px floor — see Typography); its surrounding gap is `xs` (4px).
 - Mobile breakpoint (`@media (max-width: 768px)`) inherits `src/styles.css:213–222`. The Sources list and badge rows wrap (`flex-wrap: wrap`); banner action buttons stack vertically below 768px.
 
@@ -75,7 +75,7 @@ Identical 8-point scale to Phases 3/4, derived from existing `src/styles.css` re
 
 ## Typography
 
-Phase 5 introduces **no new sizes** — exactly the **4 sizes** already in the system are used: 14px, 16px, 20px, 28px (plus the pre-existing 12px role-tag micro-label and 11px timestamp in `chat-message-list`, preserved verbatim).
+Phase 5 introduces **no new sizes** — exactly the **4 sizes** already in the system are used: 14px, 16px, 20px, 28px. Phase 4's timestamp and role-tag micro-labels in `chat-message-list` are inherited without change and are not re-declared here.
 
 | Role | Size | Weight | Line Height |
 |------|------|--------|-------------|
@@ -86,12 +86,12 @@ Phase 5 introduces **no new sizes** — exactly the **4 sizes** already in the s
 | Web-search progress / resolved summary | 14px (0.875rem) | 600 | 1.5 |
 | Source/confidence badge label | 14px (0.875rem) | 600 | 1.2 |
 | Edit-mode form header ("Editing entry") | 20px (1.25rem) | 600 | 1.2 |
-| History-row Edit/Save/Cancel button | 14px (0.875rem) | 500 (existing `.btn` weight) | — |
+| History-row Edit/Save/Discard changes button | 14px (0.875rem) | inherits the global `.btn` class | — |
 | Banner title (quota / multi-tab / 401) | 16px (1rem) | 600 | 1.2 |
 | Banner body | 14px (0.875rem) | 400 | 1.5 |
 | Page heading h1 (unchanged) | 28px (1.75rem) | 600 | 1.2 |
 
-**Weights used:** 400 (body, banner body, Sources URL, search detail) and 600 (footnote marker, badge labels, headings, Sources title). The single legacy 500 in the global `.btn` class is preserved as-is (Edit/Save/Cancel/banner buttons inherit it) — do not introduce new 500 uses outside `.btn`. This matches the Phase 3/4 two-weight rule.
+**Weights used:** 400 (body, banner body, Sources URL, search detail) and 600 (footnote marker, badge labels, headings, Sources title). The existing global `.btn` class carries a legacy weight inherited from `src/styles.css` — not re-declared by Phase 5; the Edit/Save/Discard changes/banner buttons inherit it as-is, and no new weight is introduced outside `.btn`. This matches the Phase 3/4 two-weight rule.
 
 **Phase 5-specific typography rules:**
 - **Footnote marker `[n]` renders at 14px / 600 inline, baseline-aligned — NOT a shrunk `<sup>`.** Per CLAUDE.md a11y ("color is never the only state indicator") and contrast goals, a true superscript would drop below the readable floor and harm contrast; instead the marker is a same-line bracketed numeral styled as a link (accent color, underline-on-hover). This keeps the grounded citation unmistakable and clickable at an accessible size.
@@ -178,7 +178,7 @@ Each new/changed surface declares one focal point — where a sighted user's eye
 |---------|-------------|-----------|
 | Chat stream **while a web search is running** | The **live search row** (`🔎 Searching the web…`). Stream auto-scrolls to keep it in view (mirrors Phase 4 D-01 tool-progress). No focus steal — focus stays on chat input. | Reuse existing `scrollToBottom()` fired on each `ChatTurnEvent`; `role="status"` `aria-live="polite"`. |
 | Chat message **with grounded citations** | The prose answer; the footnote markers `[n]` are inline anchors in DOM order, the **Sources** list foots the message. No auto-focus. | Native `<a href="#source-{msgId}-{n}">` intra-doc anchors. |
-| **Edit-mode entry form** (cardio/weight/readings) | The **first form field** (the field the user most likely typo'd) receives focus when Edit is clicked, and the edit-mode header announces the mode change. | `ViewChild` first input `.focus()` on edit-mode enter + `role="status"` announce; Cancel returns focus to the originating row's Edit button. |
+| **Edit-mode entry form** (cardio/weight/readings) | The **first form field** (the field the user most likely typo'd) receives focus when Edit is clicked, and the edit-mode header announces the mode change. | `ViewChild` first input `.focus()` on edit-mode enter + `role="status"` announce; Discard changes returns focus to the originating row's Edit button. |
 | **Quota banner (70% / 95%)** | Announced via `aria-live`; does NOT steal focus from the user's current task. The 95% block banner's primary action (Archive / Delete) is keyboard-reachable in DOM order. | `role="status"` (70%) / `role="alert"` (95%); banner sits ahead of `<router-outlet>` like the recovery banner. |
 | **Multi-tab banner** | Announced via `aria-live="polite"`; does NOT steal focus. Refresh action keyboard-reachable. | `role="status"`. |
 | **401 rotate-key prompt** | The **"Re-enter key" / "Go to settings" action** is the focal point — it is the user's path out. | `<app-error-state>` `role="alert"`; primary action focusable. |
@@ -229,12 +229,14 @@ All copy below is LOCKED. Voice matches Phases 3/4 (plain, second-person, honest
 | Edit-mode form header | `Editing entry` |
 | Edit-mode form header announce (`role="status"`) | `Editing entry — make your changes and save.` |
 | Save button (edit mode) | `Save changes` |
-| Cancel button (edit mode) | `Cancel` |
+| Discard-edit button (edit mode) | `Discard changes` |
+| Discard-edit button accessible name | `Discard changes and stop editing this entry` |
+| Discard-edit status announce (`role="status"`) | `Edit discarded — back to adding a new entry.` |
 | Add-mode submit button (unchanged default) | the existing per-page label (e.g. `Add Session`) |
 | Edit success status | `Entry updated.` |
 | Edit validation error | reuses the existing per-field `.error-message` copy (e.g. `Duration must be between 1 and 1440 minutes`) — validators unchanged (D-12) |
 
-> Edit reuses the existing per-page form in place (D-11). Saving preserves `id` + `createdAt`, refreshes `updatedAt`, re-runs the same validators (D-12). Cancel restores add mode without writing.
+> Edit reuses the existing per-page form in place (D-11). Saving preserves `id` + `createdAt`, refreshes `updatedAt`, re-runs the same validators (D-12). Discard changes restores add mode without writing.
 
 ### Quota banner (D-14, QUAL-02) — app-level
 
@@ -291,7 +293,7 @@ All copy below is LOCKED. Voice matches Phases 3/4 (plain, second-person, honest
 |--------|----------------------|
 | **Delete an entry to free quota** (95% prompt path) | The existing per-page delete already confirms via its current pattern (preserved). The 95% banner only *routes* the user to delete/archive; it does not itself delete. |
 | **Archive chat history** (D-13, offered at 95%) | **Non-destructive** — archival moves messages to a lazy key, nothing is lost. No confirm needed; reversible by "Load earlier messages". |
-| **Cancel an in-progress edit** (D-11) | **No confirm** — Cancel discards unsaved edits and restores add mode. Low-friction; the original entry is untouched on disk until Save. |
+| **Discard an in-progress edit** (D-11) | **No confirm** — Discard changes drops unsaved edits and restores add mode. Low-friction; the original entry is untouched on disk until Save. |
 | **Edit an entry** (D-11/D-12) | **Not destructive** — preserves `id`+`createdAt`; only Save writes; re-validated. No second dialog. |
 | **Clear API key** (existing settings action) | Unchanged from Phase 3 (existing `.btn-secondary` "Clear API Key"). |
 
@@ -315,7 +317,7 @@ No user-facing copy. The rule, extended across the full web-on/off matrix (D-09)
 | Inline footnote marker | inline in `chat-message-list` `'text'` branch | new inline template | `<a href="#source-{msgId}-{n}">[{n}]</a>` at 14px/600 accent, baseline-aligned (NOT `<sup>`). Rendered only for a claim backed by a structured `web_search_result_location` (D-03). Keyboard-activatable; scrolls to the matching Sources item. |
 | Per-message Sources list | inline in `chat-message-list` template | new inline template | `<section aria-label="Sources">` footing a message that has ≥1 grounded citation. `Sources` heading + ordered list; each item `id="source-{msgId}-{n}"`, title (600) + `https:` URL link (accent). Only `https:` → link; else plain text. |
 | Grounded source badge variant | inline in `chat-message-list` `'text'` branch | extend existing chip | Phase 4 source chip + `· grounded` label suffix + the `[n]` footnote marker. Un-grounded variant unchanged. |
-| Edit-mode form + per-row Edit button | `features/{cardio,weight,readings}/*-page.component.ts` | existing — extend | Per `.history-item` adds an `Edit` button (`.btn-secondary .btn-sm`) in the existing `.history-item-actions` slot (alongside the existing Delete). Clicking loads the row into the existing form (edit mode): adds an `Editing entry` header + `role="status"` announce, swaps the submit button to `Save changes` + a `Cancel` button. Save calls the new `update*` service method (D-12); Cancel restores add mode. Validators + `.error-message` reused unchanged. |
+| Edit-mode form + per-row Edit button | `features/{cardio,weight,readings}/*-page.component.ts` | existing — extend | Per `.history-item` adds an `Edit` button (`.btn-secondary .btn-sm`) in the existing `.history-item-actions` slot (alongside the existing Delete). Clicking loads the row into the existing form (edit mode): adds an `Editing entry` header + `role="status"` announce, swaps the submit button to `Save changes` + a `Discard changes` button. Save calls the new `update*` service method (D-12); Discard changes restores add mode. Validators + `.error-message` reused unchanged. |
 | Quota banner | `app.component.ts` / `app.component.css` | new (composes `<app-error-state>` voice) | App-level banner ahead of `<router-outlet>` (recovery-banner placement pattern). 70% amber dismissible / 95% red persistent with `Manage storage` + `Copy all data as JSON`. Driven by `navigator.storage.estimate()` + cross-browser quota-error matching (QUAL-02). |
 | Multi-tab banner | `app.component.ts` / `app.component.css` | new | App-level neutral informational banner on a `storage` event (QUAL-04). `🔄` + Refresh + Dismiss. |
 | 401 rotate-key prompt | `chat-page.component.ts` composing `<app-error-state>` | extend existing | Replaces the Phase 4 generic transport error for the 401 case with the rotate-key copy + `Go to settings` action (QUAL-07). |
@@ -335,7 +337,7 @@ No user-facing copy. The rule, extended across the full web-on/off matrix (D-09)
 
 **Edit-mode visual treatment:**
 - The page stays single-surface (form above history list — D-11); NO modal, NO route change.
-- Entering edit mode: the existing form gains an `Editing entry` header (20px/600) so the mode is unmistakable by copy; the submit row swaps to `Save changes` (`.btn-primary`) + `Cancel` (`.btn-secondary`).
+- Entering edit mode: the existing form gains an `Editing entry` header (20px/600) so the mode is unmistakable by copy; the submit row swaps to `Save changes` (`.btn-primary`) + `Discard changes` (`.btn-secondary`).
 - Per-row Edit button: `.btn-secondary .btn-sm` in the existing `.history-item-actions` flex slot, `0.75rem` gap (existing) from Delete; the row carries `min-height: 44px` so the touch target is met without resizing `.btn-sm` globally.
 - No color-only signaling of edit mode — the header copy + button labels carry it.
 
@@ -375,7 +377,7 @@ Evidence (disclosures + Sources) brackets the conclusion (prose), reinforcing th
 | Inline footnote marker `[n]` | Native `<a href="#source-{msgId}-{n}">` with `aria-label="Source {n}: {title}"`; the matching Sources item has the target `id`. Keyboard-activatable; rendered at an accessible 14px (not a sub-floor superscript). |
 | Per-message Sources list | `<section aria-label="Sources">` with a heading; each `https:` URL is a native `<a>` with the source title as its accessible name. Non-`https:` URLs render as plain text (no link). |
 | Grounded source badge | `<span>` with `aria-label="Source: from research, grounded in {n} live web source(s)"`; the `· grounded` suffix + `[n]` marker are real text content (screen-reader-visible), not color-only. |
-| Edit-mode form | Mode change announced via a `role="status"` line (`Editing entry — make your changes and save.`); first field receives focus on edit-mode enter; Cancel returns focus to the originating Edit button; the form retains its existing `aria-label`, per-field labels, `aria-required`, `aria-invalid`, and `.error-message` wiring (unchanged validators). Per-row Edit button has a descriptive accessible name (`Edit this {entry-type} entry`). |
+| Edit-mode form | Mode change announced via a `role="status"` line (`Editing entry — make your changes and save.`); first field receives focus on edit-mode enter; Discard changes returns focus to the originating Edit button; the form retains its existing `aria-label`, per-field labels, `aria-required`, `aria-invalid`, and `.error-message` wiring (unchanged validators). Per-row Edit button has a descriptive accessible name (`Edit this {entry-type} entry`). |
 | Quota banner | 70%: `role="status"` `aria-live="polite"` (non-blocking, dismissible). 95%: `role="alert"` `aria-live="assertive"` (write-blocking). Color + icon (`⚠`/`⛔`) + text triple-encode. Actions keyboard-reachable; does not steal focus. |
 | Multi-tab banner | `role="status"` `aria-live="polite"`; `🔄` + text (color-neutral, not a signal); Refresh + Dismiss keyboard-reachable; does not steal focus. |
 | 401 rotate-key prompt | `<app-error-state>` `role="alert"` `aria-live="assertive"` (reused); `Go to settings` + `Retry` keyboard-reachable. |
@@ -390,7 +392,7 @@ Evidence (disclosures + Sources) brackets the conclusion (prose), reinforcing th
 
 **Keyboard navigation rules:**
 - Footnote markers + Sources URLs focusable in DOM order; Enter activates and moves focus to the target Sources item.
-- Per-row Edit buttons focusable in DOM order; Enter enters edit mode and moves focus to the first form field; Escape/Cancel returns focus to the originating Edit button.
+- Per-row Edit buttons focusable in DOM order; Enter enters edit mode and moves focus to the first form field; Escape/Discard changes returns focus to the originating Edit button.
 - Banner actions (Refresh / Manage storage / Copy JSON / Dismiss / Go to settings) focusable in DOM order.
 - Web-search disclosures focusable in DOM order; Enter/Space toggles (native).
 - No custom arrow-key handlers (CLAUDE.md "Function over form").
@@ -398,7 +400,7 @@ Evidence (disclosures + Sources) brackets the conclusion (prose), reinforcing th
 **Focus management:**
 - The loop must NOT yank focus on web-search progress events (mirrors Phase 4) — live progress reaches screen readers via `aria-live`, not focus moves.
 - Banners NEVER steal focus (they announce via `aria-live`); the user's current task keeps focus.
-- The one intentional focus move is entering edit mode (→ first field) and exiting via Cancel (→ originating Edit button).
+- The one intentional focus move is entering edit mode (→ first field) and exiting via Discard changes (→ originating Edit button).
 
 ---
 
@@ -433,7 +435,7 @@ Not applicable — Phase 5 introduces no third-party UI registry, no `components
 | Confidence/source semantic palette (calm/alert tiers, icons, taxonomy) | 04-UI-SPEC Color (inherited verbatim) |
 | Core palette (`#f5f5f5`/`#ffffff`/`#f0f0f0`/`#f8f9fa`/`#2c3e50`/`#7f8c8d`/`#3498db`/`#ddd`/`#e74c3c`/`#fdeaea`/`#fdf3e7`/`#b9770e`/`#eef6ec`/`#2e7d32`) | `src/styles.css`, `settings-ai.component.ts`, `chat-message-list.component.ts`, 04-UI-SPEC |
 | Spacing scale (4/8/16/24/32) + 44px touch-target exception | `src/styles.css` rem usage; 04-UI-SPEC; touch-target floor |
-| Typography (4 sizes: 14/16/20/28; weights 400/600, legacy 500 in `.btn` only) | `src/styles.css`, existing chat/settings/cardio components; 04-UI-SPEC |
+| Typography (4 sizes: 14/16/20/28; weights 400/600 — `.btn` legacy weight inherited, not re-declared) | `src/styles.css`, existing chat/settings/cardio components; 04-UI-SPEC |
 | Existing global classes (`.btn*`, `.history-item*`, `.form-group`, `.info-note`, `.toggle-row`, `.empty-state`) | `src/styles.css:54–222`, `settings-ai.component.ts` styles |
 | Standalone components only; no new global CSS for chat/badge surfaces; banner styles in `app.component.css` | CLAUDE.md "Component Pattern" + Phase 1/3/4 conventions |
 | `takeUntilDestroyed(destroyRef)` on new subscriptions (multi-tab listener, edit-mode, archival load) | CLAUDE.md; STATE.md "Pattern 2 Form A" |
