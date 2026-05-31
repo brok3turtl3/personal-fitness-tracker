@@ -1,4 +1,4 @@
-import { Component, DestroyRef, OnInit, inject } from '@angular/core';
+import { Component, DestroyRef, ElementRef, OnInit, ViewChild, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
@@ -23,15 +23,22 @@ import { ErrorStateComponent } from '../../shared/error-state.component';
   template: `
     <div class="page-container">
       <h1>Health Readings</h1>
-      
-      <!-- Add Reading Form -->
-      <form [formGroup]="readingForm" (ngSubmit)="onSubmit()" class="readings-form" aria-label="Add health reading form">
+
+      <!-- Edit-mode announce (a11y: mode change is spoken, not color-only) -->
+      <p class="sr-status" role="status" aria-live="polite">{{ editStatus }}</p>
+
+      <!-- Add / Edit Reading Form -->
+      <form [formGroup]="readingForm" (ngSubmit)="onSubmit()" class="readings-form" [attr.aria-label]="editingId ? 'Edit health reading form' : 'Add health reading form'">
+        @if (editingId) {
+          <h2 class="edit-mode-header">Editing entry</h2>
+        }
         <div class="form-row">
           <div class="form-group">
             <label for="date">Date & Time *</label>
-            <input 
-              type="datetime-local" 
-              id="date" 
+            <input
+              type="datetime-local"
+              id="date"
+              #firstField
               formControlName="date"
               aria-label="Reading date and time"
               aria-required="true"
@@ -45,12 +52,13 @@ import { ErrorStateComponent } from '../../shared/error-state.component';
 
           <div class="form-group">
             <label for="readingType">Reading Type *</label>
-            <select 
-              id="readingType" 
+            <select
+              id="readingType"
               formControlName="readingType"
               (change)="onTypeChange()"
               aria-label="Health reading type"
               aria-required="true"
+              [attr.disabled]="editingId ? '' : null"
               [attr.aria-invalid]="isFieldInvalid('readingType')"
               [class.invalid]="isFieldInvalid('readingType')"
             >
@@ -195,19 +203,32 @@ import { ErrorStateComponent } from '../../shared/error-state.component';
         }
 
         <div class="form-actions">
-          <button 
-            type="submit" 
-            class="btn btn-primary" 
+          <button
+            type="submit"
+            class="btn btn-primary"
             [disabled]="!isFormValid() || isSubmitting"
             [attr.aria-busy]="isSubmitting"
-            aria-label="Add health reading"
+            [attr.aria-label]="editingId ? 'Save changes' : 'Add health reading'"
           >
             @if (isSubmitting) {
               Saving...
+            } @else if (editingId) {
+              Save changes
             } @else {
               Add Reading
             }
           </button>
+          @if (editingId) {
+            <button
+              type="button"
+              class="btn btn-secondary"
+              (click)="onCancelEdit()"
+              [disabled]="isSubmitting"
+              aria-label="Discard changes and stop editing this entry"
+            >
+              Discard changes
+            </button>
+          }
         </div>
       </form>
 
@@ -236,6 +257,15 @@ import { ErrorStateComponent } from '../../shared/error-state.component';
                   </span>
                   <div class="history-item-actions">
                     <span class="history-item-value">{{ formatReadingValue(reading) }}</span>
+                    <button
+                      type="button"
+                      class="btn btn-secondary btn-sm"
+                      [id]="'edit-btn-' + reading.id"
+                      (click)="onEdit(reading)"
+                      [attr.aria-label]="'Edit this ' + getTypeLabel(reading.type).toLowerCase() + ' reading'"
+                    >
+                      Edit
+                    </button>
                     <button
                       type="button"
                       class="btn btn-danger btn-sm"
@@ -361,12 +391,33 @@ import { ErrorStateComponent } from '../../shared/error-state.component';
       margin: 0;
     }
 
+    .edit-mode-header {
+      font-size: 1.25rem;
+      font-weight: 600;
+      line-height: 1.2;
+      color: #2c3e50;
+      margin: 0 0 1rem 0;
+    }
+
+    .sr-status {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
     .history-item {
       padding: 1rem;
       border-bottom: 1px solid #eee;
       display: flex;
       flex-direction: column;
       gap: 0.5rem;
+      min-height: 44px;
     }
 
     .history-item:last-child {
@@ -438,6 +489,8 @@ import { ErrorStateComponent } from '../../shared/error-state.component';
 export class ReadingsPageComponent implements OnInit {
   private destroyRef = inject(DestroyRef);
 
+  @ViewChild('firstField') firstField?: ElementRef<HTMLInputElement>;
+
   readingForm: FormGroup;
   readings: HealthReading[] = [];
   readingTypes = READING_TYPES;
@@ -447,6 +500,16 @@ export class ReadingsPageComponent implements OnInit {
   isDeleting = false;
   submitError: string | null = null;
   loadError: Error | null = null;
+
+  /** Non-null when an existing reading is being edited in place (D-11). */
+  editingId: string | null = null;
+  /**
+   * The discriminant of the reading being edited. Drives the type-aware Save
+   * dispatch so a BP edit can never call the ketone update (T-05-06-04).
+   */
+  editingType: HealthReadingType | null = null;
+  /** Live-region copy announcing edit-mode transitions (a11y, not color). */
+  editStatus = '';
 
   constructor(
     private fb: FormBuilder,
@@ -586,6 +649,65 @@ export class ReadingsPageComponent implements OnInit {
     }
   }
 
+  /**
+   * Enter edit mode for an existing reading: pre-fill the right-typed form in
+   * place (D-11), wire the type-specific validators, announce, and focus the
+   * first field. Stores both id + discriminant for the type-aware Save dispatch
+   * (T-05-06-04). Non-destructive — nothing is written until Save (D-12).
+   */
+  onEdit(reading: HealthReading): void {
+    this.editingId = reading.id;
+    this.editingType = reading.type;
+    this.selectedType = reading.type;
+    this.submitError = null;
+
+    this.readingForm.reset();
+    this.readingForm.patchValue({
+      date: this.toDatetimeLocal(reading.date),
+      readingType: reading.type,
+      notes: reading.notes ?? ''
+    });
+
+    switch (reading.type) {
+      case 'blood_pressure':
+        this.readingForm.patchValue({
+          systolic: reading.systolic,
+          diastolic: reading.diastolic
+        });
+        break;
+      case 'blood_glucose':
+        this.readingForm.patchValue({ glucoseMmol: reading.glucoseMmol });
+        break;
+      case 'ketone':
+        this.readingForm.patchValue({ ketoneMmol: reading.ketoneMmol });
+        break;
+    }
+
+    this.updateValidators();
+    this.editStatus = 'Editing entry — make your changes and save.';
+    setTimeout(() => this.firstField?.nativeElement?.focus(), 0);
+  }
+
+  /**
+   * Discard an in-progress edit and restore add mode (D-11). No service write;
+   * returns focus to the originating row's Edit button.
+   */
+  onCancelEdit(): void {
+    const returnId = this.editingId;
+    this.editingId = null;
+    this.editingType = null;
+    this.selectedType = '';
+    this.submitError = null;
+    this.readingForm.reset();
+    this.updateValidators();
+    this.editStatus = 'Edit discarded — back to adding a new entry.';
+    if (returnId) {
+      setTimeout(() => {
+        document.getElementById('edit-btn-' + returnId)?.focus();
+      }, 0);
+    }
+  }
+
   onSubmit(): void {
     if (!this.isFormValid()) {
       Object.keys(this.readingForm.controls).forEach(key => {
@@ -600,10 +722,18 @@ export class ReadingsPageComponent implements OnInit {
     const formValue = this.readingForm.value;
     const date = new Date(formValue.date).toISOString();
     const notes = formValue.notes || undefined;
+    const editing = this.editingId;
+    // Pin the discriminant: in edit mode it is the row's locked type; in add
+    // mode it is the user-selected type. Either way Save dispatches by it.
+    const type = editing ? this.editingType : this.selectedType;
 
     const handleSuccess = () => {
       this.readingForm.reset();
       this.selectedType = '';
+      this.editingId = null;
+      this.editingType = null;
+      this.updateValidators();
+      this.editStatus = editing ? 'Entry updated.' : this.editStatus;
       this.loadReadings();
       this.isSubmitting = false;
     };
@@ -617,39 +747,64 @@ export class ReadingsPageComponent implements OnInit {
       }
     };
 
-    switch (this.selectedType) {
-      case 'blood_pressure':
-        this.readingsService.addBloodPressure({
+    switch (type) {
+      case 'blood_pressure': {
+        const input = {
           date,
           systolic: Number(formValue.systolic),
           diastolic: Number(formValue.diastolic),
           notes
-        })
-          .pipe(takeUntilDestroyed(this.destroyRef))
+        };
+        const op$ = editing
+          ? this.readingsService.updateBloodPressure(editing, input)
+          : this.readingsService.addBloodPressure(input);
+        op$.pipe(takeUntilDestroyed(this.destroyRef))
           .subscribe({ next: handleSuccess, error: handleError });
         break;
-      case 'blood_glucose':
-        this.readingsService.addBloodGlucose({
+      }
+      case 'blood_glucose': {
+        const input = {
           date,
           glucoseMmol: Number(formValue.glucoseMmol),
           notes
-        })
-          .pipe(takeUntilDestroyed(this.destroyRef))
+        };
+        const op$ = editing
+          ? this.readingsService.updateBloodGlucose(editing, input)
+          : this.readingsService.addBloodGlucose(input);
+        op$.pipe(takeUntilDestroyed(this.destroyRef))
           .subscribe({ next: handleSuccess, error: handleError });
         break;
-      case 'ketone':
-        this.readingsService.addKetone({
+      }
+      case 'ketone': {
+        const input = {
           date,
           ketoneMmol: Number(formValue.ketoneMmol),
           notes
-        })
-          .pipe(takeUntilDestroyed(this.destroyRef))
+        };
+        const op$ = editing
+          ? this.readingsService.updateKetone(editing, input)
+          : this.readingsService.addKetone(input);
+        op$.pipe(takeUntilDestroyed(this.destroyRef))
           .subscribe({ next: handleSuccess, error: handleError });
         break;
+      }
       default:
         this.isSubmitting = false;
         return;
     }
+  }
+
+  /**
+   * Convert a stored ISO 8601 timestamp to the local `YYYY-MM-DDTHH:mm`
+   * string a `<input type="datetime-local">` expects when pre-filling.
+   */
+  private toDatetimeLocal(iso: string): string {
+    const d = new Date(iso);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return (
+      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+      `T${pad(d.getHours())}:${pad(d.getMinutes())}`
+    );
   }
 
   isFieldInvalid(fieldName: string): boolean {
