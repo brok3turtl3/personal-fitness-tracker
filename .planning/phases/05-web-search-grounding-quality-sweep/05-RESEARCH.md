@@ -435,16 +435,16 @@ export function toSourcesList(cs: readonly GroundedCitation[]): GroundedCitation
 | A2 | Stryker `angular-cli` runner works without an explicit `karma.conf.js` checked in | Standard Stack | If wrong, QUAL-10 needs a `ng generate config karma` task added. Low risk — easy to add. |
 | A3 | A V6 schema migration will be required (citations/server-tool blocks persisted) | Runtime State Inventory | If the planner chooses render-time-only citations AND doesn't persist encrypted fields, multi-turn citations break instead. Recommendation stands: plan for V6. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Persist grounded citations + encrypted fields, or re-derive at render?**
+1. **Persist grounded citations + encrypted fields, or re-derive at render?** — **RESOLVED (plan 05-02).**
    - What we know: Multi-turn citation resolution *requires* `encrypted_content`/`encrypted_index` to be sent back; the renderer needs `web_search_result_location` to draw footnotes.
-   - What's unclear: Whether to store the full structured blocks (cleanest, survives reload, multi-turn-correct) vs. a slimmer persisted form.
-   - Recommendation: Persist the server-tool blocks + citations verbatim (V6 migration). Anything less risks Pitfall 1/7.
+   - Resolution: Plan **05-02** persists the `server_tool_use` / `web_search_tool_result` server-tool blocks + `TextBlock.citations` **verbatim** through `chat-block-serializer.ts` (byte-stable `encrypted_content`/`encrypted_index`, F13 round-trip spec) and ships the **V6 schema migration** (`migrateV5ToV6`) so the extended `ChatBlock` shape persists with backward compatibility. The slimmer-form option is rejected (risks Pitfall 1/7).
 
-2. **CSP `style-src` final value (A1).** Recommendation: add `style-src 'self' 'unsafe-inline'` and document it as an explicit addition to the D-15 string after verifying Angular's behavior.
+2. **CSP `style-src` final value (A1).** — **RESOLVED (plan 05-07).**
+   - Resolution: Plan **05-07** Task 2 commits `style-src 'self' 'unsafe-inline'` as an explicit addition to the D-15 CSP `<meta>` string (Angular 18 injects component `styles:[...]` inline at runtime — Pitfall 5), verified by the 05-07 e2e console-error check (no `Refused to apply inline style`) and matched against the 05-01 `index.html.csp-assertion.spec.ts` contract. `script-src` stays `'self'` (no inline-script loosening).
 
-3. **Banner stacking vs one-at-a-time (UI-SPEC Open Item 4).** Planner's call; UI contract holds either way.
+3. **Banner stacking vs one-at-a-time (UI-SPEC Open Item 4).** — **RESOLVED (plan 05-07).** Planner's call exercised in 05-07 Task 1: banners stack by severity (recovery > 95% block > multi-tab > 70% warn) with collapse-to-most-severe permitted; the UI contract holds either way.
 
 ## Environment Availability
 

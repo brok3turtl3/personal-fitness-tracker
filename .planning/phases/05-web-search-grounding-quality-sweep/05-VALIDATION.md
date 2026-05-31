@@ -2,7 +2,7 @@
 phase: 5
 slug: web-search-grounding-quality-sweep
 status: draft
-nyquist_compliant: false
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-05-31
 ---
@@ -48,7 +48,7 @@ created: 2026-05-31
 | QUAL quota | unit | 70% warn / 95% block via `navigator.storage.estimate()`; matches `QuotaExceededError` + `NS_ERROR_DOM_QUOTA_REACHED` | ⬜ pending |
 | QUAL multi-tab | integration | `storage` event triggers "data changed elsewhere" banner | ⬜ pending |
 | QUAL 401/key-rotation | unit | stale 401 surfaces rotate/re-enter prompt, not console error | ⬜ pending |
-| QUAL CSP | build/runtime | only `https://api.anthropic.com` connect-src allowed | ⬜ pending |
+| QUAL CSP | build/runtime | only `https://api.anthropic.com` connect-src allowed; `style-src 'self' 'unsafe-inline'` present (A1) | ⬜ pending |
 | QUAL a11y | axe-core | zero serious/critical violations across 8 feature pages | ⬜ pending |
 | QUAL mutation | Stryker | mutation score ≥ pinned floor on ≥1 critical service | ⬜ pending |
 
@@ -58,11 +58,12 @@ created: 2026-05-31
 
 ## Wave 0 Requirements
 
-- [ ] `web-citation-parser` test stubs + fixtures F1–F14 (web_search_tool_result / citation / error response shapes)
-- [ ] Stryker install + config (`@stryker-mutator/core` + `karma-runner`, `projectType: angular-cli`; verify `karma.conf.js` need — A2)
-- [ ] axe-core test harness wired into Karma for the 8 feature pages
-- [ ] CSP assertion test (connect-src restricted to `https://api.anthropic.com`)
-- [ ] Verify Angular 18 inline-style CSP interaction (`style-src` value — A1)
+- [ ] `web-citation-parser` test stubs + fixtures F1–F14 (web_search_tool_result / citation / error response shapes) — 05-01 Task 2
+- [ ] Stryker install + config (`@stryker-mutator/core` + `karma-runner`, `projectType: angular-cli`; verify `karma.conf.js` need — A2) — 05-01 Task 1
+- [ ] CSP assertion test (connect-src restricted to `https://api.anthropic.com`; `object-src 'none'`; `style-src 'self' 'unsafe-inline'` — A1) — 05-01 Task 3
+- [ ] Verify Angular 18 inline-style CSP interaction (`style-src` value — A1) — committed + e2e-verified in 05-07 Task 2
+
+> **NOTE (stale Wave-0 entry corrected):** "axe-core test harness wired into Karma for the 8 feature pages" was REMOVED — it is NOT a Wave-0 gap. The axe-core harness already exists from Phase 1 (`src/app/shared/a11y-test-helpers.ts` → `expectNoSeriousA11yViolations`) and the 8 feature pages already carry characterization a11y specs. The only remaining a11y work is **lifting the `color-contrast` deferral**, which is covered by **05-01 Task 3** (removes `disableRules: ['color-contrast']` from the diet/chat/charts/reports characterization specs) and finalized by **05-09 Task 3** (full pass + manual review). The CSP A1 `style-src` build/runtime check is covered by **05-07 Task 2** (committed meta tag + e2e console-error check).
 
 ---
 
@@ -71,16 +72,17 @@ created: 2026-05-31
 | Behavior | Requirement | Why Manual | Test Instructions |
 |----------|-------------|------------|-------------------|
 | Live grounded web-search round-trip with real API key | RESCH-01 | Requires real Anthropic API call + network; not run in CI | Enable web search in `/settings`, ask a research question, confirm inline footnotes cite live `https:` sources |
+| Keyboard-only navigation + visual color-contrast review across 8 pages | QUAL-08 | Keyboard traps / focus order / contrast distinguishability cannot be fully covered by axe-core | 05-09 Task 3 checkpoint — tab through all 8 pages + every interactive control; confirm no trap + state distinguishable without color |
 
 ---
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 90s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references (stale axe-core harness entry corrected — harness pre-exists from Phase 1)
+- [x] No watch-mode flags
+- [x] Feedback latency < 90s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved 2026-05-31
