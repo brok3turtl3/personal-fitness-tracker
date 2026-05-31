@@ -873,6 +873,25 @@ describe('ChatService', () => {
       expect(done.stopReason).toBe('end_turn');
     });
 
+    it('perpetual pause_turn → terminates (CR-01: pause cannot evade the cap)', async () => {
+      // The API ALWAYS returns pause_turn. Without a consecutive-pause ceiling
+      // the loop would `turn--` forever and never advance. The fix bounds
+      // consecutive pauses, so the loop MUST terminate with done(pause_turn)
+      // after a bounded number of sends — proving the billing-stop guarantee
+      // holds even under a pathological pause_turn stream.
+      mockAnthropicApi.sendMessage.and.returnValue(
+        of(message('pause_turn', [textBlock('still thinking…')])),
+      );
+
+      const events = await collect();
+
+      const done = events.find(e => e.kind === 'done') as { kind: 'done'; stopReason: string };
+      expect(done).toBeTruthy();
+      expect(done.stopReason).toBe('pause_turn');
+      // Bounded number of sends — provably finite (3 consecutive pauses ceiling).
+      expect(mockAnthropicApi.sendMessage).toHaveBeenCalledTimes(3);
+    });
+
     it('tool_use (query_*) → dispatches, appends tool_result in a USER turn, re-calls', async () => {
       let call = 0;
       let secondTurnMessages: Array<{ role: string; content: Array<{ type: string; tool_use_id?: string }> }> = [];

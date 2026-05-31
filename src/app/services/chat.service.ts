@@ -306,6 +306,14 @@ export class ChatService {
           const tools = this.toolRegistry.definitions();
           const system = await firstValueFrom(this.fitnessContext.buildSystemPrompt());
 
+          // CR-01: pause_turn must NEVER defeat the maxAgentTurns billing cap.
+          // A perpetual pause_turn stream (transient API condition / future API
+          // change) would otherwise keep `turn--`-ing forever. Track consecutive
+          // pauses and treat an excess as a terminal condition so the loop is
+          // GUARANTEED to terminate.
+          let pauseCount = 0;
+          const MAX_CONSECUTIVE_PAUSES = 3;
+
           // Build the working message list from persisted ChatBlock[] via the
           // Phase 3 serializer (REUSE — tool_result→user placement already solved).
           const conversation = await firstValueFrom(this.getConversation(conversationId));
@@ -363,11 +371,24 @@ export class ChatService {
                 subscriber.complete();
                 return;
               case 'pause_turn':
+                // CR-01: bound the number of consecutive pauses so a perpetual
+                // pause_turn stream cannot evade the maxAgentTurns cap. Once the
+                // ceiling is hit, persist what was gathered and terminate
+                // (mirrors the terminal-stop path) rather than re-sending again.
+                if (++pauseCount >= MAX_CONSECUTIVE_PAUSES) {
+                  await this.persistAssistantBlocks(conversationId, assistantBlocks);
+                  subscriber.next({ kind: 'done', stopReason: 'pause_turn' });
+                  subscriber.complete();
+                  return;
+                }
                 // Re-send the SAME messages unmodified (the paused assistant
                 // turn is already pushed); do NOT count this against the cap.
                 turn--;
                 continue;
               case 'tool_use':
+                // A real tool turn means progress — reset the pause streak so
+                // only CONSECUTIVE pauses count toward the ceiling.
+                pauseCount = 0;
                 break;
               default:
                 await this.persistAssistantBlocks(conversationId, assistantBlocks);
