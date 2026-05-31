@@ -107,6 +107,20 @@ describe('ToolRegistryService', () => {
     expect(service.isWriteProposal('some_future_read_tool')).toBeFalse();
   });
 
+  it('Phase 5 (D-02): web_search is read-only — isWriteProposal("web_search") is false', () => {
+    // The web_search server tool is read-only; it must NEVER sit in the
+    // write-proposal allow-list (it would otherwise surface a pending pill).
+    expect(service.isWriteProposal('web_search')).toBeFalse();
+  });
+
+  it('Phase 5 (D-02): web_search is NOT a dispatchable client executor', () => {
+    // Anthropic runs the server tool; the client has no executor for it, so it
+    // is never registered and dispatch would throw "Unknown tool" — the loop
+    // never reaches that path (its dispatch filter is b.type === "tool_use").
+    expect(service.has('web_search')).toBeFalse();
+    expect(service.definitions().some(d => d.name === 'web_search')).toBeFalse();
+  });
+
   it('dispatch("query_weight_entries", { from, to }) returns a string', async () => {
     const result = await service.dispatch('query_weight_entries', {
       from: '2026-01-01',

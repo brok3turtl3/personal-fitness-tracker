@@ -63,6 +63,16 @@ export class ToolRegistryService {
    * absent, so they default to non-write and auto-execute. Keeping this an
    * explicit allow-list (rather than a `query_*` deny-list) means a new read
    * tool can never accidentally bypass the pending-pill gate.
+   *
+   * Phase 5 (D-02): the `web_search` server tool is DELIBERATELY ABSENT here
+   * AND never registered as a dispatchable executor. Anthropic executes it
+   * server-side and returns the result inline in the same assistant turn — the
+   * client renders it (render-only, chat.service.ts) and NEVER calls
+   * `dispatch('web_search', …)`. It is read-only, so `isWriteProposal('web_search')`
+   * is false by absence; and because it has no executor, `has('web_search')` is
+   * false and `dispatch('web_search', …)` would throw "Unknown tool" — the loop
+   * never reaches that path because its dispatch filter is `b.type === 'tool_use'`,
+   * which a `server_tool_use` block is structurally not.
    */
   private static readonly WRITE_PROPOSAL_TOOLS: ReadonlySet<string> = new Set([
     'memory',

@@ -23,6 +23,14 @@ import { MemoryToolExecutor } from './memory-tool-executor.service';
 import { MemoryStoreService } from './memory-store.service';
 import { PendingApprovalService } from './pending-approval.service';
 import { toAnthropicContent } from './chat-block-serializer';
+import {
+  F9_PAUSED,
+  F9_RESUME,
+  F10,
+  F11,
+  F12_TOO_MANY,
+  F12_QUERY_LONG,
+} from './web-citation-parser.fixtures';
 
 /** Spec helper: extract joined text from a ChatMessage's blocks (D-15). */
 function textOf(msg: ChatMessage): string {
@@ -79,8 +87,17 @@ describe('ChatService', () => {
     mockStorageService.loadArchivedMessages.and.returnValue([]);
     mockStorageService.hasArchivedMessages.and.returnValue(false);
 
-    mockAnthropicApi = jasmine.createSpyObj('AnthropicApiService', ['sendMessage', 'countTokens']);
+    mockAnthropicApi = jasmine.createSpyObj('AnthropicApiService', ['sendMessage', 'countTokens', 'buildWebSearchTool']);
     mockAnthropicApi.sendMessage.and.returnValue(of(mockApiResponse));
+    // Phase 5: default tool settings have enableWebSearch=false → null def (no
+    // web-search tool appended). Specs that exercise web-search responses drive
+    // the loop via canned F* fixtures regardless of the tool def.
+    mockAnthropicApi.buildWebSearchTool.and.callFake(
+      (s: { enableWebSearch: boolean; webSearchMaxUses: number }) =>
+        s.enableWebSearch
+          ? ({ type: 'web_search_20250305', name: 'web_search', max_uses: s.webSearchMaxUses ?? 3 } as never)
+          : null,
+    );
     // Under TOKEN_WINDOW_SIZE → the loop's countTokens-driven window check is a
     // no-op in these specs (window/summarize decision driven by countTokens, D-15).
     mockAnthropicApi.countTokens.and.returnValue(of(500));
@@ -1054,6 +1071,137 @@ describe('ChatService', () => {
       });
 
       await expectAsync(collect()).toBeRejectedWithError('boom');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // runAgenticLoop — Phase 5 (Plan 05-05 Task 2): web-search server tool is
+  // RENDER-ONLY (E3), never dispatched, never answered with a tool_result;
+  // pause_turn is live + turn-safe; HTTP-200 error union is honest + no retry
+  // (E4). Drives the loop with the F9–F12 web-citation-parser fixtures.
+  // ---------------------------------------------------------------------------
+  describe('runAgenticLoop (Phase 5 — web-search server tool E3/E4)', () => {
+    const CONV_ID = 'ws-loop-conv';
+
+    function seedConv(): void {
+      const conv: ChatConversation = {
+        id: CONV_ID,
+        title: 'WS Loop',
+        messages: [{
+          id: 'u1',
+          role: 'user',
+          blocks: [{ type: 'text', text: 'What do recent guidelines say?' }],
+          tokenEstimate: 6,
+          createdAt: '2026-05-31T10:00:00.000Z',
+        }],
+        summarizedMessageCount: 0,
+        createdAt: '2026-05-31T10:00:00.000Z',
+        updatedAt: '2026-05-31T10:00:00.000Z',
+      };
+      mockAppData = { ...mockAppData, chatConversations: [conv] };
+      mockStorageService.getData.and.callFake(() => of(mockAppData));
+    }
+
+    function collect(): Promise<ChatTurnEvent[]> {
+      return new Promise<ChatTurnEvent[]>((resolve, reject) => {
+        const events: ChatTurnEvent[] = [];
+        service.runAgenticLoop(CONV_ID, 'sk-ant-test-key').subscribe({
+          next: e => events.push(e),
+          error: reject,
+          complete: () => resolve(events),
+        });
+      });
+    }
+
+    beforeEach(() => seedConv());
+
+    it('server_tool_use + web_search_tool_result turn (F10) → 0 dispatch, 0 tool_result posted; emits started+results (E3)', async () => {
+      const sentMessages: Array<Array<{ role: string; content: Array<{ type: string }> }>> = [];
+      mockAnthropicApi.sendMessage.and.callFake((_key, params) => {
+        sentMessages.push(JSON.parse(JSON.stringify(params.messages)));
+        return of(F10);
+      });
+
+      const events = await collect();
+
+      // Render-only: the server tool is NEVER dispatched.
+      expect(mockToolRegistry.dispatch).not.toHaveBeenCalled();
+      // NO tool_result block was posted back in any user turn.
+      const anyToolResultPosted = sentMessages.some(msgs =>
+        msgs.some(m => m.role === 'user' && m.content.some(b => b.type === 'tool_result')),
+      );
+      expect(anyToolResultPosted).toBeFalse();
+      // Live events: started (with query) + results (with count).
+      const started = events.find(e => e.kind === 'web_search_started') as { kind: 'web_search_started'; query: string };
+      expect(started).toBeTruthy();
+      expect(started.query).toBe('clean server tool turn');
+      const results = events.find(e => e.kind === 'web_search_results') as { kind: 'web_search_results'; count: number };
+      expect(results).toBeTruthy();
+      expect(results.count).toBe(1);
+      // The turn ends end_turn → completes normally (one send).
+      const done = events.find(e => e.kind === 'done') as { kind: 'done'; stopReason: string };
+      expect(done.stopReason).toBe('end_turn');
+      expect(mockAnthropicApi.sendMessage).toHaveBeenCalledTimes(1);
+    });
+
+    it('pause_turn (F9_PAUSED → F9_RESUME) → resumes re-sending the paused turn unmodified, no maxAgentTurns decrement (E3)', async () => {
+      let call = 0;
+      const sentMessages: Array<Array<{ role: string }>> = [];
+      mockAnthropicApi.sendMessage.and.callFake((_key, params) => {
+        sentMessages.push(JSON.parse(JSON.stringify(params.messages)));
+        call++;
+        return of(call === 1 ? F9_PAUSED : F9_RESUME);
+      });
+
+      const events = await collect();
+
+      // Exactly two sends: the paused turn + the resume.
+      expect(mockAnthropicApi.sendMessage).toHaveBeenCalledTimes(2);
+      // Resume re-sends the prior messages PLUS exactly the paused assistant turn.
+      const first = sentMessages[0];
+      const second = sentMessages[1];
+      expect(second.length).toBe(first.length + 1);
+      expect(second[second.length - 1].role).toBe('assistant');
+      // NO synthetic tool_result injected for the server tool on resume.
+      const noToolResult = (sentMessages[1] as Array<{ role: string; content: Array<{ type: string }> }>).every(
+        m => !(m.role === 'user' && m.content.some(b => b.type === 'tool_result')),
+      );
+      expect(noToolResult).toBeTrue();
+      // Server tool never dispatched across the pause/resume.
+      expect(mockToolRegistry.dispatch).not.toHaveBeenCalled();
+      const done = events.find(e => e.kind === 'done') as { kind: 'done'; stopReason: string };
+      expect(done.stopReason).toBe('end_turn');
+    });
+
+    it('error union (F11 max_uses_exceeded) → emits web_search_error(code), no retry, no throw (E4)', async () => {
+      mockAnthropicApi.sendMessage.and.returnValue(of(F11));
+
+      const events = await collect();
+
+      const err = events.find(e => e.kind === 'web_search_error') as { kind: 'web_search_error'; code: string };
+      expect(err).toBeTruthy();
+      expect(err.code).toBe('max_uses_exceeded');
+      // No retry: the errored turn ends end_turn → exactly one send, no re-call.
+      expect(mockAnthropicApi.sendMessage).toHaveBeenCalledTimes(1);
+      expect(mockToolRegistry.dispatch).not.toHaveBeenCalled();
+      // Completed cleanly (no throw to the error channel).
+      const done = events.find(e => e.kind === 'done');
+      expect(done).toBeTruthy();
+    });
+
+    it('error union (F12 too_many_requests) → web_search_error("too_many_requests")', async () => {
+      mockAnthropicApi.sendMessage.and.returnValue(of(F12_TOO_MANY));
+      const events = await collect();
+      const err = events.find(e => e.kind === 'web_search_error') as { kind: 'web_search_error'; code: string };
+      expect(err.code).toBe('too_many_requests');
+      expect(mockAnthropicApi.sendMessage).toHaveBeenCalledTimes(1);
+    });
+
+    it('error union (F12 query_too_long) → web_search_error("query_too_long")', async () => {
+      mockAnthropicApi.sendMessage.and.returnValue(of(F12_QUERY_LONG));
+      const events = await collect();
+      const err = events.find(e => e.kind === 'web_search_error') as { kind: 'web_search_error'; code: string };
+      expect(err.code).toBe('query_too_long');
     });
   });
 
