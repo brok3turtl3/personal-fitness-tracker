@@ -220,4 +220,38 @@ describe('SettingsAiComponent', () => {
       disableRules: ['color-contrast'],
     });
   });
+
+  // ── D-06: webSearchMaxUses cost-context helper ─────────────────────────────
+
+  it('renders the LOCKED webSearchMaxUses cost-context helper near the field (D-06)', async () => {
+    const spies = makeSpies();
+    const fixture = await configureBed(spies);
+    const el: HTMLElement = fixture.nativeElement;
+
+    const helper = el.querySelector('#websearch-max-helper') as HTMLElement;
+    expect(helper).toBeTruthy();
+    expect(helper.textContent).toContain(
+      'Each web search adds to the cost of a message. This caps how many the AI can run per request.',
+    );
+    // The helper describes the field (a11y wiring).
+    const field = el.querySelector('#webSearchMaxUses') as HTMLElement;
+    expect(field.getAttribute('aria-describedby')).toBe('websearch-max-helper');
+  });
+
+  it('webSearchMaxUses field keeps the min=0 max=10 bound (D-06 confirms, no new control)', async () => {
+    const spies = makeSpies();
+    const fixture = await configureBed(spies);
+    const field = fixture.nativeElement.querySelector('#webSearchMaxUses') as HTMLInputElement;
+
+    expect(field.getAttribute('min')).toBe('0');
+    expect(field.getAttribute('max')).toBe('10');
+
+    const c = fixture.componentInstance;
+    c.toolSettingsForm.get('webSearchMaxUses')?.setValue(11);
+    expect(c.toolSettingsForm.get('webSearchMaxUses')?.errors?.['max']).toBeTruthy();
+    c.toolSettingsForm.get('webSearchMaxUses')?.setValue(-1);
+    expect(c.toolSettingsForm.get('webSearchMaxUses')?.errors?.['min']).toBeTruthy();
+    c.toolSettingsForm.get('webSearchMaxUses')?.setValue(3);
+    expect(c.toolSettingsForm.get('webSearchMaxUses')?.valid).toBeTrue();
+  });
 });

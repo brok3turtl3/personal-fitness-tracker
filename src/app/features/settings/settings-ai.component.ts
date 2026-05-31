@@ -169,7 +169,9 @@ import { ErrorStateComponent } from '../../shared/error-state.component';
               min="0"
               max="10"
               aria-label="Maximum web searches per request"
+              aria-describedby="websearch-max-helper"
             >
+            <p id="websearch-max-helper" class="form-helper toggle-helper websearch-cost-helper">Each web search adds to the cost of a message. This caps how many the AI can run per request.</p>
           </div>
         </section>
 
@@ -239,6 +241,11 @@ import { ErrorStateComponent } from '../../shared/error-state.component';
 
     .toggle-helper {
       margin: 0.25rem 0 0 1.5rem;
+    }
+
+    /* Field-level cost helper sits under the input, not indented like a toggle. */
+    .websearch-cost-helper {
+      margin: 0.375rem 0 0;
     }
 
     .form-group {

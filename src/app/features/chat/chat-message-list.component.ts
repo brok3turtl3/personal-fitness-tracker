@@ -1,5 +1,6 @@
-import { Component, ElementRef, EventEmitter, Input, OnChanges, Output, ViewChild } from '@angular/core';
+import { Component, ElementRef, EventEmitter, Input, OnChanges, Output, ViewChild, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { StorageService } from '../../services/storage.service';
 import {
   ChatMessage,
   ClaimSpan,
@@ -55,7 +56,21 @@ export function isLinkableCitation(citation: { type?: string } | undefined | nul
   imports: [CommonModule, PendingPillComponent],
   template: `
     <div class="message-list" #scrollContainer>
-      @for (msg of messages; track msg.id) {
+      @if (canLoadEarlier()) {
+        <div class="load-earlier-row">
+          <button
+            type="button"
+            class="btn-secondary load-earlier-btn"
+            aria-label="Load earlier archived messages in this conversation"
+            [disabled]="loadingEarlier"
+            (click)="onLoadEarlier()"
+          >Load earlier messages</button>
+        </div>
+      }
+      @if (loadingEarlier) {
+        <div class="load-earlier-status" role="status" aria-live="polite">Loading earlier messages…</div>
+      }
+      @for (msg of renderedMessages(); track msg.id) {
         <div class="message" [class.user]="msg.role === 'user'" [class.assistant]="msg.role === 'assistant'">
           <div class="message-role">{{ msg.role === 'user' ? 'You' : 'AI Assistant' }}</div>
           <div class="message-content">@for (block of msg.blocks; track $index; let $blockIdx = $index) {
@@ -321,6 +336,30 @@ export function isLinkableCitation(citation: { type?: string } | undefined | nul
     }
     .search-result-item { margin: 0.125rem 0; }
 
+    .load-earlier-row {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 0.5rem;
+    }
+    .load-earlier-btn {
+      min-height: 44px;
+      padding: 0.5rem 1rem;
+      background: #ecf0f1;
+      color: #2c3e50;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.875rem;
+    }
+    .load-earlier-btn:hover:not(:disabled) { background: #dfe6e9; }
+    .load-earlier-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .load-earlier-status {
+      text-align: center;
+      font-size: 0.875rem;
+      color: #555;
+      margin-bottom: 0.5rem;
+    }
+
     .message-time {
       font-size: 0.7rem;
       opacity: 0.6;
@@ -358,6 +397,12 @@ export class ChatMessageListComponent implements OnChanges {
   @Input() messages: ChatMessage[] = [];
   @Input() loading = false;
   /**
+   * The active conversation id — drives the lazy archival affordance (QUAL-05,
+   * D-13). When the conversation changes, any already-loaded earlier messages
+   * are dropped so we never show a different conversation's archive.
+   */
+  @Input() conversationId?: string;
+  /**
    * Re-emitted from inner pending-pill (approve|discard|edit) outputs. The
    * parent chat-page dispatches this to chat.service.updateMessageBlock with
    * the appropriate patch (Plan 03-05 Task 3; D-11).
@@ -369,6 +414,21 @@ export class ChatMessageListComponent implements OnChanges {
     editedText?: string;
   }>();
   @ViewChild('scrollContainer') scrollContainer!: ElementRef<HTMLDivElement>;
+
+  private storageService = inject(StorageService);
+
+  /**
+   * Archived (pre-summary) messages lazy-loaded on demand via StorageService
+   * (QUAL-05, D-13). Prepended to the rendered list. Empty until the user
+   * reaches for "Load earlier messages". Reset when the conversation changes.
+   */
+  private archivedMessages: ChatMessage[] = [];
+  /** True only while a load is in flight (announced + disables the button). */
+  loadingEarlier = false;
+  /** Conversation id the current archive belongs to (guards a stale archive). */
+  private archivedFor?: string;
+  /** Set once a load has run so a now-empty archive hides the button. */
+  private earlierLoaded = false;
 
   /**
    * Memoized `parseClaimSpans` results, keyed by `${messageId}#${blockIndex}#${text}`.
@@ -397,7 +457,58 @@ export class ChatMessageListComponent implements OnChanges {
     // collisions are impossible, but this bounds the cache to live blocks).
     this.spanCache.clear();
     this.citationCache.clear();
+    // Conversation changed ⇒ drop any earlier-loaded archive so we never show
+    // a different conversation's messages (D-13 archival is per-conversation).
+    if (this.conversationId !== this.archivedFor) {
+      this.archivedMessages = [];
+      this.archivedFor = this.conversationId;
+      this.earlierLoaded = false;
+    }
     setTimeout(() => this.scrollToBottom(), 0);
+  }
+
+  // ── Lazy chat archival affordance (QUAL-05, D-13) ───────────────────────────
+
+  /** Messages to render: lazily-loaded archive (oldest-first) then the live slice. */
+  renderedMessages(): ChatMessage[] {
+    return this.archivedMessages.length
+      ? [...this.archivedMessages, ...this.messages]
+      : this.messages;
+  }
+
+  /**
+   * Show the affordance only when an archive key exists for this conversation
+   * and we have not yet exhausted it. A cheap, never-throwing presence check
+   * through the StorageService chokepoint (D-13).
+   */
+  canLoadEarlier(): boolean {
+    if (!this.conversationId || this.loadingEarlier || this.earlierLoaded) return false;
+    return this.storageService.hasArchivedMessages(this.conversationId);
+  }
+
+  /**
+   * Lazy-load this conversation's archived messages and prepend them. Preserves
+   * the scroll anchor (the offset from the bottom) so the user is NOT jumped to
+   * the top abruptly (UI-SPEC a11y). Loads through StorageService (the storage
+   * chokepoint); never throws (loadArchivedMessages is fail-soft).
+   */
+  onLoadEarlier(): void {
+    if (!this.conversationId || this.loadingEarlier) return;
+    this.loadingEarlier = true;
+
+    const el = this.scrollContainer?.nativeElement;
+    const prevFromBottom = el ? el.scrollHeight - el.scrollTop : 0;
+
+    const earlier = this.storageService.loadArchivedMessages(this.conversationId);
+    this.archivedMessages = earlier;
+    this.earlierLoaded = true;
+    this.loadingEarlier = false;
+
+    // Restore the scroll anchor on the next frame so prepended content does not
+    // yank the viewport to the top.
+    setTimeout(() => {
+      if (el) el.scrollTop = el.scrollHeight - prevFromBottom;
+    }, 0);
   }
 
   /**

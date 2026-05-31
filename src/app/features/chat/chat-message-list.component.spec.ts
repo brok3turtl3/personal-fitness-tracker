@@ -23,6 +23,7 @@ import {
 import { toGroundedCitations } from '../../services/web-citation-parser';
 import { fromAnthropicMessage } from '../../services/chat-block-serializer';
 import { F1, F3, F6 } from '../../services/web-citation-parser.fixtures';
+import { StorageService } from '../../services/storage.service';
 import { expectNoSeriousA11yViolations } from '../../shared/a11y-test-helpers';
 import type { Message } from '@anthropic-ai/sdk/resources/messages';
 
@@ -768,5 +769,113 @@ describe('ChatMessageListComponent — E1 adversarial citation-link gate (RESCH-
       { type: 'char_location', url: 'https://example.org/y', title: 'Y', cited_text: 'y' },
     ] as never;
     expect(toGroundedCitations(nonWebSearch)).toEqual([]);
+  });
+});
+
+// ── Lazy chat archival affordance (QUAL-05, D-13, Task 4) ────────────────────
+
+describe('ChatMessageListComponent — load earlier archived messages (QUAL-05/D-13)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  function makeStorage(): jasmine.SpyObj<StorageService> {
+    return jasmine.createSpyObj<StorageService>('StorageService', [
+      'hasArchivedMessages',
+      'loadArchivedMessages',
+    ]);
+  }
+
+  async function createWithStorage(
+    storage: jasmine.SpyObj<StorageService>,
+    conversationId: string | undefined,
+    messages: ChatMessage[],
+  ): Promise<ComponentFixture<ChatMessageListComponent>> {
+    await TestBed.configureTestingModule({
+      imports: [ChatMessageListComponent],
+      providers: [{ provide: StorageService, useValue: storage }],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(ChatMessageListComponent);
+    fixture.componentInstance.messages = messages;
+    fixture.componentInstance.conversationId = conversationId;
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  it('renders the "Load earlier messages" button only when an archive key exists', async () => {
+    const storage = makeStorage();
+    storage.hasArchivedMessages.and.returnValue(true);
+    storage.loadArchivedMessages.and.returnValue([]);
+
+    const fixture = await createWithStorage(storage, 'conv-1', [
+      makeMsg('user', [{ type: 'text', text: 'live' }]),
+    ]);
+    const btn = fixture.nativeElement.querySelector('.load-earlier-btn') as HTMLButtonElement;
+    expect(btn).toBeTruthy();
+    expect(btn.textContent).toContain('Load earlier messages');
+    expect(btn.getAttribute('aria-label')).toBe(
+      'Load earlier archived messages in this conversation',
+    );
+  });
+
+  it('hides the button when no archive key exists', async () => {
+    const storage = makeStorage();
+    storage.hasArchivedMessages.and.returnValue(false);
+    storage.loadArchivedMessages.and.returnValue([]);
+
+    const fixture = await createWithStorage(storage, 'conv-1', [
+      makeMsg('user', [{ type: 'text', text: 'live' }]),
+    ]);
+    expect(fixture.nativeElement.querySelector('.load-earlier-btn')).toBeFalsy();
+  });
+
+  it('clicking lazy-loads through StorageService and PREPENDS archived messages', async () => {
+    const storage = makeStorage();
+    storage.hasArchivedMessages.and.returnValue(true);
+    const archived = [
+      makeMsg('user', [{ type: 'text', text: 'OLDEST archived question' }]),
+      makeMsg('assistant', [{ type: 'text', text: 'archived answer' }]),
+    ];
+    storage.loadArchivedMessages.and.returnValue(archived);
+
+    const live = makeMsg('user', [{ type: 'text', text: 'most recent live message' }]);
+    const fixture = await createWithStorage(storage, 'conv-1', [live]);
+
+    const btn = fixture.nativeElement.querySelector('.load-earlier-btn') as HTMLButtonElement;
+    btn.click();
+    fixture.detectChanges();
+
+    expect(storage.loadArchivedMessages).toHaveBeenCalledWith('conv-1');
+    // Archived render oldest-first ABOVE the live slice.
+    const rendered = fixture.componentInstance.renderedMessages();
+    expect(rendered.length).toBe(3);
+    expect(rendered[0].id).toBe(archived[0].id);
+    expect(rendered[2].id).toBe(live.id);
+    // The archived text is now in the DOM.
+    expect(fixture.nativeElement.textContent).toContain('OLDEST archived question');
+  });
+
+  it('hides the button after a load so the archive is not re-fetched', async () => {
+    const storage = makeStorage();
+    storage.hasArchivedMessages.and.returnValue(true);
+    storage.loadArchivedMessages.and.returnValue([
+      makeMsg('user', [{ type: 'text', text: 'archived' }]),
+    ]);
+
+    const fixture = await createWithStorage(storage, 'conv-1', []);
+    (fixture.nativeElement.querySelector('.load-earlier-btn') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.load-earlier-btn')).toBeFalsy();
+  });
+
+  it('expectNoSeriousA11yViolations with the load-earlier affordance present', async () => {
+    const storage = makeStorage();
+    storage.hasArchivedMessages.and.returnValue(true);
+    storage.loadArchivedMessages.and.returnValue([]);
+
+    const fixture = await createWithStorage(storage, 'conv-1', [
+      makeMsg('user', [{ type: 'text', text: 'live' }]),
+    ]);
+    const btn = fixture.nativeElement.querySelector('.load-earlier-btn') as HTMLElement;
+    await expectNoSeriousA11yViolations(btn);
   });
 });

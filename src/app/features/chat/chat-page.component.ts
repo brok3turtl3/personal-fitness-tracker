@@ -55,6 +55,7 @@ import { ErrorStateComponent } from '../../shared/error-state.component';
 
             <app-chat-message-list
               [messages]="activeConversation.messages"
+              [conversationId]="activeConversation.id"
               [loading]="sending"
               (blockAction)="onBlockAction($event)"
             />
