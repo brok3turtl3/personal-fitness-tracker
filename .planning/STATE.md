@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: ready_to_plan
-last_updated: "2026-05-31T18:44:21.120Z"
+last_updated: "2026-05-31T19:41:37.150Z"
 progress:
   total_phases: 5
   completed_phases: 4
@@ -33,9 +33,9 @@ progress:
 Phase: 04 (agentic-loop-citation-ui) — ALL PLANS LANDED (6/6); ROADMAP phase 04 → Complete
 Plan: Wave 1 done (01–03) + 04-04 (agentic loop) + 04-05 (citation UI) + 04-06 (chat-page loop orchestration) done
 **Phase:** 5
-**Plan:** Not started
+**Plan:** Not started — context gathered (05-CONTEXT.md committed at 27e0a67)
 **Status:** Ready to plan
-**Resume file:** None
+**Resume file:** .planning/phases/05-web-search-grounding-quality-sweep/05-CONTEXT.md
 **Progress:** [██████████] 100%
 
 **Wave structure:**
@@ -153,6 +153,10 @@ Plan: Wave 1 done (01–03) + 04-04 (agentic loop) + 04-05 (citation UI) + 04-06
 ### Blockers
 
 None.
+
+### Recent Sessions (Phase 05)
+
+- **2026-05-31** — `/gsd-discuss-phase 5`. Gathered Phase 5 context (05-CONTEXT.md + 05-DISCUSSION-LOG.md committed at 27e0a67). User delegated ALL gray areas + todo-fold decisions to Claude with the standing north star "best practices, established codebase patterns, focus on UX" (same as Phase 4). 14 decisions locked (D-01..D-15): web_search_20250305 stable (D-01); server-tool handling not client dispatch (D-02); grounded citations as inline footnotes + per-message Sources list reusing the Phase 4 `isLinkableCitation` allow-list (D-03); "from research · grounded · linked" source-axis upgrade of Phase 4 D-12, un-grounded stays plain text (D-04); live in-stream search row (D-05); `webSearchMaxUses` default 3 surfaced in /settings (D-06); no domain allow/block list (D-07); when-to-search is AI-SPEC (D-08); adversarial citation test extended across web-on/off matrix (D-09); meal-note redaction = per-entry free-text notes not the kcal line + AI-SPEC discourages PII in search queries (D-10, folded CR-04 todo); CRUD edit reuses the per-page entry form pre-filled, not a modal (D-11); edits preserve id+createdAt, refresh updatedAt, re-validate (D-12); chat archival = lazy-loaded per-conversation key through StorageService (D-13); 95% block-write prompt offers archive/delete not export (D-14); QUAL-01/04/06/07/08/10 handed straight to planner per REQUIREMENTS acceptance criteria (D-15). Folded todos: IN-01 chat block-action errors → QUAL-09. Reviewed-not-folded: Phase 4 visual UAT → stays `/gsd-verify-work 4`. STATE.md updated manually (state.record-session regressed the progress counters — known handler incompatibility with this narrative STATE.md). Ready for `/gsd-plan-phase 5`.
 
 ### Recent Sessions (Phase 04 execution)
 
