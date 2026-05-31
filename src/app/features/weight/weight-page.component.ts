@@ -1,4 +1,4 @@
-import { Component, DestroyRef, OnInit, inject } from '@angular/core';
+import { Component, DestroyRef, ElementRef, OnInit, ViewChild, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
@@ -16,15 +16,22 @@ import { ErrorStateComponent } from '../../shared/error-state.component';
   template: `
     <div class="page-container">
       <h1>Weight Entries</h1>
-      
-      <!-- Add Entry Form -->
-      <form [formGroup]="entryForm" (ngSubmit)="onSubmit()" class="weight-form" aria-label="Add weight entry form">
+
+      <!-- Edit-mode announce (a11y: mode change is spoken, not color-only) -->
+      <p class="sr-status" role="status" aria-live="polite">{{ editStatus }}</p>
+
+      <!-- Add / Edit Entry Form -->
+      <form [formGroup]="entryForm" (ngSubmit)="onSubmit()" class="weight-form" [attr.aria-label]="editingId ? 'Edit weight entry form' : 'Add weight entry form'">
+        @if (editingId) {
+          <h2 class="edit-mode-header">Editing entry</h2>
+        }
         <div class="form-row">
           <div class="form-group">
             <label for="date">Date & Time *</label>
-            <input 
-              type="datetime-local" 
-              id="date" 
+            <input
+              type="datetime-local"
+              id="date"
+              #firstField
               formControlName="date"
               aria-label="Entry date and time"
               aria-required="true"
@@ -92,19 +99,32 @@ import { ErrorStateComponent } from '../../shared/error-state.component';
         }
 
         <div class="form-actions">
-          <button 
-            type="submit" 
-            class="btn btn-primary" 
+          <button
+            type="submit"
+            class="btn btn-primary"
             [disabled]="entryForm.invalid || isSubmitting"
             [attr.aria-busy]="isSubmitting"
-            aria-label="Add weight entry"
+            [attr.aria-label]="editingId ? 'Save changes' : 'Add weight entry'"
           >
             @if (isSubmitting) {
               Saving...
+            } @else if (editingId) {
+              Save changes
             } @else {
               Add Entry
             }
           </button>
+          @if (editingId) {
+            <button
+              type="button"
+              class="btn btn-secondary"
+              (click)="onCancelEdit()"
+              [disabled]="isSubmitting"
+              aria-label="Discard changes and stop editing this entry"
+            >
+              Discard changes
+            </button>
+          }
         </div>
       </form>
 
@@ -131,6 +151,15 @@ import { ErrorStateComponent } from '../../shared/error-state.component';
                   <span class="history-item-value">{{ entry.weightLbs }} lbs</span>
                   <div class="history-item-actions">
                     <span class="history-item-date">{{ formatDate(entry.date) }}</span>
+                    <button
+                      type="button"
+                      class="btn btn-secondary btn-sm"
+                      [id]="'edit-btn-' + entry.id"
+                      (click)="onEdit(entry)"
+                      aria-label="Edit this weight entry"
+                    >
+                      Edit
+                    </button>
                     <button
                       type="button"
                       class="btn btn-danger btn-sm"
@@ -253,9 +282,30 @@ import { ErrorStateComponent } from '../../shared/error-state.component';
       margin: 0;
     }
 
+    .edit-mode-header {
+      font-size: 1.25rem;
+      font-weight: 600;
+      line-height: 1.2;
+      color: #2c3e50;
+      margin: 0 0 1rem 0;
+    }
+
+    .sr-status {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
     .history-item {
       padding: 1rem;
       border-bottom: 1px solid #eee;
+      min-height: 44px;
     }
 
     .history-item:last-child {
@@ -299,6 +349,8 @@ import { ErrorStateComponent } from '../../shared/error-state.component';
 export class WeightPageComponent implements OnInit {
   private destroyRef = inject(DestroyRef);
 
+  @ViewChild('firstField') firstField?: ElementRef<HTMLInputElement>;
+
   entryForm: FormGroup;
   entries: WeightEntry[] = [];
   limits = VALIDATION_LIMITS;
@@ -306,6 +358,11 @@ export class WeightPageComponent implements OnInit {
   isDeleting = false;
   submitError: string | null = null;
   loadError: Error | null = null;
+
+  /** Non-null when an existing entry is being edited in place (D-11). */
+  editingId: string | null = null;
+  /** Live-region copy announcing edit-mode transitions (a11y, not color). */
+  editStatus = '';
 
   constructor(
     private fb: FormBuilder,
@@ -370,6 +427,41 @@ export class WeightPageComponent implements OnInit {
       });
   }
 
+  /**
+   * Enter edit mode for an existing entry: pre-fill the form in place (D-11),
+   * announce the mode change, and focus the first field. Non-destructive —
+   * nothing is written until Save (D-12).
+   */
+  onEdit(entry: WeightEntry): void {
+    this.editingId = entry.id;
+    this.submitError = null;
+    this.entryForm.reset();
+    this.entryForm.patchValue({
+      date: this.toDatetimeLocal(entry.date),
+      weightLbs: entry.weightLbs,
+      notes: entry.notes ?? ''
+    });
+    this.editStatus = 'Editing entry — make your changes and save.';
+    setTimeout(() => this.firstField?.nativeElement?.focus(), 0);
+  }
+
+  /**
+   * Discard an in-progress edit and restore add mode (D-11). No service write;
+   * returns focus to the originating row's Edit button.
+   */
+  onCancelEdit(): void {
+    const returnId = this.editingId;
+    this.editingId = null;
+    this.submitError = null;
+    this.entryForm.reset();
+    this.editStatus = 'Edit discarded — back to adding a new entry.';
+    if (returnId) {
+      setTimeout(() => {
+        document.getElementById('edit-btn-' + returnId)?.focus();
+      }, 0);
+    }
+  }
+
   onSubmit(): void {
     if (this.entryForm.invalid) {
       // Mark all fields as touched to show validation errors
@@ -383,13 +475,38 @@ export class WeightPageComponent implements OnInit {
     this.submitError = null;
 
     const formValue = this.entryForm.value;
-    
+
     // Convert local datetime to ISO string
     const entryData: CreateWeightEntry = {
       date: new Date(formValue.date).toISOString(),
       weightLbs: Number(formValue.weightLbs),
       notes: formValue.notes || undefined
     };
+
+    const handleError = (err: unknown) => {
+      this.isSubmitting = false;
+      if (err instanceof WeightValidationError) {
+        this.submitError = err.errors.map(e => e.message).join(', ');
+      } else {
+        this.submitError = 'Failed to save entry. Please try again.';
+      }
+    };
+
+    if (this.editingId) {
+      this.weightService.updateEntry(this.editingId, entryData)
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe({
+          next: () => {
+            this.editingId = null;
+            this.entryForm.reset();
+            this.editStatus = 'Entry updated.';
+            this.loadEntries();
+            this.isSubmitting = false;
+          },
+          error: handleError
+        });
+      return;
+    }
 
     this.weightService.addEntry(entryData)
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -399,15 +516,21 @@ export class WeightPageComponent implements OnInit {
           this.loadEntries();
           this.isSubmitting = false;
         },
-        error: (err) => {
-          this.isSubmitting = false;
-          if (err instanceof WeightValidationError) {
-            this.submitError = err.errors.map(e => e.message).join(', ');
-          } else {
-            this.submitError = 'Failed to save entry. Please try again.';
-          }
-        }
+        error: handleError
       });
+  }
+
+  /**
+   * Convert a stored ISO 8601 timestamp to the local `YYYY-MM-DDTHH:mm`
+   * string a `<input type="datetime-local">` expects when pre-filling.
+   */
+  private toDatetimeLocal(iso: string): string {
+    const d = new Date(iso);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return (
+      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+      `T${pad(d.getHours())}:${pad(d.getMinutes())}`
+    );
   }
 
   isFieldInvalid(fieldName: string): boolean {

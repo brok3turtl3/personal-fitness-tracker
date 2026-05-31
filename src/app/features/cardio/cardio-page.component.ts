@@ -1,4 +1,4 @@
-import { Component, DestroyRef, OnInit, inject } from '@angular/core';
+import { Component, DestroyRef, ElementRef, OnInit, ViewChild, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
@@ -16,15 +16,22 @@ import { ErrorStateComponent } from '../../shared/error-state.component';
   template: `
     <div class="page-container">
       <h1>Cardio Sessions</h1>
-      
-      <!-- Add Session Form -->
-      <form [formGroup]="sessionForm" (ngSubmit)="onSubmit()" class="cardio-form" aria-label="Add cardio session form">
+
+      <!-- Edit-mode announce (a11y: mode change is spoken, not color-only) -->
+      <p class="sr-status" role="status" aria-live="polite">{{ editStatus }}</p>
+
+      <!-- Add / Edit Session Form -->
+      <form [formGroup]="sessionForm" (ngSubmit)="onSubmit()" class="cardio-form" [attr.aria-label]="editingId ? 'Edit cardio session form' : 'Add cardio session form'">
+        @if (editingId) {
+          <h2 class="edit-mode-header">Editing entry</h2>
+        }
         <div class="form-row">
           <div class="form-group">
             <label for="date">Date & Time *</label>
-            <input 
-              type="datetime-local" 
-              id="date" 
+            <input
+              type="datetime-local"
+              id="date"
+              #firstField
               formControlName="date"
               aria-label="Session date and time"
               aria-required="true"
@@ -161,19 +168,32 @@ import { ErrorStateComponent } from '../../shared/error-state.component';
         }
 
         <div class="form-actions">
-          <button 
-            type="submit" 
-            class="btn btn-primary" 
+          <button
+            type="submit"
+            class="btn btn-primary"
             [disabled]="sessionForm.invalid || isSubmitting"
             [attr.aria-busy]="isSubmitting"
-            aria-label="Add cardio session"
+            [attr.aria-label]="editingId ? 'Save changes' : 'Add cardio session'"
           >
             @if (isSubmitting) {
               Saving...
+            } @else if (editingId) {
+              Save changes
             } @else {
               Add Session
             }
           </button>
+          @if (editingId) {
+            <button
+              type="button"
+              class="btn btn-secondary"
+              (click)="onCancelEdit()"
+              [disabled]="isSubmitting"
+              aria-label="Discard changes and stop editing this entry"
+            >
+              Discard changes
+            </button>
+          }
         </div>
       </form>
 
@@ -208,6 +228,15 @@ import { ErrorStateComponent } from '../../shared/error-state.component';
                         &middot; {{ session.caloriesBurned }} kcal
                       }
                     </span>
+                    <button
+                      type="button"
+                      class="btn btn-secondary btn-sm"
+                      [id]="'edit-btn-' + session.id"
+                      (click)="onEdit(session)"
+                      aria-label="Edit this cardio session"
+                    >
+                      Edit
+                    </button>
                     <button
                       type="button"
                       class="btn btn-danger btn-sm"
@@ -333,12 +362,33 @@ import { ErrorStateComponent } from '../../shared/error-state.component';
       margin: 0;
     }
 
+    .edit-mode-header {
+      font-size: 1.25rem;
+      font-weight: 600;
+      line-height: 1.2;
+      color: #2c3e50;
+      margin: 0 0 1rem 0;
+    }
+
+    .sr-status {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
     .history-item {
       padding: 1rem;
       border-bottom: 1px solid #eee;
       display: flex;
       flex-direction: column;
       gap: 0.5rem;
+      min-height: 44px;
     }
 
     .history-item:last-child {
@@ -395,6 +445,8 @@ import { ErrorStateComponent } from '../../shared/error-state.component';
 export class CardioPageComponent implements OnInit {
   private destroyRef = inject(DestroyRef);
 
+  @ViewChild('firstField') firstField?: ElementRef<HTMLInputElement>;
+
   sessionForm: FormGroup;
   sessions: CardioSession[] = [];
   cardioTypes = CARDIO_TYPES;
@@ -403,6 +455,11 @@ export class CardioPageComponent implements OnInit {
   isDeleting = false;
   submitError: string | null = null;
   loadError: Error | null = null;
+
+  /** Non-null when an existing session is being edited in place (D-11). */
+  editingId: string | null = null;
+  /** Live-region copy announcing edit-mode transitions (a11y, not color). */
+  editStatus = '';
 
   constructor(
     private fb: FormBuilder,
@@ -476,6 +533,45 @@ export class CardioPageComponent implements OnInit {
       });
   }
 
+  /**
+   * Enter edit mode for an existing session: pre-fill the form in place
+   * (D-11), announce the mode change, and focus the first field. Writes
+   * nothing — the original entry stays untouched until Save (D-12).
+   */
+  onEdit(session: CardioSession): void {
+    this.editingId = session.id;
+    this.submitError = null;
+    this.sessionForm.reset();
+    this.sessionForm.patchValue({
+      date: this.toDatetimeLocal(session.date),
+      type: session.type,
+      durationMinutes: session.durationMinutes,
+      distanceKm: session.distanceKm ?? '',
+      caloriesBurned: session.caloriesBurned ?? '',
+      notes: session.notes ?? ''
+    });
+    this.editStatus = 'Editing entry — make your changes and save.';
+    // Focus the first field once the edit-mode header has rendered.
+    setTimeout(() => this.firstField?.nativeElement?.focus(), 0);
+  }
+
+  /**
+   * Discard an in-progress edit and restore add mode (D-11). Non-destructive:
+   * no service write. Returns focus to the originating row's Edit button.
+   */
+  onCancelEdit(): void {
+    const returnId = this.editingId;
+    this.editingId = null;
+    this.submitError = null;
+    this.sessionForm.reset();
+    this.editStatus = 'Edit discarded — back to adding a new entry.';
+    if (returnId) {
+      setTimeout(() => {
+        document.getElementById('edit-btn-' + returnId)?.focus();
+      }, 0);
+    }
+  }
+
   onSubmit(): void {
     if (this.sessionForm.invalid) {
       // Mark all fields as touched to show validation errors
@@ -494,7 +590,7 @@ export class CardioPageComponent implements OnInit {
       formValue.caloriesBurned === '' || formValue.caloriesBurned === null || formValue.caloriesBurned === undefined
         ? undefined
         : Number(formValue.caloriesBurned);
-    
+
     // Convert local datetime to ISO string
     const sessionData: CreateCardioSession = {
       date: new Date(formValue.date).toISOString(),
@@ -505,6 +601,31 @@ export class CardioPageComponent implements OnInit {
       notes: formValue.notes || undefined
     };
 
+    const handleError = (err: unknown) => {
+      this.isSubmitting = false;
+      if (err instanceof CardioValidationError) {
+        this.submitError = err.errors.map(e => e.message).join(', ');
+      } else {
+        this.submitError = 'Failed to save session. Please try again.';
+      }
+    };
+
+    if (this.editingId) {
+      this.cardioService.updateSession(this.editingId, sessionData)
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe({
+          next: () => {
+            this.editingId = null;
+            this.sessionForm.reset();
+            this.editStatus = 'Entry updated.';
+            this.loadSessions();
+            this.isSubmitting = false;
+          },
+          error: handleError
+        });
+      return;
+    }
+
     this.cardioService.addSession(sessionData)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
@@ -513,15 +634,21 @@ export class CardioPageComponent implements OnInit {
           this.loadSessions();
           this.isSubmitting = false;
         },
-        error: (err) => {
-          this.isSubmitting = false;
-          if (err instanceof CardioValidationError) {
-            this.submitError = err.errors.map(e => e.message).join(', ');
-          } else {
-            this.submitError = 'Failed to save session. Please try again.';
-          }
-        }
+        error: handleError
       });
+  }
+
+  /**
+   * Convert a stored ISO 8601 timestamp to the local `YYYY-MM-DDTHH:mm`
+   * string a `<input type="datetime-local">` expects when pre-filling.
+   */
+  private toDatetimeLocal(iso: string): string {
+    const d = new Date(iso);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return (
+      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+      `T${pad(d.getHours())}:${pad(d.getMinutes())}`
+    );
   }
 
   isFieldInvalid(fieldName: string): boolean {
