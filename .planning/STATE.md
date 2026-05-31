@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: ready_to_plan
-last_updated: "2026-05-31T19:41:37.150Z"
+status: planning
+last_updated: "2026-05-31T21:34:09.000Z"
 progress:
   total_phases: 5
-  completed_phases: 4
+  completed_phases: 3
   total_plans: 23
   completed_plans: 23
-  percent: 80
+  percent: 100
 ---
 
 # State: Personal Fitness Tracker — Refinement Milestone (v2)
@@ -24,7 +24,7 @@ progress:
 
 **Milestone:** Refinement (v2) — diet UX overhaul + AI chat depth + full quality pass on the existing Angular 18 + Electron app at v1.2.3.
 
-**Current Focus:** Phase 04 — agentic-loop-citation-ui
+**Current Focus:** Phase 05 — web-search-grounding-quality-sweep (PLANNED — ready to execute)
 
 ---
 
@@ -33,17 +33,20 @@ progress:
 Phase: 04 (agentic-loop-citation-ui) — ALL PLANS LANDED (6/6); ROADMAP phase 04 → Complete
 Plan: Wave 1 done (01–03) + 04-04 (agentic loop) + 04-05 (citation UI) + 04-06 (chat-page loop orchestration) done
 **Phase:** 5
-**Plan:** Not started — context gathered (05-CONTEXT.md committed at 27e0a67)
-**Status:** Ready to plan
-**Resume file:** .planning/phases/05-web-search-grounding-quality-sweep/05-CONTEXT.md
-**Progress:** [██████████] 100%
+**Plan:** PLANNED — 9 plans in 5 waves (committed 7f746d1; revised 5efd870). Research 96741c8, VALIDATION + PATTERNS committed.
+**Status:** Ready to execute
+**Resume file:** .planning/phases/05-web-search-grounding-quality-sweep/05-01-PLAN.md
+**Plan-checker:** PASS on iteration 2 (4 blockers + 5 warnings on iter 1 → all resolved → 0 issues, all 12 dimensions pass).
 
-**Wave structure:**
+**Wave structure (Phase 5):**
 
-- Wave 1: Plans 01, 02, 03, 04 (no dependencies — Karma config, shared utilities, empty/error components, typed schemas + fixtures)
-- Wave 2: Plans 05, 06, 09 (e2e harness, utility consumers, storage refactor)
-- Wave 3: Plans 07, 10 (page retrofit, recovery banner)
-- Wave 4: Plan 08 (characterization specs — depends on retrofitted pages)
+- Wave 1: 05-01 (Wave-0 infra: Stryker, F1–F14 fixtures, CSP assertion, color-contrast lift), 05-02 (web-citation-parser + V6 migration + serializer server-tool/citation passthrough), 05-03 (CRUD update methods, id+createdAt-preserving)
+- Wave 2: 05-04 (quota estimate + cross-browser error match + multi-tab read + lazy archival), 05-06 (edit-mode UI on cardio/weight/readings)
+- Wave 3: 05-05 (web_search server tool: transport + render-only loop + read-only guard + D-08/D-10 prompt), 05-07 (app-level quota + multi-tab banners + CSP meta)
+- Wave 4: 05-08 (footnotes + Sources + grounded badge + live row + E1 adversarial + archival affordance + cost helper)
+- Wave 5: 05-09 (401 rotate-key + block-action errors + QUAL-01 any sweep + mutation floor + a11y manual checkpoint) — **autonomous: no** (QUAL-08 manual keyboard/contrast checkpoint)
+
+**Coverage:** all 13 req IDs (RESCH-01/02/03 + QUAL-01..10) covered; decision coverage 1/1; all D-01..D-15 mapped (D-17 lint-gate resolved). Phase 5 bumps CURRENT_SCHEMA_VERSION → V6; Phase 2's diet schema work must retarget V6→V7.
 
 ---
 
@@ -156,6 +159,7 @@ None.
 
 ### Recent Sessions (Phase 05)
 
+- **2026-05-31** — `/gsd-plan-phase 5`. Research → pattern-map → plan → verify, all gates green. **gsd-phase-researcher** (HIGH confidence, 96741c8): confirmed every web-search SDK type exported from `@anthropic-ai/sdk@0.92.0`; flagged the serializer/persistence gap (`chat-block-serializer.ts` lifts unknown blocks to `[unsupported block type]`, no `citations`/server-tool variant on the persisted union → forces a **V6 migration**); confirmed CRUD/quota/multi-tab/Stryker gaps by direct inspection; 2 build-time assumptions (A1 CSP `style-src 'unsafe-inline'` for Angular inline styles, A2 Stryker `karma.conf.js` need). **VALIDATION.md** created (Nyquist) — `nyquist_compliant: true`, `wave_0_complete: false` (flips at execute). **gsd-pattern-mapper** (22/22 analogs): `confidence-attribution-parser.ts` = template for new pure `web-citation-parser.ts`; `diet.service.updateSavedFood` = CRUD-parity analog; `recovery-banner.component` = banner template. **gsd-planner** → 9 plans/5 waves (7f746d1). **gsd-plan-checker** iter 1 → 4 blockers + 5 warnings (RESEARCH open-Qs not closed; VALIDATION not marked compliant + stale axe Wave-0 entry; QUAL-01 sweep had no grep verify; QUAL-09 missed diet/charts/reports; +5 warnings). Revision (5efd870) fixed all 9: RESEARCH open-Qs marked RESOLVED; VALIDATION reconciled + compliant; QUAL-01 + tree-wide D-17 grep gates added to 05-09 T2; QUAL-09 coverage of the 3 untouched pages added; 05-08 T1 split into 1a/1b; QUAL-08 truth reframed user-observable. **iter 2 → VERIFICATION PASSED (0 issues, 12/12 dimensions).** STATE.md updated manually (state handlers regress this narrative file — known incompatibility). Ready for `/gsd-execute-phase 5` (run waves sequentially on main — worktrees unsafe, node_modules gitignored).
 - **2026-05-31** — `/gsd-discuss-phase 5`. Gathered Phase 5 context (05-CONTEXT.md + 05-DISCUSSION-LOG.md committed at 27e0a67). User delegated ALL gray areas + todo-fold decisions to Claude with the standing north star "best practices, established codebase patterns, focus on UX" (same as Phase 4). 14 decisions locked (D-01..D-15): web_search_20250305 stable (D-01); server-tool handling not client dispatch (D-02); grounded citations as inline footnotes + per-message Sources list reusing the Phase 4 `isLinkableCitation` allow-list (D-03); "from research · grounded · linked" source-axis upgrade of Phase 4 D-12, un-grounded stays plain text (D-04); live in-stream search row (D-05); `webSearchMaxUses` default 3 surfaced in /settings (D-06); no domain allow/block list (D-07); when-to-search is AI-SPEC (D-08); adversarial citation test extended across web-on/off matrix (D-09); meal-note redaction = per-entry free-text notes not the kcal line + AI-SPEC discourages PII in search queries (D-10, folded CR-04 todo); CRUD edit reuses the per-page entry form pre-filled, not a modal (D-11); edits preserve id+createdAt, refresh updatedAt, re-validate (D-12); chat archival = lazy-loaded per-conversation key through StorageService (D-13); 95% block-write prompt offers archive/delete not export (D-14); QUAL-01/04/06/07/08/10 handed straight to planner per REQUIREMENTS acceptance criteria (D-15). Folded todos: IN-01 chat block-action errors → QUAL-09. Reviewed-not-folded: Phase 4 visual UAT → stays `/gsd-verify-work 4`. STATE.md updated manually (state.record-session regressed the progress counters — known handler incompatibility with this narrative STATE.md). Ready for `/gsd-plan-phase 5`.
 
 ### Recent Sessions (Phase 04 execution)
