@@ -1,10 +1,11 @@
 ---
 phase: 4
 slug: agentic-loop-citation-ui
-status: draft
+status: approved
 shadcn_initialized: false
 preset: none
 created: 2026-05-31
+reviewed_at: 2026-05-31
 ---
 
 # Phase 4 — UI Design Contract
