@@ -306,6 +306,80 @@ describe('WeightService', () => {
     });
   });
 
+  describe('updateEntry', () => {
+    const ORIGINAL_CREATED = '2024-12-01T08:00:00.000Z';
+
+    it('should preserve id + createdAt, refresh updatedAt, and overwrite editable fields', (done) => {
+      const original = createStoredEntry({
+        id: 'edit-id',
+        weightLbs: 165,
+        createdAt: ORIGINAL_CREATED,
+        updatedAt: ORIGINAL_CREATED
+      });
+      mockAppData.weightEntries = [original];
+      storageServiceSpy.getData.and.returnValue(of(mockAppData));
+
+      const input = createValidEntry({ weightLbs: 172.5, notes: 'fixed typo' });
+
+      service.updateEntry('edit-id', input).subscribe(result => {
+        expect(result.id).toBe(original.id);
+        expect(result.createdAt).toBe(original.createdAt);
+        expect(result.updatedAt).not.toBe(original.updatedAt);
+        expect(result.weightLbs).toBe(172.5);
+        expect(result.notes).toBe('fixed typo');
+
+        expect(storageServiceSpy.saveData).toHaveBeenCalled();
+        const savedData = storageServiceSpy.saveData.calls.mostRecent().args[0];
+        const stored = savedData.weightEntries.find(e => e.id === 'edit-id');
+        expect(stored?.weightLbs).toBe(172.5);
+        done();
+      });
+    });
+
+    it('should reject invalid input (weight 49) and NOT persist', (done) => {
+      const original = createStoredEntry({ id: 'edit-id', createdAt: ORIGINAL_CREATED });
+      mockAppData.weightEntries = [original];
+      storageServiceSpy.getData.and.returnValue(of(mockAppData));
+
+      service.updateEntry('edit-id', createValidEntry({ weightLbs: 49 })).subscribe({
+        next: () => fail('Expected error'),
+        error: (err: WeightValidationError) => {
+          expect(err).toBeInstanceOf(WeightValidationError);
+          expect(err.errors.some(e => e.field === 'weightLbs')).toBeTrue();
+          expect(storageServiceSpy.saveData).not.toHaveBeenCalled();
+          done();
+        }
+      });
+    });
+
+    it('should error on missing id and NOT persist', (done) => {
+      mockAppData.weightEntries = [createStoredEntry({ id: 'other-id' })];
+      storageServiceSpy.getData.and.returnValue(of(mockAppData));
+
+      service.updateEntry('missing-id', createValidEntry()).subscribe({
+        next: () => fail('Expected error'),
+        error: (err: Error) => {
+          expect(err.message).toBe('Weight entry not found');
+          expect(storageServiceSpy.saveData).not.toHaveBeenCalled();
+          done();
+        }
+      });
+    });
+
+    it('should error when storage not initialized', (done) => {
+      storageServiceSpy.getData.and.returnValue(of(null));
+
+      service.updateEntry('edit-id', createValidEntry()).subscribe({
+        next: () => fail('Expected error'),
+        error: (err: Error) => {
+          expect(err.message).toBe('Storage not initialized');
+          expect(storageServiceSpy.saveData).not.toHaveBeenCalled();
+          done();
+        }
+      });
+    });
+  });
+
   describe('deleteEntry', () => {
     it('should delete an existing entry and persist', (done) => {
       mockAppData.weightEntries = [

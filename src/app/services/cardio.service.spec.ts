@@ -388,6 +388,84 @@ describe('CardioService', () => {
     });
   });
 
+  describe('updateSession', () => {
+    const ORIGINAL_CREATED = '2024-12-01T08:00:00.000Z';
+
+    it('should preserve id + createdAt, refresh updatedAt, and overwrite editable fields', (done) => {
+      const original = createStoredSession({
+        id: 'edit-id',
+        type: 'running',
+        durationMinutes: 30,
+        createdAt: ORIGINAL_CREATED,
+        updatedAt: ORIGINAL_CREATED
+      });
+      mockAppData.cardioSessions = [original];
+      storageServiceSpy.getData.and.returnValue(of(mockAppData));
+
+      const input = createValidSession({ type: 'cycling', durationMinutes: 45, distanceKm: 12 });
+
+      service.updateSession('edit-id', input).subscribe(result => {
+        expect(result.id).toBe(original.id);
+        expect(result.createdAt).toBe(original.createdAt);
+        expect(result.updatedAt).not.toBe(original.updatedAt);
+        expect(result.type).toBe('cycling');
+        expect(result.durationMinutes).toBe(45);
+        expect(result.distanceKm).toBe(12);
+
+        expect(storageServiceSpy.saveData).toHaveBeenCalled();
+        const savedData = storageServiceSpy.saveData.calls.mostRecent().args[0];
+        const stored = savedData.cardioSessions.find(s => s.id === 'edit-id');
+        expect(stored?.durationMinutes).toBe(45);
+        done();
+      });
+    });
+
+    it('should reject invalid input (duration 0) and NOT persist', (done) => {
+      const original = createStoredSession({ id: 'edit-id', createdAt: ORIGINAL_CREATED });
+      mockAppData.cardioSessions = [original];
+      storageServiceSpy.getData.and.returnValue(of(mockAppData));
+
+      const input = createValidSession({ durationMinutes: 0 });
+
+      service.updateSession('edit-id', input).subscribe({
+        next: () => fail('Expected error'),
+        error: (err: CardioValidationError) => {
+          expect(err).toBeInstanceOf(CardioValidationError);
+          expect(err.errors.some(e => e.field === 'durationMinutes')).toBeTrue();
+          expect(storageServiceSpy.saveData).not.toHaveBeenCalled();
+          done();
+        }
+      });
+    });
+
+    it('should error on missing id and NOT persist', (done) => {
+      mockAppData.cardioSessions = [createStoredSession({ id: 'other-id' })];
+      storageServiceSpy.getData.and.returnValue(of(mockAppData));
+
+      service.updateSession('missing-id', createValidSession()).subscribe({
+        next: () => fail('Expected error'),
+        error: (err: Error) => {
+          expect(err.message).toBe('Cardio session not found');
+          expect(storageServiceSpy.saveData).not.toHaveBeenCalled();
+          done();
+        }
+      });
+    });
+
+    it('should error when storage not initialized', (done) => {
+      storageServiceSpy.getData.and.returnValue(of(null));
+
+      service.updateSession('edit-id', createValidSession()).subscribe({
+        next: () => fail('Expected error'),
+        error: (err: Error) => {
+          expect(err.message).toBe('Storage not initialized');
+          expect(storageServiceSpy.saveData).not.toHaveBeenCalled();
+          done();
+        }
+      });
+    });
+  });
+
   describe('deleteSession', () => {
     it('should delete an existing session and persist', (done) => {
       mockAppData.cardioSessions = [
