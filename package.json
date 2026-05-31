@@ -11,7 +11,8 @@
     "electron:dev": "ng build --configuration=production && electron .",
     "electron:build": "ng build --configuration=production && electron-builder",
     "electron:publish": "ng build --configuration=production && electron-builder --publish always",
-    "e2e": "node e2e/run.mjs"
+    "e2e": "node e2e/run.mjs",
+    "mutation": "stryker run"
   },
   "private": true,
   "dependencies": {
@@ -36,6 +37,8 @@
     "@angular-devkit/build-angular": "^18.2.21",
     "@angular/cli": "^18.2.21",
     "@angular/compiler-cli": "^18.2.0",
+    "@stryker-mutator/core": "^9.6.1",
+    "@stryker-mutator/karma-runner": "^9.6.1",
     "@types/jasmine": "~5.1.0",
     "axe-core": "^4.11.4",
     "electron": "^33.0.0",

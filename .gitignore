@@ -32,6 +32,10 @@ yarn-error.log*
 # Test coverage
 coverage/
 
+# Stryker mutation testing (dev-only outputs)
+reports/mutation/
+.stryker-tmp/
+
 # Temp files
 *.tmp
 *.swp
