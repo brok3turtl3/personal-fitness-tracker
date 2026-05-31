@@ -10,7 +10,17 @@ import { By } from '@angular/platform-browser';
 
 import { ChatMessageListComponent, isLinkableCitation } from './chat-message-list.component';
 import { PendingPillComponent } from './pending-pill.component';
-import { ChatBlock, ChatMessage, ToolResultBlock, ToolUseBlock } from '../../models/ai-chat.model';
+import {
+  ChatBlock,
+  ChatMessage,
+  GroundedCitation,
+  ServerToolUsePersistedBlock,
+  TextBlock,
+  ToolResultBlock,
+  ToolUseBlock,
+  WebSearchToolResultPersistedBlock,
+} from '../../models/ai-chat.model';
+import { toGroundedCitations } from '../../services/web-citation-parser';
 import { expectNoSeriousA11yViolations } from '../../shared/a11y-test-helpers';
 
 function makeMsg(role: 'user' | 'assistant', blocks: ChatBlock[]): ChatMessage {
@@ -421,5 +431,99 @@ describe('ChatMessageListComponent — tool disclosures (E12, D-05/D-06)', () =>
     await expectNoSeriousA11yViolations(fixture.nativeElement, {
       disableRules: ['color-contrast'],
     });
+  });
+});
+
+// ── Web-search live/persisted rows (D-05, Task 1a) ───────────────────────────
+
+function serverToolUse(id: string, query: string): ServerToolUsePersistedBlock {
+  return { type: 'server_tool_use', id, name: 'web_search', input: { query } };
+}
+
+function webResultBlock(toolUseId: string, count: number): WebSearchToolResultPersistedBlock {
+  return {
+    type: 'web_search_tool_result',
+    toolUseId,
+    content: Array.from({ length: count }, (_, i) => ({
+      type: 'web_search_result' as const,
+      url: `https://example.org/r${i}`,
+      title: `Result ${i}`,
+      encryptedContent: `enc_${i}`,
+    })),
+  };
+}
+
+function webErrorBlock(toolUseId: string, errorCode: string): WebSearchToolResultPersistedBlock {
+  return {
+    type: 'web_search_tool_result',
+    toolUseId,
+    content: { type: 'web_search_tool_result_error', errorCode },
+  };
+}
+
+describe('ChatMessageListComponent — web-search rows (D-05)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('an in-flight server_tool_use (no paired result) renders the role=status searching row', async () => {
+    const msg = makeMsg('assistant', [serverToolUse('srv-1', 'creatine evidence')]);
+    const fixture = await createFixture([msg]);
+    const el: HTMLElement = fixture.nativeElement;
+
+    // No <details> while in-flight (non-expandable).
+    expect(el.querySelector('details')).toBeFalsy();
+    const live = el.querySelector('[role="status"]') as HTMLElement;
+    expect(live).toBeTruthy();
+    expect(live.getAttribute('aria-live')).toBe('polite');
+    expect(live.textContent).toContain('Searching the web');
+    expect(live.textContent).toContain('creatine evidence');
+  });
+
+  it('a resolved web_search_tool_result renders the collapsed "Found {n} sources" disclosure', async () => {
+    const msg = makeMsg('assistant', [
+      serverToolUse('srv-1', 'resistance training frequency'),
+      webResultBlock('srv-1', 3),
+    ]);
+    const fixture = await createFixture([msg]);
+    const el: HTMLElement = fixture.nativeElement;
+
+    const details = el.querySelector('details') as HTMLDetailsElement;
+    expect(details).toBeTruthy();
+    expect(details.open).toBe(false);
+    const summary = el.querySelector('summary') as HTMLElement;
+    expect(summary.textContent).toContain('🔎 Found 3 sources');
+    expect(summary.getAttribute('aria-label')).toContain('Show what the AI searched for:');
+    // Renderer-derived query in the body, never model prose.
+    expect(details.textContent).toContain('Web search');
+    expect(details.textContent).toContain('resistance training frequency');
+  });
+
+  it('a web_search error result renders an honest row with NO anchor', async () => {
+    const msg = makeMsg('assistant', [
+      serverToolUse('srv-1', 'over the cap'),
+      webErrorBlock('srv-1', 'max_uses_exceeded'),
+    ]);
+    const fixture = await createFixture([msg]);
+    const el: HTMLElement = fixture.nativeElement;
+
+    expect(el.querySelector('details')).toBeFalsy();
+    expect(el.textContent).toContain("Couldn't reach the web");
+    expect(el.querySelectorAll('a').length).toBe(0);
+  });
+
+  it('expectNoSeriousA11yViolations on a web-search row render (color-contrast enforced)', async () => {
+    const messages = [
+      makeMsg('assistant', [serverToolUse('srv-a', 'q')]),
+      makeMsg('assistant', [serverToolUse('srv-b', 'q2'), webResultBlock('srv-b', 2)]),
+    ];
+    const fixture = await createFixture(messages);
+    // Scope contrast enforcement to the search-row surfaces themselves. The
+    // surrounding assistant-bubble chrome (.message-time opacity 0.6,
+    // .message-role opacity 0.8) is the Phase-4 palette the cross-chat
+    // color-contrast sweep owns in 05-09 — out of scope for this row. The
+    // search row's own #2c3e50-on-#f8f9fa text is contrast-clean and enforced.
+    const live = fixture.nativeElement.querySelector('[role="status"]') as HTMLElement;
+    const details = fixture.nativeElement.querySelector('details') as HTMLElement;
+    await expectNoSeriousA11yViolations(live);
+    await expectNoSeriousA11yViolations(details);
   });
 });

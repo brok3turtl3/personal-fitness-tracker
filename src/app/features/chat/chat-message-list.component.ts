@@ -1,7 +1,16 @@
 import { Component, ElementRef, EventEmitter, Input, OnChanges, Output, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ChatMessage, ClaimSpan, Confidence, ToolResultBlock } from '../../models/ai-chat.model';
+import {
+  ChatMessage,
+  ClaimSpan,
+  Confidence,
+  GroundedCitation,
+  ToolResultBlock,
+  WebSearchResultPersisted,
+  WebSearchToolResultPersistedBlock,
+} from '../../models/ai-chat.model';
 import { parseClaimSpans } from '../../services/confidence-attribution-parser';
+import { toGroundedCitations, toSourcesList } from '../../services/web-citation-parser';
 import { PendingPillComponent } from './pending-pill.component';
 
 /**
@@ -87,6 +96,41 @@ export function isLinkableCitation(citation: { type?: string } | undefined | nul
                      Phase 3 static placeholder so nothing is silently dropped. -->
                 @if (!hasPairedQueryToolUse(msg, block.tool_use_id)) {
                   <div class="tool-result-placeholder" aria-label="Tool result"><strong>Tool result:</strong> {{ block.content }}</div>
+                }
+              }
+              @case ('server_tool_use') {
+                <!-- D-05: an Anthropic-executed web search. In-flight when no paired
+                     web_search_tool_result exists yet (non-expandable, announced);
+                     resolved/error rendered from the result branch below. -->
+                @if (!webResultFor(msg, block.id)) {
+                  <div class="tool-inflight" role="status" aria-live="polite">
+                    <span class="tool-inflight-text">{{ searchInFlightSummary(block.input) }}</span><span class="inflight-dots" aria-hidden="true">…</span>
+                  </div>
+                }
+              }
+              @case ('web_search_tool_result') {
+                <!-- D-05: resolved web search. An array of results → collapsed
+                     "🔎 Found {n} sources" disclosure (renderer-derived count,
+                     never model prose). An error union → an honest, link-free row. -->
+                @if (webResultCount(block) !== undefined) {
+                  <details class="tool-disclosure" [id]="'websearch-' + block.toolUseId">
+                    <summary class="tool-summary" [attr.aria-label]="'Show what the AI searched for: ' + webSearchSummary(block)">{{ webSearchSummary(block) }}</summary>
+                    <div class="tool-body">
+                      <div class="tool-name">Web search</div>
+                      <div class="tool-section-label">Searched:</div>
+                      <pre class="tool-pre">{{ webSearchQuery(msg, block.toolUseId) }}</pre>
+                      <div class="tool-section-label">Sources found:</div>
+                      <ul class="search-results-list">
+                        @for (r of webSearchResults(block); track $index) {
+                          <li class="search-result-item">{{ r.title }}</li>
+                        }
+                      </ul>
+                    </div>
+                  </details>
+                } @else {
+                  <div class="tool-error" role="status" aria-live="polite">
+                    <span class="tool-error-text">🔎 Couldn't reach the web</span>
+                  </div>
                 }
               }
             }
@@ -217,6 +261,25 @@ export function isLinkableCitation(citation: { type?: string } | undefined | nul
       word-wrap: break-word;
     }
     .inflight-dots { margin-left: 2px; animation: blink 1.4s infinite; }
+
+    .tool-error {
+      display: flex;
+      align-items: center;
+      min-height: 44px;
+      margin: 0.5rem 0;
+      padding: 0.25rem 0.75rem;
+      background: #f8f9fa;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font: 600 14px/1.5 inherit;
+      color: #2c3e50;
+    }
+    .search-results-list {
+      margin: 0.25rem 0 0;
+      padding-left: 1.25rem;
+      font: 400 14px/1.5 inherit;
+    }
+    .search-result-item { margin: 0.125rem 0; }
 
     .message-time {
       font-size: 0.7rem;
@@ -405,6 +468,67 @@ export class ChatMessageListComponent implements OnChanges {
     } catch {
       return String(input);
     }
+  }
+
+  // ── Web-search rows (D-05) ──────────────────────────────────────────────────
+
+  /**
+   * Find the web_search_tool_result paired to a server_tool_use id within the
+   * same message. Absence ⇒ the search is in-flight (non-expandable row).
+   */
+  webResultFor(msg: ChatMessage, serverToolUseId: string): WebSearchToolResultPersistedBlock | undefined {
+    return msg.blocks.find(
+      (b): b is WebSearchToolResultPersistedBlock =>
+        b.type === 'web_search_tool_result' && b.toolUseId === serverToolUseId,
+    );
+  }
+
+  /** In-flight present-tense line; includes the query (renderer-derived) when present. */
+  searchInFlightSummary(input: unknown): string {
+    const query = this.deriveQuery(input);
+    return query
+      ? `🔎 Searching the web for "${query}"…`
+      : '🔎 Searching the web…';
+  }
+
+  /**
+   * Count of results in a resolved web_search_tool_result, or `undefined` when
+   * the content is the error union (so the template renders the honest error
+   * row instead). Renderer-derived — never model prose (E12/D-05).
+   */
+  webResultCount(block: WebSearchToolResultPersistedBlock): number | undefined {
+    return Array.isArray(block.content) ? block.content.length : undefined;
+  }
+
+  /** The result array of a resolved search (empty when the content is an error). */
+  webSearchResults(block: WebSearchToolResultPersistedBlock): WebSearchResultPersisted[] {
+    return Array.isArray(block.content) ? block.content : [];
+  }
+
+  /** LOCKED resolved summary `🔎 Found {n} sources` (renderer-derived count). */
+  webSearchSummary(block: WebSearchToolResultPersistedBlock): string {
+    const n = this.webResultCount(block) ?? 0;
+    return `🔎 Found ${n} sources`;
+  }
+
+  /**
+   * The query string for a resolved disclosure body, read from the paired
+   * server_tool_use input (renderer-derived). Omitted (empty) if unavailable.
+   */
+  webSearchQuery(msg: ChatMessage, serverToolUseId: string): string {
+    const st = msg.blocks.find(
+      (b) => b.type === 'server_tool_use' && b.id === serverToolUseId,
+    );
+    return st && st.type === 'server_tool_use' ? this.deriveQuery(st.input) : '';
+  }
+
+  /** Pull a `query` string out of the server_tool_use input, if present. */
+  private deriveQuery(input: unknown): string {
+    if (input && typeof input === 'object') {
+      const q = (input as Record<string, unknown>)['query'];
+      if (typeof q === 'string') return q;
+    }
+    return '';
   }
 
   emitAction(
