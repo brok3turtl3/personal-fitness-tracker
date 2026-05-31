@@ -93,8 +93,58 @@ export class WeightService {
   }
 
   /**
+   * Update an existing weight entry in place.
+   * Re-runs the same validators that guard {@link addEntry}; preserves the
+   * original `id` + `createdAt`, refreshes `updatedAt`, and overwrites the
+   * editable fields from `input`. Storage is left untouched on any failure.
+   *
+   * @param id - The id of the entry to update
+   * @param input - Edited entry data (same shape as add)
+   * @returns Observable with the updated entry
+   * @throws WeightValidationError if validation fails
+   */
+  updateEntry(id: string, input: CreateWeightEntry): Observable<WeightEntry> {
+    const validationResult = validateWeight(input);
+
+    if (!validationResult.valid) {
+      return throwError(() => new WeightValidationError(validationResult.errors));
+    }
+
+    return this.storageService.getData().pipe(
+      switchMap(data => {
+        if (!data) {
+          return throwError(() => new Error('Storage not initialized'));
+        }
+
+        const idx = data.weightEntries.findIndex(entry => entry.id === id);
+        if (idx < 0) {
+          return throwError(() => new Error('Weight entry not found'));
+        }
+
+        const existing = data.weightEntries[idx];
+        const updated: WeightEntry = {
+          ...existing,
+          date: input.date,
+          weightLbs: input.weightLbs,
+          notes: input.notes,
+          id: existing.id,
+          createdAt: existing.createdAt,
+          updatedAt: new Date().toISOString()
+        };
+
+        const weightEntries = [...data.weightEntries];
+        weightEntries[idx] = updated;
+
+        return this.storageService.saveData({ ...data, weightEntries }).pipe(
+          map(() => updated)
+        );
+      })
+    );
+  }
+
+  /**
    * Get a single weight entry by ID.
-   * 
+   *
    * @param id - The entry ID to find
    * @returns Observable with the entry or null if not found
    */

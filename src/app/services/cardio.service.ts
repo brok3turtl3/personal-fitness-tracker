@@ -96,8 +96,61 @@ export class CardioService {
   }
 
   /**
+   * Update an existing cardio session in place.
+   * Re-runs the same validators that guard {@link addSession}; preserves the
+   * original `id` + `createdAt`, refreshes `updatedAt`, and overwrites the
+   * editable fields from `input`. Storage is left untouched on any failure.
+   *
+   * @param id - The id of the session to update
+   * @param input - Edited session data (same shape as add)
+   * @returns Observable with the updated session
+   * @throws CardioValidationError if validation fails
+   */
+  updateSession(id: string, input: CreateCardioSession): Observable<CardioSession> {
+    const validationResult = validateCardio(input);
+
+    if (!validationResult.valid) {
+      return throwError(() => new CardioValidationError(validationResult.errors));
+    }
+
+    return this.storageService.getData().pipe(
+      switchMap(data => {
+        if (!data) {
+          return throwError(() => new Error('Storage not initialized'));
+        }
+
+        const idx = data.cardioSessions.findIndex(session => session.id === id);
+        if (idx < 0) {
+          return throwError(() => new Error('Cardio session not found'));
+        }
+
+        const existing = data.cardioSessions[idx];
+        const updated: CardioSession = {
+          ...existing,
+          date: input.date,
+          type: input.type,
+          durationMinutes: input.durationMinutes,
+          distanceKm: input.distanceKm,
+          caloriesBurned: input.caloriesBurned,
+          notes: input.notes,
+          id: existing.id,
+          createdAt: existing.createdAt,
+          updatedAt: new Date().toISOString()
+        };
+
+        const cardioSessions = [...data.cardioSessions];
+        cardioSessions[idx] = updated;
+
+        return this.storageService.saveData({ ...data, cardioSessions }).pipe(
+          map(() => updated)
+        );
+      })
+    );
+  }
+
+  /**
    * Get a single cardio session by ID.
-   * 
+   *
    * @param id - The session ID to find
    * @returns Observable with the session or null if not found
    */
