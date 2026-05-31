@@ -73,6 +73,56 @@ export interface ChatMessage {
   createdAt: string;
 }
 
+/**
+ * Per-claim confidence grade emitted inline by the model on graded claims
+ * (D-09). The 6-value allow-list is canonical — `confidence-attribution-parser.ts`
+ * narrows raw model tokens against exactly these values; an unknown token
+ * leaves confidence `undefined` (renders unbadged, never fabricated).
+ */
+export type Confidence =
+  | 'strong'
+  | 'moderate'
+  | 'weak'
+  | 'animal-only'
+  | 'anecdotal'
+  | 'speculative';
+
+/**
+ * Source axis for a graded claim (D-10): whether the claim is grounded in the
+ * user's own logged `data` or in external `research`.
+ */
+export type Attribution = 'data' | 'research';
+
+/**
+ * A single claim span parsed out of assistant text. The inline grading tokens
+ * (`[evidence: …]` / `[source: …]`) are stripped from `text`; `confidence` and
+ * `source` are set only when a valid token was present (safe degradation, D-09).
+ */
+export interface ClaimSpan {
+  /** The claim text with its inline grading tokens stripped. */
+  readonly text: string;
+  /** undefined ⇒ render unbadged (safe degradation, D-09). */
+  readonly confidence?: Confidence;
+  /** undefined ⇒ no source marker. */
+  readonly source?: Attribution;
+}
+
+/**
+ * Loop-event union emitted by the Phase 4 agentic loop, one event per
+ * meaningful step of a single user turn.
+ *
+ * SDK-agnostic (D-17): no Anthropic SDK import here. The `tool_use_started`
+ * payload carries the UI-needed fields structurally (NOT the SDK `ToolUseBlock`),
+ * and `done.stopReason` is a plain `string` (NOT the SDK `StopReason`) — the
+ * loop narrows the SDK types to these at the transport chokepoint.
+ */
+export type ChatTurnEvent =
+  | { kind: 'tool_use_started'; toolUseId: string; toolName: string; input: unknown }
+  | { kind: 'tool_result'; toolUseId: string; summary: string }
+  | { kind: 'assistant_text'; blocks: ChatBlock[] }
+  | { kind: 'turn_limit'; turnsUsed: number }
+  | { kind: 'done'; stopReason: string };
+
 export interface ChatConversation {
   id: string;
   title: string;
@@ -92,7 +142,7 @@ export interface AISettings {
 export const CLAUDE_MODELS = [
   { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6 (default)', contextWindow: 200000 },
   { value: 'claude-haiku-4-5', label: 'Claude Haiku 4.5 (faster)', contextWindow: 200000 },
-  { value: 'claude-opus-4-7', label: 'Claude Opus 4.7 (best reasoning)', contextWindow: 200000 },
+  { value: 'claude-opus-4-8', label: 'Claude Opus 4.8 (best reasoning)', contextWindow: 200000 },
 ];
 
 export const DEFAULT_AI_SETTINGS: AISettings = { maxResponseTokens: 4096 };
