@@ -402,21 +402,24 @@ countTokens(apiKey: string, params: {
 | A3 | Current model lineup is Opus `claude-opus-4-8` / Sonnet `claude-sonnet-4-6` / Haiku `claude-haiku-4-5` | State of the Art | A stale Opus ID in `CLAUDE_MODELS` would 404 only the Opus selector; Sonnet default is verified-correct in the codebase. Confirm via the live models page at plan time. `[ASSUMED from AI-SPEC §4; codebase has claude-opus-4-7]` |
 | A4 | `messages.countTokens` counts the `cache_control`'d system prefix + tools block accurately enough to drive the window decision | Pattern 4, Code Examples | If the count excludes some overhead, the window decision is slightly off — acceptable (it replaces a far worse `len/4` heuristic). `[VERIFIED: param shape; ASSUMED: counting fidelity]` |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Persistence status for auto-executed `query_*` tool_use blocks.**
    - What we know: `fromAnthropicMessage` defaults every inbound `tool_use` to `status:'pending'` `[VERIFIED: chat-block-serializer.ts:118-126]`. That default is correct for *write proposals* (which await approval) but wrong for *auto-executed queries* (which already ran).
    - What's unclear: whether the loop should persist auto-run query tool_use with a new/distinct status (e.g. `'approved'` paired with its real `tool_result`) so replay via `toAnthropicContent` emits a real wire tool_use rather than a plain-text placeholder.
    - Recommendation: persist auto-executed `query_*` tool_use as `status:'approved'` together with its paired `tool_result` in the same message (the `approveToolUseBlock` shape already supports this `[VERIFIED: chat.service.ts:265-325]`), so the serializer's paired-tool_result guard emits a real tool_use on replay. Planner to confirm and add a serializer replay test.
+   - **RESOLVED:** Adopted the recommendation — auto-executed `query_*` tool_use persists as `status:'approved'` paired with its `tool_result`. Implemented in Plan 04-04 Task 1 (loop persistence + serializer replay).
 
 2. **Claim-chunk boundary for the parser (`splitIntoClaimChunks`).**
    - What we know: D-07 wants the chip "immediately after the claim it qualifies"; the token contract attaches `[evidence:…]` per claim.
    - What's unclear: sentence vs clause splitting, and how to keep a chip glued to its claim across markdown.
    - Recommendation: split on sentence boundaries with the trailing token(s) belonging to the preceding sentence; planner specifies the exact boundary and a fixture covering multi-claim paragraphs. Low risk — safe degradation (unbadged) covers ambiguous splits.
+   - **RESOLVED:** Adopted the recommendation — sentence-boundary splitting with trailing token bound to the preceding sentence. Implemented in Plan 04-01 Task 2 (parser + multi-claim fixture).
 
 3. **Does Phase 4 parse `TextBlock.citations` into a persisted `ChatBlock` field?**
    - What we know: no tool produces citations in Phase 4, so `.citations` is always absent; the guard is the deliverable.
    - Recommendation: do NOT add a citation field to `ChatBlock` this phase (YAGNI; D-12 says "leave room for the Phase 5 upgrade without rework" — the render guard already does). Render-time type check only. Planner confirms scope.
+   - **RESOLVED:** Adopted the recommendation — NO `ChatBlock.citations` field this phase; render-time type check only via the citation-link guard. Scope confirmed in Plan 04-05 Task 1.
 
 ## Environment Availability
 
