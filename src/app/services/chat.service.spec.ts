@@ -15,6 +15,11 @@ import {
   TextBlock,
   ToolUseBlock,
 } from '../models/ai-chat.model';
+import { ToolRegistryService } from './tool-registry.service';
+import { MemoryToolExecutor } from './memory-tool-executor.service';
+import { MemoryStoreService } from './memory-store.service';
+import { PendingApprovalService } from './pending-approval.service';
+import { toAnthropicContent } from './chat-block-serializer';
 
 /** Spec helper: extract joined text from a ChatMessage's blocks (D-15). */
 function textOf(msg: ChatMessage): string {
@@ -439,6 +444,167 @@ describe('ChatService', () => {
 
       const conv = mockAppData.chatConversations.find(c => c.id === conversationId)!;
       expect(new Date(conv.updatedAt).getTime()).toBeGreaterThan(new Date(before).getTime());
+    });
+  });
+
+  describe('approveToolUseBlock (gap-closure 03-07, SC3 — atomic approve + paired tool_result)', () => {
+    function seedConv(): void {
+      const block: ToolUseBlock = {
+        type: 'tool_use',
+        id: 'tu1',
+        name: 'memory',
+        input: { command: 'create', path: '/memories/x.md', file_text: 'hi' },
+        status: 'pending',
+      };
+      const message: ChatMessage = {
+        id: 'm1',
+        role: 'assistant',
+        blocks: [block],
+        tokenEstimate: 0,
+        createdAt: '2026-05-31T10:00:00.000Z',
+      };
+      const conv: ChatConversation = {
+        id: 'c1',
+        title: 'Test',
+        messages: [message],
+        summarizedMessageCount: 0,
+        createdAt: '2026-05-31T10:00:00.000Z',
+        updatedAt: '2026-05-31T10:00:00.000Z',
+      };
+      mockAppData = { ...mockAppData, chatConversations: [conv] };
+      mockStorageService.getData.and.callFake(() => of(mockAppData));
+    }
+
+    it('flips the tool_use block to approved AND appends a paired tool_result in a single saveData call', async () => {
+      seedConv();
+      mockStorageService.saveData.calls.reset();
+      await firstValueFrom(service.approveToolUseBlock('c1', 'm1', 0, {
+        content: 'File created successfully at: /memories/x.md',
+        isError: false,
+      }));
+
+      expect(mockStorageService.saveData).toHaveBeenCalledTimes(1);
+      const blocks = mockAppData.chatConversations[0].messages[0].blocks;
+      expect((blocks[0] as ToolUseBlock).status).toBe('approved');
+      const toolResult = blocks.find(b => b.type === 'tool_result') as {
+        tool_use_id: string; content: string; isError?: boolean;
+      };
+      expect(toolResult).toBeTruthy();
+      expect(toolResult.tool_use_id).toBe('tu1');
+      expect(toolResult.content).toBe('File created successfully at: /memories/x.md');
+      expect('isError' in toolResult).toBeFalse();
+    });
+
+    it('sets isError on the tool_result when result.isError is true', async () => {
+      seedConv();
+      await firstValueFrom(service.approveToolUseBlock('c1', 'm1', 0, {
+        content: 'Error: File /memories/x.md already exists',
+        isError: true,
+      }));
+      const blocks = mockAppData.chatConversations[0].messages[0].blocks;
+      const toolResult = blocks.find(b => b.type === 'tool_result') as { isError?: boolean };
+      expect(toolResult.isError).toBeTrue();
+    });
+
+    it('errors when the target block is not a tool_use block', async () => {
+      const textMsg: ChatMessage = {
+        id: 'm1', role: 'assistant',
+        blocks: [{ type: 'text', text: 'not a tool' } as ChatBlock],
+        tokenEstimate: 0, createdAt: '2026-05-31T10:00:00.000Z',
+      };
+      const conv: ChatConversation = {
+        id: 'c1', title: 'T', messages: [textMsg], summarizedMessageCount: 0,
+        createdAt: '2026-05-31T10:00:00.000Z', updatedAt: '2026-05-31T10:00:00.000Z',
+      };
+      mockAppData = { ...mockAppData, chatConversations: [conv] };
+      mockStorageService.getData.and.callFake(() => of(mockAppData));
+      try {
+        await firstValueFrom(service.approveToolUseBlock('c1', 'm1', 0, { content: 'x', isError: false }));
+        fail('Should have thrown');
+      } catch (e) {
+        expect((e as Error).message).toContain('is not tool_use');
+      }
+    });
+
+    it('errors when the conversation is not found', async () => {
+      seedConv();
+      try {
+        await firstValueFrom(service.approveToolUseBlock('nope', 'm1', 0, { content: 'x', isError: false }));
+        fail('Should have thrown');
+      } catch (e) {
+        expect((e as Error).message).toContain('Conversation not found');
+      }
+    });
+  });
+
+  describe('approve end-to-end (gap-closure 03-07) — persists to memoryFiles AND yields API-valid transcript', () => {
+    let chatService: ChatService;
+    let pendingApproval: PendingApprovalService;
+    let endToEndData: AppData;
+    const SEED_TEXT = 'seed body content';
+
+    const seededToolBlock = (): ToolUseBlock => ({
+      type: 'tool_use',
+      id: 'tu1',
+      name: 'memory',
+      input: { command: 'create', path: '/memories/seed-1.md', file_text: SEED_TEXT },
+      status: 'pending',
+    });
+
+    beforeEach(() => {
+      const toolMsg: ChatMessage = {
+        id: 'm1', role: 'assistant', blocks: [seededToolBlock()],
+        tokenEstimate: 0, createdAt: '2026-05-31T10:00:00.000Z',
+      };
+      const conv: ChatConversation = {
+        id: 'c1', title: 'T', messages: [toolMsg], summarizedMessageCount: 0,
+        createdAt: '2026-05-31T10:00:00.000Z', updatedAt: '2026-05-31T10:00:00.000Z',
+      };
+      endToEndData = { ...createEmptyAppData(), chatConversations: [conv] };
+
+      const storage = jasmine.createSpyObj<StorageService>('StorageService', ['getData', 'saveData']);
+      storage.getData.and.callFake(() => of(endToEndData));
+      storage.saveData.and.callFake((data: AppData) => {
+        endToEndData = data;
+        return of(undefined);
+      });
+
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({
+        providers: [
+          ChatService,
+          PendingApprovalService,
+          ToolRegistryService,
+          MemoryToolExecutor,
+          MemoryStoreService,
+          { provide: StorageService, useValue: storage },
+        ],
+      });
+      chatService = TestBed.inject(ChatService);
+      pendingApproval = TestBed.inject(PendingApprovalService);
+    });
+
+    it('approving a seeded memory pill writes the file to AppData.memoryFiles', async () => {
+      const result = await pendingApproval.executeApprovedToolUse(seededToolBlock());
+      expect(result.isError).toBeFalse();
+      await firstValueFrom(chatService.approveToolUseBlock('c1', 'm1', 0, result));
+      expect(endToEndData.memoryFiles['/memories/seed-1.md']).toBe(SEED_TEXT);
+    });
+
+    it('post-approve transcript serializes to API-valid content (every wire tool_use has a following paired tool_result)', async () => {
+      const result = await pendingApproval.executeApprovedToolUse(seededToolBlock());
+      await firstValueFrom(chatService.approveToolUseBlock('c1', 'm1', 0, result));
+
+      const blocks = endToEndData.chatConversations[0].messages[0].blocks;
+      const wire = toAnthropicContent(blocks);
+      const toolResultIds = new Set(
+        wire.filter(b => b.type === 'tool_result').map(b => (b as { tool_use_id: string }).tool_use_id),
+      );
+      const toolUses = wire.filter(b => b.type === 'tool_use');
+      expect(toolUses.length).toBeGreaterThan(0);
+      for (const tu of toolUses) {
+        expect(toolResultIds.has((tu as { id: string }).id)).toBeTrue();
+      }
     });
   });
 });

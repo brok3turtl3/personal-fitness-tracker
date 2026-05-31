@@ -16,6 +16,7 @@ import { ChatService } from '../../services/chat.service';
 import { AISettingsService } from '../../services/ai-settings.service';
 import { StorageService } from '../../services/storage.service';
 import { ChatConversation, ChatMessage, ToolUseBlock } from '../../models/ai-chat.model';
+import { PendingApprovalService } from '../../services/pending-approval.service';
 import { expectNoSeriousA11yViolations } from '../../shared/a11y-test-helpers';
 
 // ---------------------------------------------------------------------------
@@ -63,6 +64,7 @@ interface ChatSpies {
   chatService: jasmine.SpyObj<ChatService>;
   aiSettingsService: jasmine.SpyObj<AISettingsService>;
   storageService: jasmine.SpyObj<StorageService>;
+  pendingApproval: jasmine.SpyObj<PendingApprovalService>;
 }
 
 function makeSpies(opts: {
@@ -78,11 +80,13 @@ function makeSpies(opts: {
     'deleteConversation',
     'sendMessage',
     'updateMessageBlock',
+    'approveToolUseBlock',
     'appendAssistantBlocks',
   ]);
   chatService.getConversations.and.returnValue(of(opts.conversations ?? []));
   chatService.getConversation.and.returnValue(of(opts.activeConversation ?? null));
   chatService.updateMessageBlock.and.returnValue(of(undefined));
+  chatService.approveToolUseBlock.and.returnValue(of(undefined));
   chatService.appendAssistantBlocks.and.returnValue(of({
     id: 'appended-msg',
     role: 'assistant',
@@ -104,7 +108,14 @@ function makeSpies(opts: {
   storageService.initialize.and.returnValue(of(undefined));
   storageService.consumeDevSeed.and.returnValue(opts.devSeed ?? null);
 
-  return { chatService, aiSettingsService, storageService };
+  const pendingApproval = jasmine.createSpyObj<PendingApprovalService>('PendingApprovalService', [
+    'executeApprovedToolUse',
+  ]);
+  pendingApproval.executeApprovedToolUse.and.returnValue(
+    Promise.resolve({ content: 'File created successfully at: /memories/seed-1.md', isError: false }),
+  );
+
+  return { chatService, aiSettingsService, storageService, pendingApproval };
 }
 
 async function configureBed(spies: ChatSpies): Promise<void> {
@@ -115,6 +126,7 @@ async function configureBed(spies: ChatSpies): Promise<void> {
       { provide: ChatService, useValue: spies.chatService },
       { provide: AISettingsService, useValue: spies.aiSettingsService },
       { provide: StorageService, useValue: spies.storageService },
+      { provide: PendingApprovalService, useValue: spies.pendingApproval },
     ],
   }).compileComponents();
 }
@@ -300,7 +312,7 @@ describe('ChatPageComponent (characterization)', () => {
     expect(compiled.querySelector('.pending-pill')).toBeTruthy();
   });
 
-  it('(blockAction) approve dispatches chat.service.updateMessageBlock with status="approved"', async () => {
+  it('(blockAction) approve executes via PendingApprovalService then persists via approveToolUseBlock', async () => {
     const message: ChatMessage = {
       id: 'm-1',
       role: 'assistant',
@@ -322,13 +334,19 @@ describe('ChatPageComponent (characterization)', () => {
       blockIndex: 0,
       action: 'approve',
     });
+    // Flush the Promise → from(...) microtask before asserting persistence.
+    await Promise.resolve();
+    await Promise.resolve();
 
-    expect(spies.chatService.updateMessageBlock).toHaveBeenCalledWith(
-      'c-1',
-      'm-1',
-      0,
-      jasmine.objectContaining({ status: 'approved' }),
+    expect(spies.pendingApproval.executeApprovedToolUse).toHaveBeenCalledTimes(1);
+    expect(spies.pendingApproval.executeApprovedToolUse).toHaveBeenCalledWith(
+      jasmine.objectContaining({ id: 'tu-1', name: 'memory' }),
     );
+    expect(spies.chatService.approveToolUseBlock).toHaveBeenCalledWith(
+      'c-1', 'm-1', 0,
+      { content: 'File created successfully at: /memories/seed-1.md', isError: false },
+    );
+    expect(spies.chatService.updateMessageBlock).not.toHaveBeenCalled();
   });
 
   it('(blockAction) edit dispatches updateMessageBlock with status="edited" + editedFromText', async () => {
@@ -396,6 +414,7 @@ describe('ChatPageComponent (characterization)', () => {
       0,
       jasmine.objectContaining({ status: 'discarded' }),
     );
+    expect(spies.pendingApproval.executeApprovedToolUse).not.toHaveBeenCalled();
   });
 
   it('consumeDevSeed("memory") on init appends an assistant message with a pending memory tool_use block', async () => {

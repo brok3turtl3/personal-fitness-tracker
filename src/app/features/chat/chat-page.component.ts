@@ -1,5 +1,6 @@
 import { Component, DestroyRef, ElementRef, OnInit, ViewChild, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { from } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { ChatService } from '../../services/chat.service';
@@ -355,15 +356,20 @@ export class ChatPageComponent implements OnInit {
       from(this.pendingApprovalService.executeApprovedToolUse(block))
         .pipe(takeUntilDestroyed(this.destroyRef))
         .subscribe({
-          next: result => {
+          next: (result: { content: string; isError: boolean }) => {
             this.chatService.approveToolUseBlock(conversationId, messageId, blockIndex, result)
               .pipe(takeUntilDestroyed(this.destroyRef))
               .subscribe({
-                next: () => this.refreshActiveConversation(),
-                error: err => console.error('[chat-page] approve persist failed', err),
+                next: () => {
+                  // Refresh active conversation to surface approved pill + result.
+                  this.chatService.getConversation(conversationId)
+                    .pipe(takeUntilDestroyed(this.destroyRef))
+                    .subscribe(conv => { this.activeConversation = conv; });
+                },
+                error: (err: unknown) => console.error('[chat-page] approve persist failed', err),
               });
           },
-          error: err => console.error('[chat-page] approve execute failed', err),
+          error: (err: unknown) => console.error('[chat-page] approve execute failed', err),
         });
       return;
     }

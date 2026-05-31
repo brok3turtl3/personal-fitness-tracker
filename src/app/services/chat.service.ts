@@ -15,6 +15,7 @@ import {
   DEFAULT_AI_SETTINGS,
   TextBlock,
   ToolUseBlock,
+  ToolResultBlock,
 } from '../models/ai-chat.model';
 import { AppData } from '../models/app-data.model';
 
@@ -224,6 +225,81 @@ export class ChatService {
           ...msg.blocks.slice(0, blockIndex),
           updatedBlock,
           ...msg.blocks.slice(blockIndex + 1),
+        ];
+        const updatedMsg: ChatMessage = { ...msg, blocks: updatedBlocks };
+        const updatedConv: ChatConversation = {
+          ...conv,
+          messages: [
+            ...conv.messages.slice(0, msgIdx),
+            updatedMsg,
+            ...conv.messages.slice(msgIdx + 1),
+          ],
+          updatedAt: new Date().toISOString(),
+        };
+        const updatedData: AppData = {
+          ...data,
+          chatConversations: [
+            ...data.chatConversations.slice(0, convIdx),
+            updatedConv,
+            ...data.chatConversations.slice(convIdx + 1),
+          ],
+        };
+        return this.storageService.saveData(updatedData);
+      }),
+    );
+  }
+
+  /**
+   * Approve a tool_use block AND append its paired tool_result in ONE
+   * atomic StorageService write (gap-closure plan 03-07, SC3). Flips the
+   * block at [conversationId][messageId][blockIndex] to status='approved'
+   * and appends a ToolResultBlock whose tool_use_id === that block's id to
+   * the SAME message — so the transcript is never left with an approved
+   * tool_use that has no paired tool_result (which would brick the
+   * conversation via Anthropic 400).
+   *
+   * The result string is COMPUTED ELSEWHERE (PendingApprovalService →
+   * ToolRegistryService) and passed in. SC5: this method imports no tool
+   * executor; chat.service.ts stays grep-clean.
+   */
+  approveToolUseBlock(
+    conversationId: string,
+    messageId: string,
+    blockIndex: number,
+    result: { content: string; isError: boolean },
+  ): Observable<void> {
+    return this.storageService.getData().pipe(
+      switchMap(data => {
+        if (!data) return throwError(() => new Error('Storage not initialized'));
+
+        const convIdx = data.chatConversations.findIndex(c => c.id === conversationId);
+        if (convIdx === -1) return throwError(() => new Error(`Conversation not found: ${conversationId}`));
+
+        const conv = data.chatConversations[convIdx];
+        const msgIdx = conv.messages.findIndex(m => m.id === messageId);
+        if (msgIdx === -1) return throwError(() => new Error(`Message not found: ${messageId}`));
+
+        const msg = conv.messages[msgIdx];
+        if (blockIndex < 0 || blockIndex >= msg.blocks.length) {
+          return throwError(() => new Error(`Block index out of range: ${blockIndex}`));
+        }
+        const block = msg.blocks[blockIndex];
+        if (block.type !== 'tool_use') {
+          return throwError(() => new Error(`Block at index ${blockIndex} is not tool_use (got: ${block.type})`));
+        }
+
+        const approvedBlock: ToolUseBlock = { ...block, status: 'approved' };
+        const resultBlock: ToolResultBlock = {
+          type: 'tool_result',
+          tool_use_id: block.id,
+          content: result.content,
+          ...(result.isError ? { isError: true } : {}),
+        };
+        const updatedBlocks: ChatBlock[] = [
+          ...msg.blocks.slice(0, blockIndex),
+          approvedBlock,
+          ...msg.blocks.slice(blockIndex + 1),
+          resultBlock,
         ];
         const updatedMsg: ChatMessage = { ...msg, blocks: updatedBlocks };
         const updatedConv: ChatConversation = {
