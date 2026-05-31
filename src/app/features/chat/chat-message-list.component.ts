@@ -10,7 +10,7 @@ import {
   WebSearchToolResultPersistedBlock,
 } from '../../models/ai-chat.model';
 import { parseClaimSpans } from '../../services/confidence-attribution-parser';
-import { toGroundedCitations, toSourcesList } from '../../services/web-citation-parser';
+import { toSourcesList } from '../../services/web-citation-parser';
 import { PendingPillComponent } from './pending-pill.component';
 
 /**
@@ -58,9 +58,9 @@ export function isLinkableCitation(citation: { type?: string } | undefined | nul
       @for (msg of messages; track msg.id) {
         <div class="message" [class.user]="msg.role === 'user'" [class.assistant]="msg.role === 'assistant'">
           <div class="message-role">{{ msg.role === 'user' ? 'You' : 'AI Assistant' }}</div>
-          <div class="message-content">@for (block of msg.blocks; track $index) {
+          <div class="message-content">@for (block of msg.blocks; track $index; let $blockIdx = $index) {
             @switch (block.type) {
-              @case ('text') {<span class="block-text">@for (span of spansFor(msg.id, $index, block.text); track $spanIdx; let $spanIdx = $index) {<span class="claim-span">{{ span.text }}@if (span.confidence) {<span class="confidence-chip" [class.tier-calm]="isCalm(span.confidence)" [class.tier-alert]="!isCalm(span.confidence)" [attr.aria-label]="'Confidence: ' + span.confidence"><span class="chip-glyph" aria-hidden="true">{{ confidenceGlyph(span.confidence) }}</span><span class="chip-label">{{ span.confidence }}</span></span>}@if (span.source === 'data') {<span class="source-chip" aria-label="Source: from your data"><span class="chip-glyph" aria-hidden="true">📈</span><span class="chip-label">your data</span></span>}@if (span.source === 'research') {<span class="source-chip" aria-label="Source: from research — general knowledge, not a live source"><span class="chip-glyph" aria-hidden="true">📚</span><span class="chip-label">research</span></span><span class="research-qualifier">general knowledge — not a live source</span>}</span>{{ ' ' }}}</span>}
+              @case ('text') {<span class="block-text">@for (span of spansFor(msg.id, $blockIdx, block.text); track $spanIdx; let $spanIdx = $index) {<span class="claim-span">{{ span.text }}@if (span.confidence) {<span class="confidence-chip" [class.tier-calm]="isCalm(span.confidence)" [class.tier-alert]="!isCalm(span.confidence)" [attr.aria-label]="'Confidence: ' + span.confidence"><span class="chip-glyph" aria-hidden="true">{{ confidenceGlyph(span.confidence) }}</span><span class="chip-label">{{ span.confidence }}</span></span>}@if (span.source === 'data') {<span class="source-chip" aria-label="Source: from your data"><span class="chip-glyph" aria-hidden="true">📈</span><span class="chip-label">your data</span></span>}@if (span.source === 'research' && isGrounded(msg.id, $blockIdx, block.text, block.citations)) {<span class="source-chip source-chip--grounded" [attr.aria-label]="'Source: from research, grounded in ' + groundedFor(msg.id, $blockIdx, block.text, block.citations).length + ' live web source(s)'"><span class="chip-glyph" aria-hidden="true">📚🔗</span><span class="chip-label">research · grounded</span></span>}@else if (span.source === 'research') {<span class="source-chip" aria-label="Source: from research — general knowledge, not a live source"><span class="chip-glyph" aria-hidden="true">📚</span><span class="chip-label">research</span></span><span class="research-qualifier">general knowledge — not a live source</span>}</span>{{ ' ' }}}@if (isGrounded(msg.id, $blockIdx, block.text, block.citations)) {<span class="footnote-markers">@for (cite of groundedFor(msg.id, $blockIdx, block.text, block.citations); track cite.url; let $n = $index) {<a class="footnote-marker" [href]="'#' + sourceId(msg.id, $n + 1)" [attr.aria-label]="'Source ' + ($n + 1) + ': ' + cite.title">[{{ $n + 1 }}]</a>}</span>}</span>@if (isGrounded(msg.id, $blockIdx, block.text, block.citations)) {<section class="sources" aria-label="Sources"><h4 class="sources-heading">Sources</h4><ol class="sources-list">@for (cite of groundedFor(msg.id, $blockIdx, block.text, block.citations); track cite.url; let $n = $index) {<li class="sources-item" [id]="sourceId(msg.id, $n + 1)"><span class="sources-title">[{{ $n + 1 }}] {{ cite.title }}</span> <a class="sources-url" [href]="cite.url" rel="noopener noreferrer" target="_blank">{{ cite.url }}</a></li>}</ol></section>}}
               @case ('tool_use') {
                 @if (isQueryTool(block.name)) {
                   @if (resultFor(msg, block.id); as result) {
@@ -225,11 +225,51 @@ export function isLinkableCitation(citation: { type?: string } | undefined | nul
     .confidence-chip.tier-calm { background: #eef6ec; color: #2e7d32; }
     .confidence-chip.tier-alert { background: #fdf3e7; color: #b9770e; }
     .source-chip { background: #f0f0f0; color: #2c3e50; }
+    .source-chip--grounded { background: #f0f0f0; color: #2c3e50; }
     .research-qualifier {
       margin-left: 4px;
       font: italic 0.8125rem/1 inherit;
       color: #7f8c8d;
     }
+
+    .footnote-markers { white-space: normal; }
+    .footnote-marker {
+      margin-left: 4px;
+      font: 600 14px/1.5 inherit;
+      /* Darkened accent (#21618c) so the link clears WCAG AA (5.8:1) on the
+         #f0f0f0 assistant bubble — the UI-SPEC color-nudge for a failing row
+         (QUAL-08). Same blue family as the #3498db accent. */
+      color: #21618c;
+      text-decoration: none;
+      vertical-align: baseline;
+    }
+    .footnote-marker:hover { text-decoration: underline; }
+
+    .sources {
+      margin-top: 16px;
+      padding-top: 8px;
+      border-top: 1px solid #ddd;
+    }
+    .sources-heading {
+      margin: 0 0 8px;
+      font: 600 14px/1.2 inherit;
+      color: #2c3e50;
+    }
+    .sources-list {
+      margin: 0;
+      padding-left: 1.25rem;
+      list-style: none;
+    }
+    .sources-item {
+      margin: 8px 0;
+      font: 400 14px/1.5 inherit;
+    }
+    .sources-title { font-weight: 600; }
+    .sources-url {
+      color: #21618c;
+      overflow-wrap: anywhere;
+    }
+    .sources-url:hover { text-decoration: underline; }
 
     .tool-disclosure,
     .tool-inflight {
@@ -338,6 +378,14 @@ export class ChatMessageListComponent implements OnChanges {
    */
   private spanCache = new Map<string, ClaimSpan[]>();
 
+  /**
+   * Memoized grounded-citation narrowing per text block, keyed by
+   * `${messageId}#${blockIndex}#${text}` — the SAME memo discipline as
+   * `spanCache`. Narrowing runs ONCE per (block, text), NEVER in a
+   * change-detection-rebound binding. Cleared in ngOnChanges with spanCache.
+   */
+  private citationCache = new Map<string, GroundedCitation[]>();
+
   /** Confidence grades that read as "calm / higher-confidence" (04-UI-SPEC). */
   private static readonly CALM_GRADES: ReadonlySet<Confidence> = new Set<Confidence>([
     'strong',
@@ -348,6 +396,7 @@ export class ChatMessageListComponent implements OnChanges {
     // Inputs replaced ⇒ drop stale memoized spans (the key includes text, so
     // collisions are impossible, but this bounds the cache to live blocks).
     this.spanCache.clear();
+    this.citationCache.clear();
     setTimeout(() => this.scrollToBottom(), 0);
   }
 
@@ -364,6 +413,59 @@ export class ChatMessageListComponent implements OnChanges {
       this.spanCache.set(key, spans);
     }
     return spans;
+  }
+
+  /**
+   * Grounded web-search citations backing a text block, memoized (D-03/D-09).
+   * The persisted `TextBlock.citations` already arrive narrowed + https-gated
+   * by `web-citation-parser.toGroundedCitations` at the serializer chokepoint
+   * (the ONLY place that turns an SDK `TextCitation` into a `GroundedCitation`).
+   * Here we re-assert the https gate defensively and dedupe by URL via
+   * `toSourcesList` for the footnote/Sources render. Memoized the SAME way as
+   * `spansFor`/`spanCache`: narrowed ONCE per (block, text), never in a
+   * CD-rebound binding.
+   */
+  groundedFor(
+    messageId: string,
+    blockIndex: number,
+    text: string,
+    citations: GroundedCitation[] | undefined,
+  ): GroundedCitation[] {
+    const key = `${messageId}#${blockIndex}#${text}`;
+    let grounded = this.citationCache.get(key);
+    if (!grounded) {
+      // Defensive https re-gate: a GroundedCitation is guaranteed https: by the
+      // parser, but re-checking here means a hand-built/tampered block can never
+      // slip a non-https url into an <a href> (T-05-08-02). Then dedupe by URL.
+      const httpsOnly = (citations ?? []).filter((c) => this.isHttps(c.url));
+      grounded = toSourcesList(httpsOnly);
+      this.citationCache.set(key, grounded);
+    }
+    return grounded;
+  }
+
+  /** True iff a url parses and uses the https: protocol (defensive link gate). */
+  private isHttps(url: string): boolean {
+    try {
+      return new URL(url).protocol === 'https:';
+    } catch {
+      return false;
+    }
+  }
+
+  /** True when a text block is backed by ≥1 grounded citation (footnote/badge). */
+  isGrounded(
+    messageId: string,
+    blockIndex: number,
+    text: string,
+    citations: GroundedCitation[] | undefined,
+  ): boolean {
+    return this.groundedFor(messageId, blockIndex, text, citations).length > 0;
+  }
+
+  /** Stable per-message footnote anchor id: `source-{msgId}-{n}` (1-based). */
+  sourceId(messageId: string, n: number): string {
+    return `source-${messageId}-${n}`;
   }
 
   /** True when a confidence grade is in the calm tier (pale-green badge). */

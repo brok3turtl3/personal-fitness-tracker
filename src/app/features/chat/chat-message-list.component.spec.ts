@@ -527,3 +527,154 @@ describe('ChatMessageListComponent — web-search rows (D-05)', () => {
     await expectNoSeriousA11yViolations(details);
   });
 });
+
+// ── Grounded footnotes + Sources list + grounded badge (D-03/D-04/D-09, Task 1b)
+
+function groundedCite(url: string, title: string, citedText = 'excerpt'): GroundedCitation {
+  return { url, title, citedText };
+}
+
+function textWithCitations(text: string, citations: GroundedCitation[]): TextBlock {
+  return { type: 'text', text, citations };
+}
+
+describe('ChatMessageListComponent — grounded footnotes + Sources (D-03/D-04)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('F2: a grounded claim renders a footnote [1] anchor + a Sources https link', async () => {
+    const msg = makeMsg('assistant', [
+      textWithCitations(
+        'Train each muscle group at least twice per week. [evidence: strong][source: research]',
+        [groundedCite('https://example.org/rt-guidelines', 'Resistance Training — 2024 Guidelines')],
+      ),
+    ]);
+    const fixture = await createFixture([msg]);
+    const el: HTMLElement = fixture.nativeElement;
+
+    const marker = el.querySelector('a.footnote-marker') as HTMLAnchorElement;
+    expect(marker).toBeTruthy();
+    expect(marker.textContent).toContain('[1]');
+    expect(marker.getAttribute('href')).toBe(`#source-${msg.id}-1`);
+    expect(marker.getAttribute('aria-label')).toBe('Source 1: Resistance Training — 2024 Guidelines');
+
+    const sources = el.querySelector('section.sources') as HTMLElement;
+    expect(sources).toBeTruthy();
+    expect(sources.getAttribute('aria-label')).toBe('Sources');
+    const url = el.querySelector('a.sources-url') as HTMLAnchorElement;
+    expect(url.getAttribute('href')).toBe('https://example.org/rt-guidelines');
+    expect(url.getAttribute('href')!.startsWith('https:')).toBe(true);
+    // The Sources item carries the matching anchor target id.
+    expect(el.querySelector(`#source-${msg.id}-1`)).toBeTruthy();
+  });
+
+  it('F2: a grounded research claim shows the · grounded badge (not the un-grounded one)', async () => {
+    const msg = makeMsg('assistant', [
+      textWithCitations(
+        'Twice per week is supported. [evidence: strong][source: research]',
+        [groundedCite('https://example.org/g', 'Guideline')],
+      ),
+    ]);
+    const fixture = await createFixture([msg]);
+    const el: HTMLElement = fixture.nativeElement;
+
+    const grounded = el.querySelector('.source-chip--grounded') as HTMLElement;
+    expect(grounded).toBeTruthy();
+    expect(grounded.textContent).toContain('research · grounded');
+    expect(grounded.textContent).toContain('📚🔗');
+    expect(grounded.getAttribute('aria-label')).toBe(
+      'Source: from research, grounded in 1 live web source(s)',
+    );
+    // The un-grounded qualifier text is NOT present on a grounded claim.
+    expect(el.querySelector('.message-content')?.textContent).not.toContain(
+      'general knowledge — not a live source',
+    );
+  });
+
+  it('F4: an un-grounded research claim has NO link, NO grounded badge, keeps the qualifier', async () => {
+    const text =
+      'Progressive overload drives strength gains. [evidence: moderate][source: research]';
+    const msg = makeMsg('assistant', [{ type: 'text', text }]); // no citations
+    const fixture = await createFixture([msg]);
+    const el: HTMLElement = fixture.nativeElement;
+
+    expect(el.querySelectorAll('a').length).toBe(0);
+    expect(el.querySelector('.source-chip--grounded')).toBeFalsy();
+    expect(el.querySelector('.footnote-marker')).toBeFalsy();
+    expect(el.querySelector('section.sources')).toBeFalsy();
+    expect(el.querySelector('.message-content')?.textContent).toContain(
+      'general knowledge — not a live source',
+    );
+  });
+
+  it('F5: a mixed turn renders the grounded and un-grounded claims distinguishably', async () => {
+    const msg = makeMsg('assistant', [
+      textWithCitations(
+        'Load 20 g/day for 5–7 days. [evidence: strong][source: research]',
+        [groundedCite('https://example.org/creatine', 'Creatine Loading')],
+      ),
+      { type: 'text', text: 'Consistency matters most. [evidence: moderate][source: research]' },
+    ]);
+    const fixture = await createFixture([msg]);
+    const el: HTMLElement = fixture.nativeElement;
+
+    // Exactly one grounded badge + one un-grounded research chip.
+    expect(el.querySelectorAll('.source-chip--grounded').length).toBe(1);
+    expect(el.querySelectorAll('.footnote-marker').length).toBe(1);
+    // The un-grounded chip keeps the qualifier; one Sources list (grounded block only).
+    expect(el.querySelector('.message-content')?.textContent).toContain(
+      'general knowledge — not a live source',
+    );
+    expect(el.querySelectorAll('section.sources').length).toBe(1);
+  });
+
+  it('F6: a non-https citation renders plain text — never a link (https gate)', async () => {
+    // A persisted non-https citation should never have survived the serializer,
+    // but the renderer re-narrows defensively: toGroundedCitations drops it.
+    const msg = makeMsg('assistant', [
+      textWithCitations('Insecure ref. [evidence: weak][source: research]', [
+        { url: 'http://insecure.example.com/a', title: 'Insecure', citedText: 'x' },
+      ]),
+    ]);
+    const fixture = await createFixture([msg]);
+    const el: HTMLElement = fixture.nativeElement;
+
+    expect(el.querySelectorAll('a').length).toBe(0);
+    expect(el.querySelector('.source-chip--grounded')).toBeFalsy();
+    expect(el.querySelector('section.sources')).toBeFalsy();
+  });
+
+  it('F7: a null/blank-title citation falls back to the URL host in the Sources link', async () => {
+    const msg = makeMsg('assistant', [
+      textWithCitations('Null-title source. [evidence: moderate][source: research]', [
+        { url: 'https://no-title.example.net/page', title: 'no-title.example.net', citedText: 'x' },
+      ]),
+    ]);
+    const fixture = await createFixture([msg]);
+    const el: HTMLElement = fixture.nativeElement;
+
+    const title = el.querySelector('.sources-title') as HTMLElement;
+    expect(title.textContent).toContain('no-title.example.net');
+    const url = el.querySelector('a.sources-url') as HTMLAnchorElement;
+    expect(url.getAttribute('href')!.startsWith('https:')).toBe(true);
+  });
+
+  it('expectNoSeriousA11yViolations on a grounded footnote + Sources render (color-contrast enforced)', async () => {
+    const msg = makeMsg('assistant', [
+      textWithCitations(
+        'Twice per week. [evidence: strong][source: research]',
+        [groundedCite('https://example.org/rt', 'RT Guidelines')],
+      ),
+    ]);
+    const fixture = await createFixture([msg]);
+    // Scope contrast to the grounded surfaces (footnote marker, Sources section,
+    // grounded chip). Bubble chrome (.message-time/.message-role opacity) is
+    // 05-09's cross-chat sweep. The accent #2980b9 link / #2c3e50 chip text
+    // is contrast-clean against the #f0f0f0 bubble and enforced here.
+    const sources = fixture.nativeElement.querySelector('section.sources') as HTMLElement;
+    const chip = fixture.nativeElement.querySelector('.source-chip--grounded') as HTMLElement;
+    const marker = fixture.nativeElement.querySelector('a.footnote-marker') as HTMLElement;
+    await expectNoSeriousA11yViolations(sources);
+    await expectNoSeriousA11yViolations(chip);
+    await expectNoSeriousA11yViolations(marker);
+  });
+});
