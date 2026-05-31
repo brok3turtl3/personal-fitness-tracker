@@ -113,7 +113,7 @@
 
 **Wave 2** *(blocked on Wave 1; file-disjoint)*
 - [ ] 04-agentic-loop-citation-ui/04-04-PLAN.md — The agentic while(stop_reason==='tool_use') loop in ChatService (CHAT-02, CHAT-05)
-- [ ] 04-agentic-loop-citation-ui/04-05-PLAN.md — chat-message-list: citation-link guard + confidence/source badges + tool-call disclosures (CHAT-06, CHAT-07, CHAT-08, CHAT-09)
+- [x] 04-agentic-loop-citation-ui/04-05-PLAN.md — chat-message-list: citation-link guard + confidence/source badges + tool-call disclosures (CHAT-06, CHAT-07, CHAT-08, CHAT-09) — completed 2026-05-31 (4 commits: b291f29, 237b87d, 5c54da9, 308c22f; SUMMARY: 04-05-SUMMARY.md). Extended the `'text'` @case → memoized parseClaimSpans + triple-encoded confidence/source badges + interpolation-only citation guard (`isLinkableCitation` allow-list; E1 spec asserts zero `<a>` from author-year/DOI/URL prose); `query_*` tool_use/tool_result → collapsed native `<details>` disclosures with renderer-derived LOCKED summaries (E12), in-flight `role=status` rows; memory write-proposal keeps `<app-pending-pill>`. Full Karma: **579 SUCCESS** (+16). Build green. **CHAT-06 marked complete** (CHAT-07/08/09 already complete via 04-01 — this plan is their UI consumer).
 
 **Wave 3** *(blocked on Wave 2)*
 - [ ] 04-agentic-loop-citation-ui/04-06-PLAN.md — chat-page loop orchestration + turn-limit/terminal notices + gate dev-seed (CHAT-02, CHAT-05, CHAT-06)

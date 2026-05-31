@@ -39,7 +39,7 @@ Requirements for the refinement milestone. Each maps to roadmap phases (filled i
 - [x] **CHAT-03**: AI has persistent memory across sessions via the official `memory_20250818` tool, backed by `AppData.memoryFiles`, with path validation (`/memories` prefix required, `..` rejected)
 - [x] **CHAT-04**: Structured `UserProfile` (goals, preferences, dietary constraints, training history) is editable in `/settings` and visible to the AI; AI can propose updates via `update_profile` with confirm-before-write
 - [x] **CHAT-05**: `ChatService` runs an agentic `while (stop_reason === 'tool_use')` loop with a configurable `maxAgentTurns` guard, dispatching through a single `ToolRegistryService`
-- [ ] **CHAT-06**: Tool-call transparency — `tool_use` and `tool_result` blocks render as collapsed sections inside the message stream, expandable on demand
+- [x] **CHAT-06**: Tool-call transparency — `tool_use` and `tool_result` blocks render as collapsed sections inside the message stream, expandable on demand
 - [x] **CHAT-07**: Per-claim confidence labels are parsed and rendered as inline badges with the taxonomy `strong | moderate | weak | animal-only | anecdotal | speculative`; low-confidence states are visually distinct (color + icon)
 - [x] **CHAT-08**: Source attribution clearly distinguishes "from your data" vs "from research" in the rendered output
 - [x] **CHAT-09**: AI never renders free-generated citations as links — only API-structured citations (`web_search_result_location`, `search_result` blocks) become hyperlinks
@@ -143,7 +143,7 @@ Mapped by the roadmapper.
 | CHAT-03 | Phase 3 | Complete |
 | CHAT-04 | Phase 3 | Complete |
 | CHAT-05 | Phase 4 | Complete |
-| CHAT-06 | Phase 4 | Pending |
+| CHAT-06 | Phase 4 | Complete |
 | CHAT-07 | Phase 4 | Complete |
 | CHAT-08 | Phase 4 | Complete |
 | CHAT-09 | Phase 4 | Complete |
