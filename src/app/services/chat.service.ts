@@ -93,8 +93,11 @@ const SUMMARIZATION_PROMPT = 'Summarize this conversation preserving key facts, 
  */
 function approxMessageTokens(text: string): number {
   // ~0.75 tokens per whitespace-delimited word (a stable, non-len/4 figure).
+  // WR-03: multiply (not divide) so the result matches the stated 0.75
+  // tokens/word intent — dividing inflated the estimate to ~1.33 tokens/word
+  // and caused premature sliding-window truncation.
   const words = text.trim().length ? text.trim().split(/\s+/).length : 0;
-  return Math.max(1, Math.ceil(words / 0.75));
+  return Math.max(1, Math.ceil(words * 0.75));
 }
 
 @Injectable({
