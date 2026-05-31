@@ -76,7 +76,13 @@ describe('ChatService', () => {
     mockAISettings.getSettings.and.returnValue(of(mockSettings));
 
     mockFitnessContext = jasmine.createSpyObj('FitnessContextService', ['buildSystemPrompt']);
-    mockFitnessContext.buildSystemPrompt.and.returnValue(of('You are a fitness expert.'));
+    // Phase 4 (04-03): buildSystemPrompt now returns a structured
+    // SystemTextBlock[] (cacheable prefix + non-cached today block) rather
+    // than a bare string. Plan 04 owns the loop consumer; here we just feed
+    // the new shape so the transport receives a valid `system`.
+    mockFitnessContext.buildSystemPrompt.and.returnValue(
+      of([{ type: 'text', text: 'You are a fitness expert.', cache_control: { type: 'ephemeral' } }]),
+    );
 
     TestBed.configureTestingModule({
       providers: [
@@ -175,7 +181,9 @@ describe('ChatService', () => {
       expect(mockAnthropicApi.sendMessage).toHaveBeenCalled();
       const [apiKey, request] = mockAnthropicApi.sendMessage.calls.mostRecent().args;
       expect(apiKey).toBe('sk-ant-test-key');
-      expect(request.system).toBe('You are a fitness expert.');
+      expect(request.system).toEqual([
+        { type: 'text', text: 'You are a fitness expert.', cache_control: { type: 'ephemeral' } },
+      ]);
       expect(request.model).toBe('claude-sonnet-4-6');
     });
 
