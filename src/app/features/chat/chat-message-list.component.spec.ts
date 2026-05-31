@@ -21,7 +21,10 @@ import {
   WebSearchToolResultPersistedBlock,
 } from '../../models/ai-chat.model';
 import { toGroundedCitations } from '../../services/web-citation-parser';
+import { fromAnthropicMessage } from '../../services/chat-block-serializer';
+import { F1, F3, F6 } from '../../services/web-citation-parser.fixtures';
 import { expectNoSeriousA11yViolations } from '../../shared/a11y-test-helpers';
+import type { Message } from '@anthropic-ai/sdk/resources/messages';
 
 function makeMsg(role: 'user' | 'assistant', blocks: ChatBlock[]): ChatMessage {
   return {
@@ -668,7 +671,7 @@ describe('ChatMessageListComponent — grounded footnotes + Sources (D-03/D-04)'
     const fixture = await createFixture([msg]);
     // Scope contrast to the grounded surfaces (footnote marker, Sources section,
     // grounded chip). Bubble chrome (.message-time/.message-role opacity) is
-    // 05-09's cross-chat sweep. The accent #2980b9 link / #2c3e50 chip text
+    // 05-09's cross-chat sweep. The accent #21618c link / #2c3e50 chip text
     // is contrast-clean against the #f0f0f0 bubble and enforced here.
     const sources = fixture.nativeElement.querySelector('section.sources') as HTMLElement;
     const chip = fixture.nativeElement.querySelector('.source-chip--grounded') as HTMLElement;
@@ -676,5 +679,94 @@ describe('ChatMessageListComponent — grounded footnotes + Sources (D-03/D-04)'
     await expectNoSeriousA11yViolations(sources);
     await expectNoSeriousA11yViolations(chip);
     await expectNoSeriousA11yViolations(marker);
+  });
+});
+
+/**
+ * E1 — RESCH-03 adversarial citation-link integrity, ZERO TOLERANCE: any
+ * fabricated / non-https link is a build-failing red, not a warning
+ * (AI-SPEC §5 E1 rubric + §6 online guardrail). This is THE single most
+ * important eval artifact for Phase 5: it proves, across the web-OFF (F1)
+ * and web-ON (F3) matrix, that the ONLY DOM `<a href>` traces to a
+ * structured `web_search_result_location` block (https-gated) — model-authored
+ * prose (author-year strings, bare DOIs, bare URLs) NEVER becomes a link.
+ *
+ * The fixtures are real SDK `Message` shapes (web-citation-parser.fixtures);
+ * they are routed through the production `fromAnthropicMessage` serializer (the
+ * SOLE chokepoint that narrows SDK `TextCitation` → local GroundedCitation),
+ * exactly as the live loop renders them — no test-only block construction.
+ */
+describe('ChatMessageListComponent — E1 adversarial citation-link gate (RESCH-03, ZERO TOLERANCE)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  function renderFixture(sdkMessage: Message): Promise<ComponentFixture<ChatMessageListComponent>> {
+    const blocks = fromAnthropicMessage(sdkMessage);
+    return createFixture([makeMsg('assistant', blocks)]);
+  }
+
+  it('WEB-OFF (F1): model-authored author-year + bare DOI prose yields ZERO <a>', async () => {
+    const fixture = await renderFixture(F1);
+    const el: HTMLElement = fixture.nativeElement;
+
+    // THE zero-tolerance assertion for the OFF axis.
+    expect(el.querySelectorAll('a').length).toBe(0);
+    // The prose still renders, inert and plain.
+    const content = el.querySelector('.message-content')?.textContent ?? '';
+    expect(content).toContain('Smith et al. 2021');
+    expect(content).toContain('10.1234/abcd');
+  });
+
+  it('WEB-ON (F3): only the structured grounded citation links; prose author-year is inert', async () => {
+    const fixture = await renderFixture(F3);
+    const el: HTMLElement = fixture.nativeElement;
+
+    // F3 carries exactly ONE grounded web_search_result_location citation.
+    const f3TextBlock = F3.content.find(
+      (b): b is Extract<typeof b, { type: 'text' }> => b.type === 'text' && !!b.citations,
+    );
+    const grounded = toGroundedCitations(f3TextBlock?.citations ?? undefined);
+    expect(grounded.length).toBe(1);
+
+    // Anchors that point at a Sources https URL == the grounded-citation count.
+    const sourceUrlAnchors = Array.from(
+      el.querySelectorAll('a.sources-url'),
+    ) as HTMLAnchorElement[];
+    expect(sourceUrlAnchors.length).toBe(grounded.length);
+    for (const a of sourceUrlAnchors) {
+      expect(a.getAttribute('href')!.startsWith('https:')).toBe(true);
+    }
+
+    // The model-authored "Jones 2020" prose string is NOT an anchor.
+    const anchorTexts = Array.from(el.querySelectorAll('a')).map((a) => a.textContent ?? '');
+    expect(anchorTexts.some((t) => t.includes('Jones 2020'))).toBe(false);
+    // It still renders as inert plain text inside the prose.
+    expect(el.querySelector('.message-content')?.textContent).toContain('Jones 2020');
+
+    // Every anchor in the DOM is either a footnote marker or a Sources URL — both
+    // trace to the structured grounded citation. None trace to free prose.
+    const allAnchors = Array.from(el.querySelectorAll('a')) as HTMLAnchorElement[];
+    for (const a of allAnchors) {
+      const href = a.getAttribute('href') ?? '';
+      const tracesToStructured = href.startsWith('https:') || href.startsWith('#source-');
+      expect(tracesToStructured).toBe(true);
+    }
+  });
+
+  it('NON-HTTPS structured block (F6): http:/ftp: citations are dropped — never an <a>', async () => {
+    const fixture = await renderFixture(F6);
+    const el: HTMLElement = fixture.nativeElement;
+
+    expect(el.querySelectorAll('a').length).toBe(0);
+    expect(el.querySelector('section.sources')).toBeFalsy();
+  });
+
+  it('toGroundedCitations DROPS a non-web_search_result_location citation (allow-list)', () => {
+    // Direct unit assertion alongside the DOM gate: the parser allow-list is the
+    // sole path to a link, and it rejects any other citation type outright.
+    const nonWebSearch = [
+      { type: 'page_location', url: 'https://example.org/x', title: 'X', cited_text: 'x' },
+      { type: 'char_location', url: 'https://example.org/y', title: 'Y', cited_text: 'y' },
+    ] as never;
+    expect(toGroundedCitations(nonWebSearch)).toEqual([]);
   });
 });
