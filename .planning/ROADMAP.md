@@ -131,7 +131,29 @@
   3. A user whose LocalStorage usage crosses 70% sees a visible warning banner; at 95% writes are blocked with a clear archive/export prompt — quota detection uses `navigator.storage.estimate()` and matches `QuotaExceededError` plus Firefox `NS_ERROR_DOM_QUOTA_REACHED`.
   4. A user with two windows open who edits in one sees the other detect the change via the `storage` event and surface a "data changed elsewhere — refresh" banner; a stale 401 from Anthropic surfaces a "rotate / re-enter key" prompt rather than a console error.
   5. A user navigating any of the eight feature pages experiences consistent forms, validation, empty/error states, full keyboard navigability, and zero serious/critical `axe-core` violations; a chat-archival pass keeps the active conversation slice small; CSP blocks any external connection except `https://api.anthropic.com`; mutation testing on at least one critical service proves coverage represents real confidence.
-**Plans**: TBD
+**Plans**: 9 plans across 5 waves
+
+**Wave 1** *(no dependencies — runs first; file-disjoint)*
+- [ ] 05-web-search-grounding-quality-sweep/05-01-PLAN.md — Wave-0 infra: Stryker install+config, F1–F14 web-search fixtures, CSP assertion spec, lift color-contrast deferral (QUAL-06/08/10)
+- [ ] 05-web-search-grounding-quality-sweep/05-02-PLAN.md — Web-citation parser + V6 migration + serializer verbatim server-tool/citation passthrough (RESCH-02, Pitfall 1)
+- [ ] 05-web-search-grounding-quality-sweep/05-03-PLAN.md — CRUD update methods on cardio/weight/readings services, identity-preserving (QUAL-03, D-12)
+
+**Wave 2** *(blocked on Wave 1)*
+- [ ] 05-web-search-grounding-quality-sweep/05-04-PLAN.md — Storage quota (estimate + cross-browser) + multi-tab read + lazy chat archival keys (QUAL-02/04/05) [depends 02]
+- [ ] 05-web-search-grounding-quality-sweep/05-06-PLAN.md — Edit-mode UI on cardio/weight/readings pages (QUAL-03) [depends 03]
+
+**Wave 3** *(blocked on Wave 2)*
+- [ ] 05-web-search-grounding-quality-sweep/05-05-PLAN.md — web_search server tool wired into the loop: transport + render-only + pause_turn + read-only guard + system-prompt D-08/D-10 (RESCH-01) [depends 02,04]
+- [ ] 05-web-search-grounding-quality-sweep/05-07-PLAN.md — App-level quota + multi-tab banners + CSP meta tag (QUAL-02/04/06) [depends 04]
+
+**Wave 4** *(blocked on Wave 3)*
+- [ ] 05-web-search-grounding-quality-sweep/05-08-PLAN.md — Grounded footnotes + Sources list + grounded badge + live search row + E1 adversarial + archival affordance + settings cost helper (RESCH-02/03, QUAL-05, D-06) [depends 02,04,05]
+
+**Wave 5** *(blocked on Wave 4)*
+- [ ] 05-web-search-grounding-quality-sweep/05-09-PLAN.md — 401 rotate-key + block-action errors + QUAL-01 type sweep + QUAL-10 mutation floor + QUAL-08 final a11y pass (checkpoint) (QUAL-01/07/08/09/10) [depends 01-08]
+
+> **Cross-phase note:** Phase 5 bumps CURRENT_SCHEMA_VERSION to V6 for the chat-block citation/server-tool shape change. Phase 2's diet schema work (DIET-10, currently labeled "V5→V6") must therefore target V6→V7 once Phase 5 lands first.
+
 **UI hint**: yes
 **AI hint**: yes
 
@@ -145,7 +167,7 @@
 | 2. Diet UX Overhaul | 0/? | Not started | - |
 | 3. AI Memory + Tool Plumbing | 7/7 | Complete    | 2026-05-31 |
 | 4. Agentic Loop + Citation UI | 0/6 | Planned | - |
-| 5. Web Search Grounding + Quality Sweep | 0/? | Not started | - |
+| 5. Web Search Grounding + Quality Sweep | 0/9 | Planned | - |
 
 ---
 
