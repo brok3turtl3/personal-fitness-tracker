@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-05-31T17:56:31.831Z"
+last_updated: "2026-05-31T18:05:29.229Z"
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 23
-  completed_plans: 19
-  percent: 83
+  completed_plans: 20
+  percent: 87
 ---
 
 # State: Personal Fitness Tracker — Refinement Milestone (v2)
@@ -31,12 +31,12 @@ progress:
 ## Current Position
 
 Phase: 04 (agentic-loop-citation-ui) — EXECUTING
-Plan: 2 of 6 complete (Wave 1)
+Plan: 3 of 6 complete (Wave 1)
 **Phase:** 4
-**Plan:** 04-02 complete; next is 04-03 (Wave 1, no dependencies)
+**Plan:** 04-03 complete; next is 04-04 (Wave 2 — agentic loop, consumes 04-03 transport + buildSystemPrompt)
 **Status:** Executing Phase 04
-**Resume file:** .planning/phases/04-agentic-loop-citation-ui/04-03-PLAN.md
-**Progress:** [████████░░] 83%
+**Resume file:** None
+**Progress:** [█████████░] 87%
 
 **Wave structure:**
 
@@ -59,6 +59,7 @@ Plan: 2 of 6 complete (Wave 1)
 | Plans completed | 10 |
 | Verifier passes | 0 |
 | Plan-checker iterations | 3 (PASS on iteration 3) |
+| Phase 04 P04-03 | 12m | 2 tasks | 5 files |
 
 ### Plan Execution Log
 
@@ -101,6 +102,8 @@ Plan: 2 of 6 complete (Wave 1)
 - **Dev-seed pending pill lands on init, not on user click (Plan 03-06 gap closure).** `chat-page` ngOnInit now auto-selects the most-recent conversation (or seed-gated auto-creates one) BEFORE consuming the dev-seed sentinel, so the seed is never destroyed before a pending pill can render. Auto-create is gated on a non-null seed to preserve the Phase 1 empty-state characterization spec. StorageService untouched (minimum surface area).
 - **Six `query_*` read tools live in ONE `DataQueryToolExecutor` as six thin per-name `ToolExecutor` adapters (Plan 04-02, CHAT-02).** Fits the existing `register(executor)` API keyed on `definition.name` without a multi-name registry extension. Handlers `firstValueFrom` the domain getters (none take a range), range-filter in memory (D-14), then cap+summarize (aggregate header + most-recent-20 for >60 rows) so a 5-year query stays bounded (E6, ≤4000 chars). Read-only: injects domain services only — no `StorageService`/`localStorage`, no SDK import (D-17). `query_daily_totals` sums `MealEntry.totals` via a local helper, decoupled from `DietService.computeDailyTotals`.
 - **`ToolRegistryService.isWriteProposal(name)` is an explicit `WRITE_PROPOSAL_TOOLS` allow-list ('memory' only) (Plan 04-02, D-02/D-03).** `query_*` and any future read tool default to non-write, so the agentic loop (04-04) auto-executes reads and defers writes to the pending pill — a new read tool can never accidentally bypass the gate. Added SDK-agnostic `ToolDefinition.strict?: boolean` flag for Anthropic strict tool use (mapped to SDK `Tool.strict` at the api chokepoint).
+- **Transport widened for the agentic loop (Plan 04-03, CHAT-10/D-15).** `AnthropicApiService.sendMessage` now accepts full `MessageCreateParams` (the Phase 3 `Omit<…,'tools'|'tool_choice'>` is removed) so the loop can pass `tools[]` + a `cache_control`'d system prefix; `countTokens` accepts `system: string | TextBlockParam[]` and `tools[]`. `anthropic-api.service.ts` stays the sole `@anthropic-ai/sdk` importer (D-17). 401 path / `mapError` / `dangerouslyAllowBrowser` preserved verbatim.
+- **`FitnessContextService.buildSystemPrompt()` now returns `SystemTextBlock[]`, not a string (Plan 04-03, D-15/E7/Pitfall 4).** Block[0] is a BYTE-STABLE cacheable prefix carrying `cache_control: { type: 'ephemeral' }` — fixed field order: persona+injection-guard → units → profile (stable empty-omission) → slim `## Fitness Data Summary` (counts + single latest value per domain, NO per-entry dump, NO wall-clock) → grading instructions. Block[1] is a NON-cached deterministic `## Today` block carrying the only volatile `new Date().toISOString()`. Full per-domain detail now arrives via the `query_*` tools. Uses a LOCAL structural `SystemTextBlock` type (assignable to the SDK param at transport) to stay OUTSIDE the D-17 chokepoint — no SDK import in fitness-context. E7 byte-identical-prefix spec proves stability (0.1× cache reads vs 1.25× writes). `chat.service.ts` already passes the result straight through as `system` (SDK accepts `string | TextBlockParam[]`); Plan 04-04 wires the `tools[]`/loop consumer.
 
 ### Active Decisions Pending
 
@@ -143,6 +146,7 @@ None.
 
 ### Recent Sessions (Phase 04 execution)
 
+- **2026-05-31** — Executed plan 04-03 (Wave 1, sequential on `main`). 2 commits (6e31c88 feat — widen transport; c323b6c feat — slim FitnessContextService). Modified `anthropic-api.service.ts` (+ spec), `fitness-context.service.ts` (+ spec), `chat.service.spec.ts`. **Task 1:** `sendMessage` drops the Phase 3 `Omit<…,'tools'|'tool_choice'>` → accepts full `MessageCreateParams` (tools[] + cache_control); `countTokens` widens `system` to `string | TextBlockParam[]` + adds `tools[]`; imported `TextBlockParam`/`MessageCountTokensTool` (anthropic-api stays the sole SDK importer, D-17); 401/mapError/dangerouslyAllowBrowser preserved verbatim; spec now asserts tools[] reaches `messages.create`, a cache_control prefix is forwarded, and TextBlockParam[] system + tools reach `messages.countTokens`. **Task 2:** `buildSystemPrompt(): Observable<string>` → `Observable<SystemTextBlock[]>` (new exported LOCAL structural type, no SDK import). Block[0] = byte-stable cacheable prefix (`cache_control: ephemeral`, fixed field order: persona+guard → units → profile (stable omission) → slim counts+latest-values key-facts → grading instructions; NO timestamp, NO full dump). Block[1] = non-cached deterministic `## Today` block (sole volatile slot). `buildFitnessDataSnapshot` full-dataset stuffing removed (detail now via `query_*`); CHAT-11 `wrapUntrusted` + D-09 redaction toggles kept. E7 spec proves byte-identical cacheable prefix across two builds (profile present + absent) + cache_control + ≤2500-char budget under a 200×4 dataset. Full Karma: **551 SUCCESS** (was 547, +4). Production build: exit 0 (pre-existing 4.87 kB budget warning). D-17 chokepoint intact (zero `@anthropic-ai/sdk` in fitness-context). Two deviations: [Rule 3] updated `chat.service.spec` mock+assertion to the new SystemTextBlock[] shape to keep the build green (Plan 04-04 owns the loop consumer); [Rule 1] reworded a JSDoc literal `@anthropic-ai/sdk` so the chokepoint grep gate stays green (same edge case as 04-01/04-02). **CHAT-10 marked complete in REQUIREMENTS.md.** Wave 1 of Phase 4 advances (3 of 6 plans done).
 - **2026-05-31T17:43Z–17:57Z** — Executed plan 04-02 (Wave 1, type: tdd). 3 commits on `main` (b785acb test/RED; 52ce57e feat/GREEN — DataQueryToolExecutor; f5398f0 feat — ToolRegistry wiring + isWriteProposal). Created `data-query-tool-executor.ts` (+ spec); modified `tool-registry.service.ts` (+ spec). Built six bounded read-only `query_*` tools (`query_cardio_sessions`/`query_weight_entries`/`query_readings`/`query_meals_in_range`/`query_daily_totals`/`query_saved_foods`) as six thin per-name `ToolExecutor` adapters in ONE `@Injectable` executor — injects domain services only (no `StorageService`/`localStorage`, no SDK import). Handlers `firstValueFrom` → in-memory range filter (D-14) → cap+summarize (aggregate header + most-recent-20 for >60 rows). Registered the six alongside memory; added `isWriteProposal(name)` (explicit `WRITE_PROPOSAL_TOOLS` allow-list = 'memory' only, D-02/D-03) and an SDK-agnostic `ToolDefinition.strict` flag. TDD gate honored: RED b785acb (13 FAILED/1 SUCCESS) → GREEN 52ce57e (14 SUCCESS); no REFACTOR. E5 (read-only, no write-shaped method reachable) + E6 (1825-row/5-year weight query ≤4000 chars + summarizes) specs green. Full Karma: **547 SUCCESS** (was 530, +17). Production build: exit 0 (pre-existing 4.87 kB budget warning). Grep gates green (zero `@anthropic-ai/sdk`/`localStorage.*`/`StorageService` in the executor). Three deviations: [Rule 1] reworded JSDoc to keep literal chokepoint grep gates green (same edge case as 04-01); [Rule 3] `query_daily_totals` sums `MealEntry.totals` via a local helper instead of the spied `computeDailyTotals`; [Rule 2] added `ToolDefinition.strict` to support `strict:true` defs. **CHAT-02 marked complete in REQUIREMENTS.md.** Wave 1 of Phase 4 advances (2 of 6 plans done).
 - **2026-05-31T17:37Z–17:43Z** — Executed plan 04-01 (Wave 1, type: tdd). 3 commits on `main` (bac46da feat — span/event types + opus-4-8 fix; 397f9a7 test/RED; 3c67bf0 feat/GREEN — pure parser). Modified `ai-chat.model.ts` (+ `Confidence`/`Attribution`/`ClaimSpan`/`ChatTurnEvent`, corrected `claude-opus-4-7`→`claude-opus-4-8`); created `confidence-attribution-parser.ts` (pure, DI-free, SDK-agnostic, total `parseClaimSpans` — allow-list `ReadonlySet`s gate every assignment, never fabricates a grade, never throws) + spec (19 specs incl. adversarial `[evidence: ???]`, unknown-grade `superstrong`, nested brackets, empty string, idempotency, multi-claim-per-sentence). TDD gate sequence honored: RED 397f9a7 (15 FAILED/4 SUCCESS) → GREEN 3c67bf0 (19 SUCCESS); no REFACTOR needed. Full Karma: **530 SUCCESS** (was 511 Phase 3 baseline, +19). Production build: exit 0 (pre-existing 4.87 kB budget warning, not a regression). D-17 chokepoint preserved (zero `@anthropic-ai/sdk` imports in either file). Two Rule 1 deviations: reworded JSDoc comments containing the literal strings `@anthropic-ai/sdk` and `@Injectable` so the plan's literal grep gates (which must FAIL on those tokens) stay green — documentation-only, no behavior change (same edge case as Plan 01-10). **CHAT-07/08/09 marked complete in REQUIREMENTS.md.** Wave 1 of Phase 4 advances (1 of 6 plans done).
 
