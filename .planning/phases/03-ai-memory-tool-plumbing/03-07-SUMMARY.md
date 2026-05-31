@@ -88,4 +88,34 @@ None of substance — plan executed as written. Two minor, in-scope adjustments 
 
 Commit style matched the repo's recent conventional commits (no Co-Authored-By trailer, consistent with the last several commits).
 
+## Issues Encountered (flaky-harness recovery)
+
+The WSL2 harness delivered tool output in delayed bursts, which caused several exact-match Edits in mid-burst to silently fail against stale assumptions about two spec files (`chat.service.spec.ts` and `chat-page.component.spec.ts` use `StorageService.consumeDevSeed` directly — there is no `AiChatDevSeedService`). As a result:
+
+- The Task 2 `chat.service.approveToolUseBlock` method + specs did NOT land in commit `1091aa7` (only `PendingApprovalService` did).
+- The Task 3 chat-page commit `b4a7a97` shipped with a TS7006 compile error (untyped `err` lambdas) and an undefined `refreshActiveConversation()` reference.
+
+All were caught by re-running the targeted specs (which surfaced "saveData called 0 times" and a Karma load error), diagnosed via temp-file reads, and corrected in commit `d3f8e0c`:
+- Added the missing `chat.service.approveToolUseBlock` method + `ToolResultBlock` import.
+- Added the 4 approveToolUseBlock specs + 2 e2e integration specs to `chat.service.spec.ts`.
+- Fixed chat-page approve lambdas to `(err: unknown)`, inlined the `getConversation` refresh, single `from` import.
+- Added the `PendingApprovalService` spy + approve-path regression specs to `chat-page.component.spec.ts`.
+
+Net effect: identical to the plan's intended end state. Final verification is green (503/503 Karma, build exit 0, both SC5 gates pass).
+
+## Task Commits
+
+1. **Task 1: serializer pairing guard** — `ffbc18c` (fix)
+2. **Task 2 (part): PendingApprovalService** — `1091aa7` (feat)
+3. **Task 3 (part): chat-page approve rewire** — `b4a7a97` (fix; superseded by d3f8e0c for the compile fix)
+4. **Task 2 completion + Task 3 fix: chat.service.approveToolUseBlock + specs + chat-page types** — `d3f8e0c` (fix)
+5. **Plan metadata (SUMMARY + STATE + ROADMAP + REQUIREMENTS)** — `3421834` (docs) + this amendment
+
 ## Self-Check: PASSED
+
+- `src/app/services/pending-approval.service.ts` — FOUND
+- `src/app/services/pending-approval.service.spec.ts` — FOUND
+- `.planning/phases/03-ai-memory-tool-plumbing/03-07-SUMMARY.md` — FOUND
+- `chat.service.approveToolUseBlock` present in `chat.service.ts` — CONFIRMED
+- Commits `ffbc18c`, `1091aa7`, `b4a7a97`, `3421834`, `d3f8e0c` — present in `git log`
+- Final: 503/503 Karma SUCCESS; production build exit 0; SC5 grep gates green for both `chat.service.ts` and `chat-page.component.ts`.
