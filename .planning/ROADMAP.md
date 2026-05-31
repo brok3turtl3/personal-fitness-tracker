@@ -104,7 +104,20 @@
   3. A user reading an AI response sees per-claim confidence badges (`strong | moderate | weak | animal-only | anecdotal | speculative`) where low-confidence states are visually distinct (color + icon — not just text), and source attribution clearly distinguishes "from your data" vs "from research."
   4. A user never sees a free-generated citation rendered as a clickable link — only API-structured citations (`web_search_result_location`, `search_result` blocks) become hyperlinks; free-text author-year strings render as plain text.
   5. A user with a typical conversation sees real token counts (via `messages.countTokens`) drive the rolling-window decision, system-prompt cache reads cost 10% of input tokens (via `cache_control: ephemeral`), and `FitnessContextService` produces a thin ~500-token header instead of stuffing the full dataset.
-**Plans**: TBD
+**Plans**: 6 plans across 3 waves
+
+**Wave 1** *(no dependencies — runs first; file-disjoint)*
+- [ ] 04-agentic-loop-citation-ui/04-01-PLAN.md — Span/event model types + opus-4-8 model-ID fix + pure confidence-attribution-parser (CHAT-07, CHAT-08, CHAT-09)
+- [ ] 04-agentic-loop-citation-ui/04-02-PLAN.md — Six bounded read-only query_* tools (DataQueryToolExecutor) + ToolRegistry isWriteProposal (CHAT-02)
+- [ ] 04-agentic-loop-citation-ui/04-03-PLAN.md — Transport widen (tools[] + cache_control + countTokens) + slim byte-stable cacheable FitnessContext prefix (CHAT-10)
+
+**Wave 2** *(blocked on Wave 1; file-disjoint)*
+- [ ] 04-agentic-loop-citation-ui/04-04-PLAN.md — The agentic while(stop_reason==='tool_use') loop in ChatService (CHAT-02, CHAT-05)
+- [ ] 04-agentic-loop-citation-ui/04-05-PLAN.md — chat-message-list: citation-link guard + confidence/source badges + tool-call disclosures (CHAT-06, CHAT-07, CHAT-08, CHAT-09)
+
+**Wave 3** *(blocked on Wave 2)*
+- [ ] 04-agentic-loop-citation-ui/04-06-PLAN.md — chat-page loop orchestration + turn-limit/terminal notices + gate dev-seed (CHAT-02, CHAT-05, CHAT-06)
+
 **UI hint**: yes
 **AI hint**: yes
 
@@ -131,7 +144,7 @@
 | 1. Foundations | 10/10 | Complete | 2026-05-02 |
 | 2. Diet UX Overhaul | 0/? | Not started | - |
 | 3. AI Memory + Tool Plumbing | 7/7 | Complete    | 2026-05-31 |
-| 4. Agentic Loop + Citation UI | 0/? | Not started | - |
+| 4. Agentic Loop + Citation UI | 0/6 | Planned | - |
 | 5. Web Search Grounding + Quality Sweep | 0/? | Not started | - |
 
 ---

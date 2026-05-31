@@ -1,9 +1,9 @@
 ---
 phase: 4
 slug: agentic-loop-citation-ui
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: planned
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-05-31
 ---
 
@@ -44,7 +44,13 @@ created: 2026-05-31
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| TBD | TBD | TBD | CHAT-02/05–10 | — | TBD | unit | `ng test --no-watch` | ❌ W0 | ⬜ pending |
+| 04-01-T2 | 04-01 | 1 | CHAT-07/08/09 | T-04-01-01 | Confidence parser safe degradation (E3) — malformed/absent token → unbadged, never fabricate | unit (pure) | `ng test --no-watch --include='**/confidence-attribution-parser.spec.ts'` | ✅ W1 (TDD) | ⬜ pending |
+| 04-02-T1 | 04-02 | 1 | CHAT-02 | T-04-02-01/02/03 | Read-only safety (E5) + bounded output (E6) for query_* | unit | `ng test --no-watch --include='**/data-query-tool-executor.spec.ts'` | ✅ W1 (TDD) | ⬜ pending |
+| 04-03-T2 | 04-03 | 1 | CHAT-10 | T-04-03-02 | Cache-prefix byte-stability + slim header (E7) | unit | `ng test --no-watch --include='**/fitness-context.service.spec.ts'` | ✅ W1 | ⬜ pending |
+| 04-04-T1 | 04-04 | 2 | CHAT-02/05 | T-04-04-01/02 | Agentic loop terminal-stop-reason robustness + cap + write-no-block + user-turn tool_result (E2) | unit | `ng test --no-watch --include='**/chat.service.spec.ts'` | ✅ W2 (TDD) | ⬜ pending |
+| 04-05-T1 | 04-05 | 2 | CHAT-07/08/09 | T-04-05-01/02 | Citation-link guard adversarial (E1) + triple-encoded badges (E4) | component | `ng test --no-watch --include='**/chat-message-list.component.spec.ts'` | ✅ W2 | ⬜ pending |
+| 04-05-T2 | 04-05 | 2 | CHAT-06 | T-04-05-03 | Tool-call disclosures + renderer-derived summaries (E12) | component | `ng test --no-watch --include='**/chat-message-list.component.spec.ts'` | ✅ W2 | ⬜ pending |
+| 04-06-T1 | 04-06 | 3 | CHAT-02/05/06 | T-04-06-01/04 | Loop orchestration: multi-emit events, turn-limit/terminal notices, takeUntilDestroyed cancel, 401 path | component | `ng test --no-watch --include='**/chat-page.component.spec.ts'` | ✅ W3 | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -52,9 +58,9 @@ created: 2026-05-31
 
 ## Wave 0 Requirements
 
-- [ ] `confidence-attribution-parser.spec.ts` — E3 safe-degradation stubs for confidence/attribution parsing (CHAT-07, CHAT-08)
-- [ ] `chat.service.spec.ts` (loop) — E2 stop-reason/cap stubs for agentic loop (CHAT-02, CHAT-05)
-- [ ] citation-guard spec — E1 free-text-vs-structured-citation stubs (CHAT-09)
+- [x] `confidence-attribution-parser.spec.ts` — E3 safe-degradation (CHAT-07, CHAT-08) — TDD in Plan 04-01 Task 2 (RED first)
+- [x] `chat.service.spec.ts` (loop) — E2 stop-reason/cap (CHAT-02, CHAT-05) — TDD in Plan 04-04 Task 1 (RED first)
+- [x] citation-guard spec — E1 free-text-vs-structured-citation (CHAT-09) — RED-first in Plan 04-05 Task 1; also `data-query-tool-executor.spec.ts` E5/E6 TDD in Plan 04-02
 
 *Existing Jasmine+Karma infrastructure covers framework needs — no install required.*
 
@@ -72,11 +78,11 @@ created: 2026-05-31
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 60s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references (folded into TDD plans 01/02/04/05 as RED-first specs)
+- [x] No watch-mode flags
+- [x] Feedback latency < 60s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved (planner, 2026-05-31)
