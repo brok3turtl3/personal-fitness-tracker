@@ -1,3 +1,15 @@
+---
+phase: 4
+slug: agentic-loop-citation-ui
+status: secured
+threats_total: 23
+threats_closed: 23
+threats_open: 0
+asvs_level: 1
+block_on: high
+created: 2026-05-31
+---
+
 # SECURITY.md — Phase 04: Agentic Loop + Citation UI
 
 **Audited:** 2026-05-31
