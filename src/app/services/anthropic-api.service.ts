@@ -5,6 +5,8 @@ import type {
   Message,
   MessageCreateParams,
   MessageParam,
+  TextBlockParam,
+  MessageCountTokensTool,
 } from '@anthropic-ai/sdk/resources/messages';
 
 /**
@@ -37,10 +39,12 @@ export class AnthropicApiError extends Error {
  * our ChatBlock model owns persistence; chat-block-serializer.ts is the
  * explicit bridge.
  *
- * SC5 (type-level): `sendMessage` accepts `Omit<MessageCreateParams, 'tools'
- * | 'tool_choice'>` — TypeScript rejects callers attempting to pass the
- * forbidden Phase 3 fields. Phase 4 will explicitly remove the Omit when
- * activating the agentic loop.
+ * Phase 4 (D-15 / CHAT-10): the Phase 3 type-level guard that forbade
+ * `tools`/`tool_choice` on `sendMessage` is intentionally LIFTED — the
+ * agentic loop now sends full `MessageCreateParams` (with `tools[]` and
+ * a `cache_control`'d system prefix). `countTokens` likewise widens to
+ * accept a `TextBlockParam[]` system + `tools` so the cacheable prefix
+ * and the tools block are both counted.
  *
  * Lint chokepoint: only this file and `chat-block-serializer.ts` may
  * import from `@anthropic-ai/sdk` or its sub-paths.
@@ -54,15 +58,17 @@ export class AnthropicApiService {
   private clientCache = new Map<string, Anthropic>();
 
   /**
-   * Phase 3 single-shot Messages API call.
+   * Messages API call (single-shot in Phase 3; one iteration of the
+   * Phase 4 agentic loop).
    *
    * @param apiKey User-supplied key from AISettingsService.
-   * @param params MessageCreateParams MINUS `tools`/`tool_choice` —
-   *               Phase 3 SC5 forbids them at the type level.
+   * @param params Full `MessageCreateParams` — Phase 4 lifts the Phase 3
+   *               `Omit<..., 'tools' | 'tool_choice'>` guard so the loop
+   *               can pass `tools[]` and a `cache_control`'d system prefix.
    */
   sendMessage(
     apiKey: string,
-    params: Omit<MessageCreateParams, 'tools' | 'tool_choice'>,
+    params: MessageCreateParams,
   ): Observable<Message> {
     const client = this.getClient(apiKey);
     return from(
@@ -76,10 +82,19 @@ export class AnthropicApiService {
    * Free token-counting endpoint. Replaces the `text.length / 4`
    * heuristic (CONCERNS.md drift item) when called by callers that need
    * an accurate count.
+   *
+   * Phase 4 (D-15): `system` widens to `string | TextBlockParam[]` and a
+   * `tools` param is accepted so the `cache_control`'d prefix + the tools
+   * block are both counted for the window decision.
    */
   countTokens(
     apiKey: string,
-    params: { model: string; system?: string; messages: MessageParam[] },
+    params: {
+      model: string;
+      system?: string | TextBlockParam[];
+      messages: MessageParam[];
+      tools?: MessageCountTokensTool[];
+    },
   ): Observable<number> {
     const client = this.getClient(apiKey);
     return from(

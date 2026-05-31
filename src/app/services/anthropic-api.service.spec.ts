@@ -5,6 +5,9 @@ import { Messages } from '@anthropic-ai/sdk/resources/messages';
 import type {
   Message,
   MessageCreateParams,
+  TextBlockParam,
+  Tool,
+  MessageCountTokensTool,
 } from '@anthropic-ai/sdk/resources/messages';
 import { AnthropicApiService, AnthropicApiError } from './anthropic-api.service';
 
@@ -22,8 +25,10 @@ import { AnthropicApiService, AnthropicApiError } from './anthropic-api.service'
  *   - 401, 403, 429, 400, 500, 529, default — friendly-message contract
  *   - Network error (no APIError) — statusCode 0, errorType 'NetworkError'
  *   - Successful sendMessage returns Message observable
- *   - sendMessage outbound request shape: 'tools' is absent (SC5)
- *   - countTokens returns input_tokens
+ *   - Phase 4: sendMessage forwards `tools[]` + a `cache_control`'d system
+ *     prefix to the SDK (the Phase 3 type-level `tools` guard is lifted)
+ *   - countTokens returns input_tokens; forwards `TextBlockParam[]` system
+ *     + `tools` to the SDK
  *   - APIError request_id propagates to AnthropicApiError.requestId
  */
 describe('AnthropicApiService', () => {
@@ -65,8 +70,8 @@ describe('AnthropicApiService', () => {
     return err;
   }
 
-  // Sample request — the omit type forbids tools/tool_choice at compile time.
-  const testRequest: Omit<MessageCreateParams, 'tools' | 'tool_choice'> = {
+  // Sample request — error-mapping specs only need the minimal shape.
+  const testRequest: MessageCreateParams = {
     model: 'claude-sonnet-4-6',
     max_tokens: 1024,
     system: 'You are a helpful assistant.',
@@ -205,7 +210,7 @@ describe('AnthropicApiService', () => {
     });
   });
 
-  describe('sendMessage — success path + SC5 invariants', () => {
+  describe('sendMessage — success path + Phase 4 transport widening', () => {
     it('success returns Message observable with content', async () => {
       spyOn(Messages.prototype, 'create').and.resolveTo(fakeMessage);
       const result = await firstValueFrom(service.sendMessage('sk-ant-test', testRequest));
@@ -213,22 +218,51 @@ describe('AnthropicApiService', () => {
       expect(result.content[0].type).toBe('text');
     });
 
-    it('SC5 (type-level): TypeScript rejects { tools: [...] } at the call site (compile-time check)', () => {
-      // Type-level proof: this expression is uncommented in spec form,
-      // but tsc would reject `{ ..., tools: [] }`. The runtime check below
-      // proves the implementation does not silently inject tools either.
-      // The actual TS rejection is locked by the Omit<...> in the public
-      // signature — see anthropic-api.service.ts line ~55.
-      expect(true).toBeTrue();
+    it('Phase 4: forwards a `tools` array to the mocked client messages.create', async () => {
+      const spy = spyOn(Messages.prototype, 'create').and.resolveTo(fakeMessage);
+      const tools: Tool[] = [
+        {
+          name: 'query_weight_entries',
+          description: 'Query weight entries in a date range.',
+          input_schema: { type: 'object', properties: {} },
+        },
+      ];
+      const requestWithTools: MessageCreateParams = {
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1024,
+        system: 'You are a helpful assistant.',
+        messages: [{ role: 'user', content: 'Hello' }],
+        tools,
+      };
+
+      await firstValueFrom(service.sendMessage('sk-ant-test', requestWithTools));
+
+      const args = spy.calls.mostRecent().args[0] as unknown as Record<string, unknown>;
+      expect(args['tools']).toBe(tools);
+      expect(Array.isArray(args['tools'])).toBeTrue();
+      expect((args['tools'] as Tool[])[0].name).toBe('query_weight_entries');
     });
 
-    it('SC5 (runtime audit): outbound request body has NO `tools` field', async () => {
+    it('Phase 4: forwards a cache_control system prefix to messages.create', async () => {
       const spy = spyOn(Messages.prototype, 'create').and.resolveTo(fakeMessage);
-      await firstValueFrom(service.sendMessage('sk-ant-test', testRequest));
-      const args = spy.calls.mostRecent().args[0] as unknown as Record<string, unknown>;
-      expect('tools' in args).toBeFalse();
-      expect(args['tools']).toBeUndefined();
-      expect('tool_choice' in args).toBeFalse();
+      const system: TextBlockParam[] = [
+        {
+          type: 'text',
+          text: 'Stable cacheable key-facts header.',
+          cache_control: { type: 'ephemeral' },
+        },
+      ];
+      const requestWithCache: MessageCreateParams = {
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1024,
+        system,
+        messages: [{ role: 'user', content: 'Hello' }],
+      };
+
+      await firstValueFrom(service.sendMessage('sk-ant-test', requestWithCache));
+
+      const args = spy.calls.mostRecent().args[0] as unknown as { system: TextBlockParam[] };
+      expect(args.system[0].cache_control).toEqual({ type: 'ephemeral' });
     });
   });
 
@@ -242,6 +276,37 @@ describe('AnthropicApiService', () => {
         }),
       );
       expect(result).toBe(42);
+    });
+
+    it('Phase 4: forwards a TextBlockParam[] system + tools to messages.countTokens', async () => {
+      const spy = spyOn(Messages.prototype, 'countTokens').and.resolveTo({ input_tokens: 7 } as never);
+      const system: TextBlockParam[] = [
+        { type: 'text', text: 'Cacheable prefix', cache_control: { type: 'ephemeral' } },
+      ];
+      const tools: MessageCountTokensTool[] = [
+        {
+          name: 'query_cardio_sessions',
+          description: 'Query cardio sessions.',
+          input_schema: { type: 'object', properties: {} },
+        },
+      ];
+
+      const result = await firstValueFrom(
+        service.countTokens('sk-ant-test', {
+          model: 'claude-sonnet-4-6',
+          system,
+          messages: [{ role: 'user', content: 'Hello' }],
+          tools,
+        }),
+      );
+
+      expect(result).toBe(7);
+      const args = spy.calls.mostRecent().args[0] as unknown as {
+        system: TextBlockParam[];
+        tools: MessageCountTokensTool[];
+      };
+      expect(args.system[0].cache_control).toEqual({ type: 'ephemeral' });
+      expect(args.tools[0].name).toBe('query_cardio_sessions');
     });
 
     it('error maps through mapError just like sendMessage', async () => {
