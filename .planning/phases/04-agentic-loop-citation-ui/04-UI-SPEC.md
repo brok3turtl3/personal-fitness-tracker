@@ -256,7 +256,7 @@ No user-facing copy. The rule: any author-year string (`Smith et al. 2019`), bar
 
 **Confidence/source badge visual treatment:**
 - Inline chips immediately after the claim sentence/clause they qualify (D-07) — NOT superscript, NOT message-level.
-- Chip: `2px 8px` padding (xs/sm), `4px` radius, `14px / 600`, inline-flex with `4px` (xs) glyph↔label gap.
+- Chip: `4px 8px` padding (xs/sm), `4px` radius, `14px / 600`, inline-flex with `4px` (xs) glyph↔label gap.
 - Order within a claim: `[confidence chip][source chip][optional "view source" link]`.
 - Badge row wraps on narrow viewports (`flex-wrap: wrap`); chips never overflow the `max-width: 80%` assistant bubble.
 
