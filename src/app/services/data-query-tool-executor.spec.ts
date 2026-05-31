@@ -72,7 +72,6 @@ describe('DataQueryToolExecutor', () => {
     dietSpy = jasmine.createSpyObj('DietService', [
       'getMealsForDay',
       'getSavedFoods',
-      'computeDailyTotals',
     ]);
 
     weightSpy.getEntries.and.returnValue(of([]));
