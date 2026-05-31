@@ -347,10 +347,30 @@ export class ChatPageComponent implements OnInit {
     const conversationId = this.activeConversationId;
     const { messageId, blockIndex, action, editedText } = event;
 
-    let patch: Partial<ToolUseBlock> | null = null;
     if (action === 'approve') {
-      patch = { status: 'approved' };
-    } else if (action === 'discard') {
+      const block = this.findToolUseBlock(messageId, blockIndex);
+      if (!block) return;
+      // Execute the approved tool (via the SC5-clean PendingApprovalService
+      // seam) → then persist status + paired tool_result atomically.
+      from(this.pendingApprovalService.executeApprovedToolUse(block))
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe({
+          next: result => {
+            this.chatService.approveToolUseBlock(conversationId, messageId, blockIndex, result)
+              .pipe(takeUntilDestroyed(this.destroyRef))
+              .subscribe({
+                next: () => this.refreshActiveConversation(),
+                error: err => console.error('[chat-page] approve persist failed', err),
+              });
+          },
+          error: err => console.error('[chat-page] approve execute failed', err),
+        });
+      return;
+    }
+
+    // discard / edit — unchanged: status-only patch via updateMessageBlock.
+    let patch: Partial<ToolUseBlock> | null = null;
+    if (action === 'discard') {
       patch = { status: 'discarded' };
     } else if (action === 'edit') {
       const block = this.findToolUseBlock(messageId, blockIndex);
