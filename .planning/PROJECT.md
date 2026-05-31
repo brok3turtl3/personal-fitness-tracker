@@ -41,10 +41,10 @@ A trustworthy personal health record paired with a knowledgeable AI coach that c
 
 **AI chat — depth upgrade**
 
-- [ ] AI has access to the user's full data and history (not just a snapshot)
+- [x] AI has access to the user's full data and history via read-only `query_*` tools + agentic loop — Validated in Phase 4
 - [ ] Persistent memory across sessions (goals, preferences, prior context)
 - [ ] Research-grounded coaching that draws on both traditional and cutting-edge sources
-- [ ] Source attribution and explicit confidence labelling on claims (e.g. flag animal-only / few clinical trials clearly)
+- [x] Source attribution + per-claim confidence labelling (data vs research; strong…animal-only…speculative, low-confidence color+icon) + tool-use transparency + citation-link guard — Validated in Phase 4
 
 **Full quality pass**
 
@@ -113,4 +113,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-02 after initialization*
+*Last updated: 2026-05-31 after Phase 4 (Agentic Loop + Citation UI) completion — agentic coach reads real data via `query_*` tools, bounded multi-turn loop, per-claim confidence + source attribution, tool-use disclosures, citation-link guard, slim cached context. 3 visual UAT items pending (04-HUMAN-UAT.md).*
