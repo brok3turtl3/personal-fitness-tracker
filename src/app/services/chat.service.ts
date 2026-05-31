@@ -303,7 +303,15 @@ export class ChatService {
           const model = settings.selectedModel ?? CLAUDE_MODELS[0].value;
           const maxTokens = settings.maxResponseTokens ?? DEFAULT_AI_SETTINGS.maxResponseTokens;
           const maxAgentTurns = toolSettings.maxAgentTurns ?? DEFAULT_AI_TOOL_SETTINGS.maxAgentTurns;
-          const tools = this.toolRegistry.definitions();
+          // WR-02: honour the user's tool-capability toggles. The settings
+          // section is not cosmetic — disabling data-query / memory tools must
+          // actually remove them from the tools[] handed to the API loop.
+          const tools = this.toolRegistry.definitions().filter(t => {
+            const name = (t as { name?: string }).name ?? '';
+            if (name === 'memory' && !toolSettings.enableMemoryTool) return false;
+            if (name.startsWith('query_') && !toolSettings.enableDataQueryTools) return false;
+            return true;
+          });
           const system = await firstValueFrom(this.fitnessContext.buildSystemPrompt());
 
           // CR-01: pause_turn must NEVER defeat the maxAgentTurns billing cap.
