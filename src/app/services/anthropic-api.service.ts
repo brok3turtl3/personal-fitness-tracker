@@ -7,6 +7,15 @@ import type {
   MessageParam,
   TextBlockParam,
   MessageCountTokensTool,
+  // --- Phase 5 web-search server-tool shapes (D-01/D-02, verified in 0.92.0) ---
+  WebSearchTool20250305,
+  ServerToolUseBlock,
+  WebSearchToolResultBlock,
+  WebSearchResultBlock,
+  WebSearchToolResultError,
+  WebSearchToolResultErrorCode,
+  CitationsWebSearchResultLocation,
+  TextCitation,
 } from '@anthropic-ai/sdk/resources/messages';
 
 /**
@@ -19,6 +28,26 @@ import type {
  * `requestId` is new (D-17 / AI-SPEC.md §3) — preserves the SDK's
  * `request_id` header for correlation. Optional 4th constructor arg.
  */
+/**
+ * Phase 5 (D-17): the response-side web-search SDK blocks this transport
+ * boundary owns. They flow OUT of `messages.create` as part of `Message.content`
+ * and are narrowed into local SDK-free `ChatBlock`s by `chat-block-serializer.ts`
+ * (`server_tool_use` / `web_search_tool_result` passed through verbatim) and into
+ * `GroundedCitation[]` by `web-citation-parser.ts` (the `TextBlock.citations`
+ * `CitationsWebSearchResultLocation` narrowing). This alias documents — and keeps
+ * type-checked at THIS file — the exact SDK surface Phase 5 added, so the D-17
+ * boundary is explicit and a future SDK rename breaks here, not silently.
+ */
+type WebSearchSdkSurface = {
+  serverToolUse: ServerToolUseBlock;
+  resultBlock: WebSearchToolResultBlock;
+  result: WebSearchResultBlock;
+  error: WebSearchToolResultError;
+  errorCode: WebSearchToolResultErrorCode;
+  citation: CitationsWebSearchResultLocation;
+  citationUnion: TextCitation;
+};
+
 export class AnthropicApiError extends Error {
   constructor(
     message: string,
@@ -105,6 +134,38 @@ export class AnthropicApiService {
           throw this.mapError(err);
         }),
     );
+  }
+
+  /**
+   * Phase 5 (RESCH-01 / D-01 / D-06 / D-07): build the `web_search_20250305`
+   * server-tool definition at the D-17 transport boundary — the ONLY place SDK
+   * tool types live.
+   *
+   *  - OFF by default: returns `null` unless `enableWebSearch` is true, so the
+   *    caller (`chat.service.runAgenticLoop`) appends nothing to `tools[]` and
+   *    the outbound web-search surface simply does not exist (D-10 privacy).
+   *  - `max_uses` is the configured per-turn cost cap (`webSearchMaxUses`,
+   *    default 3 — D-06), wired to the request so Anthropic stops searching at
+   *    the ceiling.
+   *  - `allowed_domains` / `blocked_domains` / `user_location` are intentionally
+   *    UNSET this milestone (D-07) — domain filtering / coarse-location are out
+   *    of scope and location would leak.
+   *
+   * Returns the SDK `WebSearchTool20250305` (the server tool is read-only and is
+   * NEVER routed through `ToolRegistryService.dispatch`; `isWriteProposal`
+   * stays false). The caller holds it via a local structural shape.
+   */
+  buildWebSearchTool(settings: {
+    enableWebSearch: boolean;
+    webSearchMaxUses: number;
+  }): WebSearchTool20250305 | null {
+    if (!settings.enableWebSearch) return null; // opt-in only — OFF by default (D-10)
+    return {
+      type: 'web_search_20250305', // STABLE version pinned (D-01)
+      name: 'web_search',
+      max_uses: settings.webSearchMaxUses ?? 3, // D-06 cost cap (default 3)
+      // allowed_domains / blocked_domains / user_location: UNSET (D-07).
+    };
   }
 
   private getClient(apiKey: string): Anthropic {

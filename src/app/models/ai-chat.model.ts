@@ -207,6 +207,13 @@ export type ChatTurnEvent =
   | { kind: 'tool_result'; toolUseId: string; summary: string }
   | { kind: 'assistant_text'; blocks: ChatBlock[] }
   | { kind: 'turn_limit'; turnsUsed: number }
+  // Phase 5 (D-02/D-05): live web-search feedback for the inline
+  // server_tool_use / web_search_tool_result blocks. Render-only — these
+  // events never trigger a client dispatch. Plain string/number fields ONLY
+  // (NO SDK types — D-17): the loop narrows the SDK blocks into these.
+  | { kind: 'web_search_started'; query: string }
+  | { kind: 'web_search_results'; count: number }
+  | { kind: 'web_search_error'; code: string }
   | { kind: 'done'; stopReason: string };
 
 export interface ChatConversation {

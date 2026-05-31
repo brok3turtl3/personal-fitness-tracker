@@ -266,6 +266,38 @@ describe('AnthropicApiService', () => {
     });
   });
 
+  describe('buildWebSearchTool (Phase 5 — E6 cost cap + opt-in gate, D-01/D-06/D-07)', () => {
+    it('returns null when enableWebSearch is false (OFF by default, D-10)', () => {
+      const tool = service.buildWebSearchTool({ enableWebSearch: false, webSearchMaxUses: 3 });
+      expect(tool).toBeNull();
+    });
+
+    it('returns the web_search_20250305 def with max_uses === webSearchMaxUses when enabled (E6)', () => {
+      const tool = service.buildWebSearchTool({ enableWebSearch: true, webSearchMaxUses: 5 });
+      expect(tool).not.toBeNull();
+      expect(tool!.type).toBe('web_search_20250305');
+      expect(tool!.name).toBe('web_search');
+      expect(tool!.max_uses).toBe(5);
+    });
+
+    it('defaults max_uses to 3 when webSearchMaxUses is missing (D-06)', () => {
+      // Exercise the `?? 3` fallback even though the typed setting is required.
+      const tool = service.buildWebSearchTool({
+        enableWebSearch: true,
+        webSearchMaxUses: undefined as unknown as number,
+      });
+      expect(tool!.max_uses).toBe(3);
+    });
+
+    it('leaves allowed_domains / blocked_domains / user_location UNSET (D-07)', () => {
+      const tool = service.buildWebSearchTool({ enableWebSearch: true, webSearchMaxUses: 3 })!;
+      const t = tool as unknown as Record<string, unknown>;
+      expect(t['allowed_domains']).toBeUndefined();
+      expect(t['blocked_domains']).toBeUndefined();
+      expect(t['user_location']).toBeUndefined();
+    });
+  });
+
   describe('countTokens', () => {
     it('success returns input_tokens count', async () => {
       spyOn(Messages.prototype, 'countTokens').and.resolveTo({ input_tokens: 42 } as never);

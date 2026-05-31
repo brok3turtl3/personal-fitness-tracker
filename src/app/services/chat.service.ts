@@ -309,12 +309,23 @@ export class ChatService {
           // WR-02: honour the user's tool-capability toggles. The settings
           // section is not cosmetic — disabling data-query / memory tools must
           // actually remove them from the tools[] handed to the API loop.
-          const tools = this.toolRegistry.definitions().filter(t => {
+          const tools: unknown[] = this.toolRegistry.definitions().filter(t => {
             const name = (t as { name?: string }).name ?? '';
             if (name === 'memory' && !toolSettings.enableMemoryTool) return false;
             if (name.startsWith('query_') && !toolSettings.enableDataQueryTools) return false;
             return true;
           });
+
+          // Phase 5 (RESCH-01 / D-01 / D-10): append the opt-in web_search
+          // server tool to the SAME tools[] when enabled. The SDK-typed def is
+          // built at the D-17 transport boundary (anthropic-api.service.ts);
+          // chat.service holds it structurally (SDK-agnostic) and pushes it onto
+          // the same array. OFF by default ⇒ buildWebSearchTool returns null and
+          // nothing is appended — the outbound search surface does not exist.
+          const webSearchTool = this.anthropicApi.buildWebSearchTool(toolSettings);
+          if (webSearchTool) {
+            tools.push(webSearchTool);
+          }
           const system = await firstValueFrom(this.fitnessContext.buildSystemPrompt());
 
           // CR-01: pause_turn must NEVER defeat the maxAgentTurns billing cap.
@@ -370,6 +381,38 @@ export class ChatService {
               content: response.content as unknown as ContentBlockParam[],
             });
 
+            // --- Phase 5 (D-02 / E3 / Pitfall 1, 4, 6): RENDER-ONLY web-search
+            // handling. A turn may carry inline `server_tool_use` +
+            // `web_search_tool_result` blocks (Anthropic ran the search
+            // server-side). These are emitted as live ChatTurnEvents for UI
+            // feedback ONLY — they are NEVER dispatched through
+            // ToolRegistryService and NO tool_result is posted back (the result
+            // already arrived in this same assistant turn, pushed above
+            // unmodified so encrypted_content/encrypted_index survive the next
+            // turn). This filter is SEPARATE from the `b.type === 'tool_use'`
+            // client-dispatch filter below — it MUST NOT widen it. ---
+            for (const b of response.content) {
+              if (b.type === 'server_tool_use') {
+                const input = b['input'] as { query?: string } | undefined;
+                subscriber.next({
+                  kind: 'web_search_started',
+                  query: input?.query ?? '',
+                });
+              } else if (b.type === 'web_search_tool_result') {
+                // content is WebSearchResultBlock[] OR a web_search_tool_result_error
+                // (HTTP-200 error union — Pitfall 6). Narrow before reading.
+                const content = b['content'];
+                if (Array.isArray(content)) {
+                  subscriber.next({ kind: 'web_search_results', count: content.length });
+                } else {
+                  // Honest error event — NO retry (re-bill), NO throw (Pitfall 4).
+                  const code =
+                    (content as { error_code?: string } | undefined)?.error_code ?? 'unknown';
+                  subscriber.next({ kind: 'web_search_error', code });
+                }
+              }
+            }
+
             // --- D-16: terminal stop reasons. Only 'tool_use' continues. ---
             const stopReason = response.stop_reason ?? 'end_turn';
             switch (stopReason) {
@@ -382,6 +425,13 @@ export class ChatService {
                 subscriber.complete();
                 return;
               case 'pause_turn':
+                // Phase 5 (D-02): LIVE now — a long web-search turn pauses here.
+                // The paused assistant turn (incl. its server_tool_use /
+                // web_search_tool_result blocks) was already pushed onto
+                // `messages` UNMODIFIED above; resume re-sends it verbatim (the
+                // serializer preserves encrypted_content/encrypted_index). This
+                // turn is NOT counted against maxAgentTurns (turn-- below).
+                //
                 // CR-01: bound the number of consecutive pauses so a perpetual
                 // pause_turn stream cannot evade the maxAgentTurns cap. Once the
                 // ceiling is hit, persist what was gathered and terminate
