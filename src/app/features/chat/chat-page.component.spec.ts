@@ -275,12 +275,9 @@ describe('ChatPageComponent (characterization)', () => {
     const fixture = TestBed.createComponent(ChatPageComponent);
     fixture.detectChanges();
 
-    // Assert: structural a11y only. `color-contrast` is deferred to Phase 5
-    // QUAL-08 per CONTEXT.md D-13 — current global palette is below WCAG AA
-    // contrast across all 8 pages. See a11y-test-helpers.ts header.
-    await expectNoSeriousA11yViolations(fixture.nativeElement, {
-      disableRules: ['color-contrast'],
-    });
+    // Assert: structural a11y AND contrast. The Phase 1 D-13 contrast deferral is
+    // LIFTED here (QUAL-08) — axe contrast checking is now enforced.
+    await expectNoSeriousA11yViolations(fixture.nativeElement);
   });
 
   // ---------------------------------------------------------------------------
@@ -484,9 +481,8 @@ describe('ChatPageComponent (characterization)', () => {
     fixture.componentInstance.onSelectConversation('c-active');
     fixture.detectChanges();
 
-    await expectNoSeriousA11yViolations(fixture.nativeElement, {
-      disableRules: ['color-contrast'],
-    });
+    // Contrast deferral lifted (QUAL-08) — axe contrast checking now enforced.
+    await expectNoSeriousA11yViolations(fixture.nativeElement);
   });
 
   // ---------------------------------------------------------------------------

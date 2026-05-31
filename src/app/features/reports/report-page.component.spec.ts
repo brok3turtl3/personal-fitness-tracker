@@ -227,10 +227,8 @@ describe('ReportPageComponent (characterization)', () => {
     const fixture = TestBed.createComponent(ReportPageComponent);
     fixture.detectChanges();
 
-    // Assert: structural a11y. `color-contrast` deferred to Phase 5 QUAL-08
-    // per CONTEXT.md D-13. See a11y-test-helpers.ts header.
-    await expectNoSeriousA11yViolations(fixture.nativeElement, {
-      disableRules: ['color-contrast'],
-    });
+    // Assert: structural a11y AND contrast. The Phase 1 D-13 contrast deferral is
+    // LIFTED here (QUAL-08) — axe contrast checking is now enforced.
+    await expectNoSeriousA11yViolations(fixture.nativeElement);
   });
 });

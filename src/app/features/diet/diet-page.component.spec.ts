@@ -265,12 +265,9 @@ describe('DietPageComponent (characterization)', () => {
     const fixture = TestBed.createComponent(DietPageComponent);
     fixture.detectChanges();
 
-    // Assert: structural a11y (label association, ARIA roles, landmarks, focus order).
-    // `color-contrast` is deferred to Phase 5 QUAL-08 per CONTEXT.md D-13 — current
-    // palette (#7f8c8d muted, #3498db primary) is below 4.5:1 ratio across all 8
-    // pages. See a11y-test-helpers.ts file header for rationale.
-    await expectNoSeriousA11yViolations(fixture.nativeElement, {
-      disableRules: ['color-contrast'],
-    });
+    // Assert: structural a11y (label association, ARIA roles, landmarks, focus order)
+    // AND contrast. The Phase 1 D-13 contrast deferral is LIFTED here (QUAL-08) —
+    // axe contrast checking is now enforced (no rule opt-out passed).
+    await expectNoSeriousA11yViolations(fixture.nativeElement);
   });
 });
