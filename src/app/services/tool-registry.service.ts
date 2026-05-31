@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { MemoryToolExecutor } from './memory-tool-executor.service';
+import { DataQueryToolExecutor } from './data-query-tool-executor';
 
 /**
  * Local subset of @anthropic-ai/sdk's Tool union.
@@ -53,8 +54,38 @@ export interface ToolExecutor<TInput = unknown, TOutput = string> {
 export class ToolRegistryService {
   private readonly executors = new Map<string, ToolExecutor>();
 
-  constructor(memoryExecutor: MemoryToolExecutor) {
+  /**
+   * Allow-list of tool names that are *write proposals* (D-02 / D-03).
+   *
+   * A write-proposal tool is NOT auto-executed by the agentic loop; it surfaces
+   * a pending pill the user must approve. Currently only the `memory` write
+   * tool. The six read-only `query_*` tools — and any future read tool — are
+   * absent, so they default to non-write and auto-execute. Keeping this an
+   * explicit allow-list (rather than a `query_*` deny-list) means a new read
+   * tool can never accidentally bypass the pending-pill gate.
+   */
+  private static readonly WRITE_PROPOSAL_TOOLS: ReadonlySet<string> = new Set([
+    'memory',
+  ]);
+
+  constructor(
+    memoryExecutor: MemoryToolExecutor,
+    dataQueryExecutor: DataQueryToolExecutor
+  ) {
     this.register(memoryExecutor);
+    // Register the six read-only query_* adapters alongside memory.
+    for (const executor of dataQueryExecutor.executors) {
+      this.register(executor);
+    }
+  }
+
+  /**
+   * True iff the named tool is a write proposal (memory/profile write) that the
+   * agentic loop must defer to user approval rather than auto-execute (D-03).
+   * Read-only tools (the six `query_*`) return false ⇒ auto-execute (D-02).
+   */
+  isWriteProposal(name: string): boolean {
+    return ToolRegistryService.WRITE_PROPOSAL_TOOLS.has(name);
   }
 
   /**

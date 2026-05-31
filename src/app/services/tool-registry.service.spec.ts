@@ -9,6 +9,11 @@ import { MemoryToolExecutor } from './memory-tool-executor.service';
 import { MemoryStoreService } from './memory-store.service';
 import { StorageService } from './storage.service';
 import { AppData, createEmptyAppData } from '../models/app-data.model';
+import { DataQueryToolExecutor } from './data-query-tool-executor';
+import { WeightService } from './weight.service';
+import { CardioService } from './cardio.service';
+import { ReadingsService } from './readings.service';
+import { DietService } from './diet.service';
 
 describe('ToolRegistryService', () => {
   let service: ToolRegistryService;
@@ -30,12 +35,32 @@ describe('ToolRegistryService', () => {
       return of(undefined);
     });
 
+    // Stub the four domain services so the real DataQueryToolExecutor
+    // constructs and registers its six query_* adapters under TestBed.
+    const weightSpy = jasmine.createSpyObj('WeightService', ['getEntries']);
+    weightSpy.getEntries.and.returnValue(of([]));
+    const cardioSpy = jasmine.createSpyObj('CardioService', ['getSessions']);
+    cardioSpy.getSessions.and.returnValue(of([]));
+    const readingsSpy = jasmine.createSpyObj('ReadingsService', ['getReadings']);
+    readingsSpy.getReadings.and.returnValue(of([]));
+    const dietSpy = jasmine.createSpyObj('DietService', [
+      'getMealsForDay',
+      'getSavedFoods',
+    ]);
+    dietSpy.getMealsForDay.and.returnValue(of([]));
+    dietSpy.getSavedFoods.and.returnValue(of([]));
+
     TestBed.configureTestingModule({
       providers: [
         ToolRegistryService,
         MemoryToolExecutor,
         MemoryStoreService,
+        DataQueryToolExecutor,
         { provide: StorageService, useValue: storageServiceSpy },
+        { provide: WeightService, useValue: weightSpy },
+        { provide: CardioService, useValue: cardioSpy },
+        { provide: ReadingsService, useValue: readingsSpy },
+        { provide: DietService, useValue: dietSpy },
       ],
     });
 
@@ -46,11 +71,49 @@ describe('ToolRegistryService', () => {
     expect(service.has('memory')).toBeTrue();
   });
 
-  it('definitions() returns the memory tool definition', () => {
+  it('definitions() includes the memory tool definition', () => {
     const defs = service.definitions();
-    expect(defs.length).toBe(1);
-    expect(defs[0].type).toBe('memory_20250818');
-    expect(defs[0].name).toBe('memory');
+    const memory = defs.find((d) => d.name === 'memory');
+    expect(memory).toBeDefined();
+    expect(memory!.type).toBe('memory_20250818');
+  });
+
+  it('registers all six query_* executors on construction (memory + 6)', () => {
+    const queryNames = [
+      'query_cardio_sessions',
+      'query_weight_entries',
+      'query_readings',
+      'query_meals_in_range',
+      'query_daily_totals',
+      'query_saved_foods',
+    ];
+    for (const name of queryNames) {
+      expect(service.has(name)).withContext(name).toBeTrue();
+    }
+    const defs = service.definitions();
+    expect(defs.length).toBeGreaterThanOrEqual(7);
+    const names = defs.map((d) => d.name);
+    expect(names).toContain('memory');
+    for (const name of queryNames) {
+      expect(names).toContain(name);
+    }
+  });
+
+  it('isWriteProposal("memory") is true; isWriteProposal("query_weight_entries") is false', () => {
+    expect(service.isWriteProposal('memory')).toBeTrue();
+    expect(service.isWriteProposal('query_weight_entries')).toBeFalse();
+    expect(service.isWriteProposal('query_cardio_sessions')).toBeFalse();
+    // Unknown / future tools default to non-write (allow-list semantics).
+    expect(service.isWriteProposal('some_future_read_tool')).toBeFalse();
+  });
+
+  it('dispatch("query_weight_entries", { from, to }) returns a string', async () => {
+    const result = await service.dispatch('query_weight_entries', {
+      from: '2026-01-01',
+      to: '2026-01-31',
+    });
+    expect(typeof result).toBe('string');
+    expect(result.length).toBeGreaterThan(0);
   });
 
   it('dispatch("memory", { command: "view", path: "/memories" }) returns the canonical view-directory string', async () => {
@@ -114,14 +177,15 @@ describe('ToolRegistryService', () => {
   });
 
   it('definitions() returns one entry per registered executor', () => {
+    const before = service.definitions().length;
     const fake: ToolExecutor = {
       definition: { type: 'custom', name: 'extra' },
       execute: () => 'ok',
     };
     service.register(fake);
     const defs: ToolDefinition[] = service.definitions();
-    expect(defs.length).toBe(2);
-    expect(defs.map((d) => d.name).sort()).toEqual(['extra', 'memory']);
+    expect(defs.length).toBe(before + 1);
+    expect(defs.map((d) => d.name)).toContain('extra');
   });
 
   it('dispatch coerces a non-string output to string', async () => {
