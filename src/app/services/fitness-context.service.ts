@@ -122,8 +122,9 @@ ketones are in mmol/L. Energy is in kilocalories (kcal).`;
 `## Evidence Grading
 When you make a health or fitness claim, append a confidence grade as an
 inline token: [evidence: strong|moderate|weak|animal-only|anecdotal|speculative].
-Use [source: human|animal] when citing study evidence. Do NOT fabricate
-citations or links — only structured search results may be linked.`;
+Append a source token [source: data] when the claim is grounded in the user's
+own logged data, or [source: research] when citing general scientific evidence.
+Do NOT fabricate citations or links — only structured search results may be linked.`;
 
   // Escape both the opening AND closing tag literals occurring inside content
   // (Pitfall 3 — escape both directions). Returns content wrapped in fresh delimiters.
