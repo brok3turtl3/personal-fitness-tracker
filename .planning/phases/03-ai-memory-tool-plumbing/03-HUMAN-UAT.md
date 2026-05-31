@@ -1,14 +1,14 @@
 ---
-status: diagnosed
+status: partial
 phase: 03-ai-memory-tool-plumbing
 source: [03-VERIFICATION.md]
 started: 2026-05-03T18:00:00Z
-updated: 2026-05-31T13:00:00Z
+updated: 2026-05-31T00:00:00Z
 ---
 
 ## Current Test
 
-[testing complete]
+[awaiting operator browser re-run of Tests 2 and 3 after gap-closure plan 03-06]
 
 ## Tests
 
@@ -28,9 +28,8 @@ updated: 2026-05-31T13:00:00Z
 
 **expected:** Pending pill renders with header "AI wants to remember this:", three action buttons ("Save to memory", "Edit proposal", "Discard proposal"). Primary action receives auto-focus. Clicking "Save to memory" shows the ✓ Saved badge. After page refresh, the resolved badge is still shown (state persisted).
 
-**result:** issue
-**reported:** "I am not seeing the a pending memory pill in any of the chat streams after I click the 'Seed pending momory proposal' button. I do get a confirmation saying it was succesful though"
-**severity:** major
+**result:** pending
+**note:** Lifecycle bug fixed in gap-closure plan 03-06 (commit ef9ca46). `chat-page` ngOnInit now auto-selects (or seed-gated auto-creates) an active conversation BEFORE consuming the dev-seed sentinel, so the pill is appended on the next /chat visit. Regression spec drives ngOnInit end-to-end (chat-page.component.spec.ts) and passes (491/491 full Karma suite). Awaiting operator browser re-run to confirm in-browser render + persistence.
 
 ---
 
@@ -40,10 +39,8 @@ updated: 2026-05-31T13:00:00Z
 
 **expected:** Empty-state message appears before any approval. After approval, the seeded memory file appears in the path-tree with `aria-label="{path}, N bytes"`, an expandable inline preview shows the seeded content, and Edit + Delete actions are functional. Delete with confirm removes the entry.
 
-**result:** blocked
-**blocked_by:** prior-test
-**reason:** "Empty-state ('No memory files yet') confirmed working. Inspect/edit/delete portion cannot be verified because Test 2 dev-seed mechanism is broken — no memory can be persisted to inspect."
-**partial_pass:** Empty-state behavior verified
+**result:** pending
+**note:** Unblocked by plan 03-06 — Test 2 now produces a real pending pill the user can approve, so the persisted-memory inspection flow can finally be exercised. Empty-state behavior was already confirmed working in the prior run.
 
 ---
 
@@ -62,29 +59,20 @@ updated: 2026-05-31T13:00:00Z
 
 total: 4
 passed: 2
-issues: 1
-pending: 0
+issues: 0
+pending: 2
 skipped: 0
-blocked: 1
+blocked: 0
 
 ## Gaps
 
 - truth: "Dev-seed pending memory proposal appears as a pending pill in the chat stream with header 'AI wants to remember this:' and three action buttons."
-  status: failed
+  status: resolved
+  resolution: |
+    Fixed in gap-closure plan 03-06 (commits b89e3c5 RED → ef9ca46 GREEN). The root cause — consumeDevSeedIfPresent() running in ngOnInit while activeConversationId was still null, destroying the sentinel before it could be acted on — is closed by reordering ngOnInit to load conversations and auto-select/seed-gated-auto-create an active conversation BEFORE consuming the seed (new private initializeActiveConversationAndConsumeSeed()). A mandatory regression spec drives ngOnInit end-to-end with NO manual activeConversationId assignment and asserts appendAssistantBlocks is called with the seeded block. Full Karma suite 491/491; production build exit 0; SC5 grep gate clean.
   reason: "User reported: I am not seeing the a pending memory pill in any of the chat streams after I click the 'Seed pending momory proposal' button. I do get a confirmation saying it was succesful though"
   severity: major
   test: 2
-  root_cause: |
-    chat-page.component.ts:217 calls consumeDevSeedIfPresent() synchronously in ngOnInit, but at that moment activeConversationId is still null — it is only assigned in response to a user click (onSelectConversation/onNewChat), never auto-assigned during init. The early-return guard at chat-page.component.ts:233 (`if (!this.activeConversationId) return;`) fires AFTER StorageService.consumeDevSeed() has already read-and-removed the sentinel from localStorage (storage.service.ts:369). Net effect: seed is silently consumed and thrown away; appendAssistantBlocks is never invoked; no pending pill ever renders. Unit tests at chat-page.component.spec.ts:415-417 bypass the bug by manually setting activeConversationId before invocation.
-  artifacts:
-    - path: "src/app/features/chat/chat-page.component.ts"
-      issue: "ngOnInit invokes consumeDevSeedIfPresent() before any conversation is selected; null-guard at line 233 fires after the sentinel is already destroyed"
-    - path: "src/app/services/storage.service.ts"
-      issue: "consumeDevSeed() reads-and-removes atomically (lines 367-369), making the sentinel non-recoverable when the caller can't act on it"
-    - path: "src/app/features/chat/chat-page.component.spec.ts"
-      issue: "Dev-seed specs (lines 401-471) bypass production lifecycle by manually setting activeConversationId — regression net missing"
-  missing:
-    - "Defer seed consumption until a conversation exists (auto-select most-recent on init, or auto-create one if none exist), then consume."
-    - "OR make consumeDevSeed() non-destructive on null-conversation (peek + separate clear, or re-write sentinel when caller can't act)."
-    - "Add a regression spec that exercises ngOnInit end-to-end with seed present + no manual activeConversationId assignment, asserting appendAssistantBlocks is called."
+  resolved_by: "03-06 (commit ef9ca46)"
+  verification: "Code + spec verified (5/5 must-haves at code level, 03-VERIFICATION.md). Final operator browser re-run of Tests 2 and 3 still pending."
   debug_session: ".planning/debug/dev-seed-pending-pill-not-rendering.md"
