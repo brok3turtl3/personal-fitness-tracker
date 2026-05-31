@@ -1,9 +1,9 @@
 ---
-status: partial
+status: diagnosed
 phase: 03-ai-memory-tool-plumbing
 source: [03-VERIFICATION.md]
 started: 2026-05-03T18:00:00Z
-updated: 2026-05-31T12:00:00Z
+updated: 2026-05-31T13:00:00Z
 ---
 
 ## Current Test
@@ -74,5 +74,17 @@ blocked: 1
   reason: "User reported: I am not seeing the a pending memory pill in any of the chat streams after I click the 'Seed pending momory proposal' button. I do get a confirmation saying it was succesful though"
   severity: major
   test: 2
-  artifacts: []
-  missing: []
+  root_cause: |
+    chat-page.component.ts:217 calls consumeDevSeedIfPresent() synchronously in ngOnInit, but at that moment activeConversationId is still null — it is only assigned in response to a user click (onSelectConversation/onNewChat), never auto-assigned during init. The early-return guard at chat-page.component.ts:233 (`if (!this.activeConversationId) return;`) fires AFTER StorageService.consumeDevSeed() has already read-and-removed the sentinel from localStorage (storage.service.ts:369). Net effect: seed is silently consumed and thrown away; appendAssistantBlocks is never invoked; no pending pill ever renders. Unit tests at chat-page.component.spec.ts:415-417 bypass the bug by manually setting activeConversationId before invocation.
+  artifacts:
+    - path: "src/app/features/chat/chat-page.component.ts"
+      issue: "ngOnInit invokes consumeDevSeedIfPresent() before any conversation is selected; null-guard at line 233 fires after the sentinel is already destroyed"
+    - path: "src/app/services/storage.service.ts"
+      issue: "consumeDevSeed() reads-and-removes atomically (lines 367-369), making the sentinel non-recoverable when the caller can't act on it"
+    - path: "src/app/features/chat/chat-page.component.spec.ts"
+      issue: "Dev-seed specs (lines 401-471) bypass production lifecycle by manually setting activeConversationId — regression net missing"
+  missing:
+    - "Defer seed consumption until a conversation exists (auto-select most-recent on init, or auto-create one if none exist), then consume."
+    - "OR make consumeDevSeed() non-destructive on null-conversation (peek + separate clear, or re-write sentinel when caller can't act)."
+    - "Add a regression spec that exercises ngOnInit end-to-end with seed present + no manual activeConversationId assignment, asserting appendAssistantBlocks is called."
+  debug_session: ".planning/debug/dev-seed-pending-pill-not-rendering.md"
