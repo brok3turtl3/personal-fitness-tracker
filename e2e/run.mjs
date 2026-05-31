@@ -6,6 +6,7 @@
 import puppeteer from 'puppeteer';
 import { runSmoke } from './smoke.spec.mjs';
 import { runA11y } from './a11y.spec.mjs';
+import { runCsp } from './csp.spec.mjs';
 
 const BASE_URL = process.env.E2E_BASE_URL ?? 'http://localhost:4200';
 
@@ -22,6 +23,7 @@ const browser = await puppeteer.launch({
 try {
   await runSmoke(browser, BASE_URL);
   await runA11y(browser, BASE_URL);
+  await runCsp(browser, BASE_URL);
   console.log('e2e PASS');
 } catch (err) {
   console.error('e2e FAIL:', err && err.stack ? err.stack : err);

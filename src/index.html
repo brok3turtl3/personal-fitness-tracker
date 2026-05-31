@@ -2,6 +2,16 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <!--
+    CSP policy (QUAL-06, A1). connect-src is the egress allow-list:
+    the Anthropic API is the SOLE permitted external connection (locked
+    architecture — nothing else leaves the machine). style-src includes
+    'unsafe-inline' because Angular 18 injects component styles:[...] inline at
+    runtime (A1 / Pitfall 5) — verified at build/serve to load styled with no
+    "Refused to apply inline style" violations. script-src stays 'self' (no
+    inline-script loosening). Must match src/index.html.csp-assertion.spec.ts.
+  -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://api.anthropic.com; script-src 'self'; object-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline';">
   <title>PersonalFitnessTrackerTemp</title>
   <base href="./">
   <meta name="viewport" content="width=device-width, initial-scale=1">
