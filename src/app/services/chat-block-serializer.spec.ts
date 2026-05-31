@@ -184,6 +184,107 @@ describe('chat-block-serializer', () => {
     });
   });
 
+  describe('toAnthropicContent — approved/edited pairing guard (gap-closure 03-07, SC3-UNPAIRED-TOOLUSE)', () => {
+    it('emits a wire tool_use when an approved tool_use has a paired tool_result block', () => {
+      const blocks: ChatBlock[] = [
+        {
+          type: 'tool_use',
+          id: 'tu1',
+          name: 'memory',
+          input: { command: 'create', path: '/memories/x.md' },
+          status: 'approved',
+        },
+        { type: 'tool_result', tool_use_id: 'tu1', content: 'File created successfully' },
+      ];
+      const out = toAnthropicContent(blocks);
+      const toolUses = out.filter((b) => b.type === 'tool_use');
+      const toolResults = out.filter((b) => b.type === 'tool_result');
+      const texts = out.filter((b) => b.type === 'text');
+      expect(toolUses.length).toBe(1);
+      expect((toolUses[0] as { id: string }).id).toBe('tu1');
+      expect(toolResults.length).toBe(1);
+      expect((toolResults[0] as { tool_use_id: string }).tool_use_id).toBe('tu1');
+      expect(texts.length).toBe(0);
+    });
+
+    it('degrades an approved tool_use with NO paired tool_result to placeholder text (never an unpaired wire tool_use)', () => {
+      const blocks: ChatBlock[] = [
+        {
+          type: 'tool_use',
+          id: 'tu2',
+          name: 'memory',
+          input: { command: 'create', path: '/memories/x.md' },
+          status: 'approved',
+        },
+      ];
+      const out = toAnthropicContent(blocks);
+      const toolUses = out.filter((b) => b.type === 'tool_use');
+      const texts = out.filter((b) => b.type === 'text');
+      expect(toolUses.length).toBe(0);
+      expect(texts.length).toBe(1);
+      expect((texts[0] as { text: string }).text).toContain('user has not yet responded');
+    });
+
+    it('degrades an edited tool_use with NO paired tool_result to placeholder text', () => {
+      const blocks: ChatBlock[] = [
+        {
+          type: 'tool_use',
+          id: 'tu3',
+          name: 'memory',
+          input: { command: 'create', path: '/memories/y.md' },
+          status: 'edited',
+          editedFromText: 'original',
+        },
+      ];
+      const out = toAnthropicContent(blocks);
+      const toolUses = out.filter((b) => b.type === 'tool_use');
+      const texts = out.filter((b) => b.type === 'text');
+      expect(toolUses.length).toBe(0);
+      expect(texts.length).toBe(1);
+      expect((texts[0] as { text: string }).text).toContain('user has not yet responded');
+    });
+
+    it('still drops discarded tool_use blocks entirely (D-16 regression)', () => {
+      const blocks: ChatBlock[] = [
+        {
+          type: 'tool_use',
+          id: 'tu4',
+          name: 'memory',
+          input: { command: 'view' },
+          status: 'discarded',
+        },
+      ];
+      const out = toAnthropicContent(blocks);
+      expect(out.length).toBe(0);
+    });
+
+    it('still renders pending tool_use as placeholder text (D-16 regression)', () => {
+      const blocks: ChatBlock[] = [
+        {
+          type: 'tool_use',
+          id: 'tu5',
+          name: 'memory',
+          input: { command: 'create', path: '/memories/z.md' },
+          status: 'pending',
+        },
+      ];
+      const out = toAnthropicContent(blocks);
+      const toolUses = out.filter((b) => b.type === 'tool_use');
+      const texts = out.filter((b) => b.type === 'text');
+      expect(toolUses.length).toBe(0);
+      expect(texts.length).toBe(1);
+      expect((texts[0] as { text: string }).text).toContain('user has not yet responded');
+    });
+
+    it('passes a standalone tool_result block through to the wire unchanged', () => {
+      const blocks: ChatBlock[] = [
+        { type: 'tool_result', tool_use_id: 'x', content: 'ok' },
+      ];
+      const out = toAnthropicContent(blocks);
+      expect(out).toEqual([{ type: 'tool_result', tool_use_id: 'x', content: 'ok' }]);
+    });
+  });
+
   describe('fromAnthropicMessage', () => {
     it('text-only response maps cleanly to TextBlock[]', () => {
       const msg = {

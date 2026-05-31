@@ -11,6 +11,9 @@
  *       BEFORE going on the wire. status='discarded' blocks are dropped
  *       entirely. status='pending' tool_use is replaced with a plain-text
  *       placeholder so the API never sees an unfinished tool_use loop.
+ * 03-07: approved/edited tool_use degrades to placeholder text when no
+ *       paired tool_result exists — prevents the Anthropic 400
+ *       unpaired-tool_use brick (SC3-UNPAIRED-TOOLUSE).
  *
  * Threat-model:
  *   - T-3-WL (Information Disclosure): persistence-only fields stripped
@@ -39,6 +42,17 @@ import type { ChatBlock, ToolUseBlock } from '../models/ai-chat.model';
  *   - status, editedFromText (persistence-only fields).
  */
 export function toAnthropicContent(blocks: ChatBlock[]): ContentBlockParam[] {
+  // Defensive guard (gap-closure plan 03-07, SC3-UNPAIRED-TOOLUSE): an
+  // approved/edited tool_use may only be emitted as a REAL wire tool_use
+  // when a paired tool_result block for its id exists. Otherwise it would
+  // produce the Anthropic 400 "tool_use ids were found without tool_result
+  // blocks" and brick the conversation. Fall back to placeholder text.
+  const pairedToolResultIds = new Set<string>(
+    blocks
+      .filter((b): b is Extract<ChatBlock, { type: 'tool_result' }> => b.type === 'tool_result')
+      .map((b) => b.tool_use_id),
+  );
+
   const out: ContentBlockParam[] = [];
   for (const b of blocks) {
     switch (b.type) {
@@ -57,7 +71,16 @@ export function toAnthropicContent(blocks: ChatBlock[]): ContentBlockParam[] {
           });
           continue;
         }
-        // 'approved' or 'edited': emit real tool_use; strip status + editedFromText.
+        // 'approved' | 'edited': emit a real wire tool_use ONLY if paired.
+        if (!pairedToolResultIds.has(b.id)) {
+          // No paired tool_result — emitting an unpaired tool_use would
+          // brick the conversation (Anthropic 400). Degrade to placeholder.
+          out.push({
+            type: 'text',
+            text: `[user has not yet responded to AI proposal: ${summarizeProposal(b)}]`,
+          });
+          continue;
+        }
         out.push({
           type: 'tool_use',
           id: b.id,
