@@ -81,6 +81,13 @@ export class FitnessContextService {
         // 5. Tool-use + grading instructions (stable).
         prefixParts.push(this.GRADING_INSTRUCTIONS);
 
+        // 6. Web-search steering (Phase 5, D-08 / D-04 / D-10) — STABLE text in
+        // a fixed slot, so it does not churn the cacheable prefix (E5/E7). It is
+        // ALWAYS present (harmless when web search is OFF: the tool def is only
+        // built when the user opts in — chat.service/anthropic-api), keeping the
+        // cached prefix byte-stable regardless of the toggle.
+        prefixParts.push(this.WEB_SEARCH_INSTRUCTIONS);
+
         const cacheablePrefix: SystemTextBlock = {
           type: 'text',
           text: prefixParts.join('\n\n'),
@@ -125,6 +132,28 @@ inline token: [evidence: strong|moderate|weak|animal-only|anecdotal|speculative]
 Append a source token [source: data] when the claim is grounded in the user's
 own logged data, or [source: research] when citing general scientific evidence.
 Do NOT fabricate citations or links — only structured search results may be linked.`;
+
+  // Phase 5 web-search steering (D-08 when-to-search, D-04 grounded-vs-ungrounded,
+  // D-10 query-string privacy). STABLE text in the cached prefix (E5/E7). The
+  // two short few-shot exemplars are inline (no dynamic retrieval — would churn
+  // the cache). Always present; harmless when web search is OFF.
+  private readonly WEB_SEARCH_INSTRUCTIONS =
+`## Web Search
+Prefer the user's own logged data and your training knowledge; reach for
+web_search only for genuinely current or research-grounded questions — recent
+studies, current guidelines — not for questions answerable from training
+knowledge or the user's data.
+
+When a claim is backed by a live web source it will carry a citation; an
+un-grounded "from research" claim is training knowledge — label it as such, not
+as a live source. Grounded example: "a 2024 guideline recommends training each
+muscle group twice weekly" (cited). Un-grounded example: "from research,
+progressive overload drives strength gains" (no live source).
+
+Do NOT put the user's personal or health specifics, or their per-entry free-text
+notes, into web-search query strings; phrase searches in general terms (the query
+leaves the device) — e.g. "recent guidelines on resistance-training frequency",
+not "training plan for someone with my condition".`;
 
   // Escape both the opening AND closing tag literals occurring inside content
   // (Pitfall 3 — escape both directions). Returns content wrapped in fresh delimiters.

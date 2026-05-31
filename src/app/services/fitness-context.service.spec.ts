@@ -109,6 +109,47 @@ describe('FitnessContextService', () => {
     });
   });
 
+  describe('web-search steering instructions (Phase 5 — E5: D-08 / D-04 / D-10)', () => {
+    it('the cacheable prefix carries the D-08 when-to-search instruction', async () => {
+      // Collapse line-wrap whitespace so substring assertions are robust to the
+      // template literal's hard wraps.
+      const text = prefixText(await firstValueFrom(service.buildSystemPrompt())).replace(/\s+/g, ' ');
+      expect(text).toContain('## Web Search');
+      // D-08: prefer own data/training knowledge; reach for web_search only for
+      // genuinely current/research-grounded questions.
+      expect(text).toContain('reach for web_search only for genuinely');
+      expect(text).toContain('current or research-grounded questions');
+    });
+
+    it('the cacheable prefix carries the D-10 query-string privacy instruction', async () => {
+      const text = prefixText(await firstValueFrom(service.buildSystemPrompt())).replace(/\s+/g, ' ');
+      // D-10: do not put personal/health specifics or per-entry notes into the
+      // query; the query leaves the device.
+      expect(text).toContain('leaves the device');
+      expect(text).toContain('per-entry free-text notes, into web-search query strings');
+    });
+
+    it('the D-04 grounded-vs-un-grounded framing is present', async () => {
+      const text = prefixText(await firstValueFrom(service.buildSystemPrompt())).replace(/\s+/g, ' ');
+      expect(text).toContain('un-grounded "from research" claim is training knowledge');
+    });
+
+    it('the web-search instructions live in the cached prefix, NOT the volatile today block', async () => {
+      const blocks = await firstValueFrom(service.buildSystemPrompt());
+      expect(blocks[1].text).not.toContain('## Web Search');
+    });
+
+    it('adding the stable web-search text keeps the cacheable prefix byte-stable across builds (E5/E7)', async () => {
+      mockAppData.weightEntries = [
+        { id: '1', date: '2026-05-01T08:00:00.000Z', weightLbs: 182, createdAt: '2026-05-01T08:00:00.000Z', updatedAt: '2026-05-01T08:00:00.000Z' },
+      ];
+      const a = prefixText(await firstValueFrom(service.buildSystemPrompt()));
+      const b = prefixText(await firstValueFrom(service.buildSystemPrompt()));
+      expect(a).toBe(b);
+      expect(a).toContain('## Web Search');
+    });
+  });
+
   describe('slim header budget (D-15 — ~500-token proxy)', () => {
     it('cacheable prefix stays under a ~2500-char (~500-token) budget for a large dataset', async () => {
       const now = '2026-05-01T08:00:00.000Z';
