@@ -107,7 +107,7 @@
 **Plans**: 6 plans across 3 waves
 
 **Wave 1** *(no dependencies — runs first; file-disjoint)*
-- [ ] 04-agentic-loop-citation-ui/04-01-PLAN.md — Span/event model types + opus-4-8 model-ID fix + pure confidence-attribution-parser (CHAT-07, CHAT-08, CHAT-09)
+- [x] 04-agentic-loop-citation-ui/04-01-PLAN.md — Span/event model types + opus-4-8 model-ID fix + pure confidence-attribution-parser (CHAT-07, CHAT-08, CHAT-09) — completed 2026-05-31 (3 commits: bac46da, 397f9a7, 3c67bf0; SUMMARY: 04-01-SUMMARY.md). SDK-agnostic Confidence/Attribution/ClaimSpan + ChatTurnEvent in ai-chat.model.ts; CLAUDE_MODELS fixed to claude-opus-4-8; pure total parseClaimSpans (allow-list gated, never fabricates/throws) TDD'd with 19 specs incl. adversarial degradation + idempotency. Full Karma: **530 SUCCESS** (+19). Build green. **CHAT-07/08/09 marked complete.**
 - [ ] 04-agentic-loop-citation-ui/04-02-PLAN.md — Six bounded read-only query_* tools (DataQueryToolExecutor) + ToolRegistry isWriteProposal (CHAT-02)
 - [ ] 04-agentic-loop-citation-ui/04-03-PLAN.md — Transport widen (tools[] + cache_control + countTokens) + slim byte-stable cacheable FitnessContext prefix (CHAT-10)
 

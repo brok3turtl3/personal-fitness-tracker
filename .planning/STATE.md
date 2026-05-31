@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-05-31T17:32:25.030Z"
+last_updated: "2026-05-31T17:43:46.380Z"
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 23
-  completed_plans: 17
-  percent: 74
+  completed_plans: 18
+  percent: 78
 ---
 
 # State: Personal Fitness Tracker — Refinement Milestone (v2)
@@ -24,19 +24,19 @@ progress:
 
 **Milestone:** Refinement (v2) — diet UX overhaul + AI chat depth + full quality pass on the existing Angular 18 + Electron app at v1.2.3.
 
-**Current Focus:** Phase 03 — ai-memory-tool-plumbing
+**Current Focus:** Phase 04 — agentic-loop-citation-ui
 
 ---
 
 ## Current Position
 
-Phase: 03 (ai-memory-tool-plumbing) — EXECUTING
-Plan: 1 of 5
+Phase: 04 (agentic-loop-citation-ui) — EXECUTING
+Plan: 1 of 6 complete (Wave 1)
 **Phase:** 4
-**Plan:** Not started
-**Status:** Ready to execute
-**Resume file:** .planning/phases/04-agentic-loop-citation-ui/04-UI-SPEC.md
-**Progress:** [██████████] 100%
+**Plan:** 04-01 complete; next is 04-02 (Wave 1, no dependencies)
+**Status:** Executing Phase 04
+**Resume file:** .planning/phases/04-agentic-loop-citation-ui/04-02-PLAN.md
+**Progress:** [████████░░] 78%
 
 **Wave structure:**
 
@@ -74,6 +74,7 @@ Plan: 1 of 5
 | 01-07 | Empty/error retrofit + takeUntilDestroyed across all 8 feature pages | 9m 17s | 3/3 | 8 (modified) | 84c76c7, f1bda40 | 2026-05-02 |
 | 01-10 | Recovery banner + AppComponent integration + StorageService.getBackup chokepoint method | 7m 54s | 4/4 | 6 (2 created, 4 modified) | 59840ce, 3bbcc04, 7284b48 | 2026-05-02 |
 | 01-08 | Characterization specs for diet/chat/charts/report-page (FOUND-04 + FOUND-05) | 9m 20s | 3/3 (Task 3 verification gate, no commit) | 5 (4 created, 1 modified) | 90df6c7, 258aafd | 2026-05-02 |
+| 04-01 | Type foundation (Confidence/Attribution/ClaimSpan + ChatTurnEvent) + opus-4-8 fix + pure confidence-attribution-parser (TDD) | ~6m | 2/2 | 3 (2 created, 1 modified) | bac46da, 397f9a7, 3c67bf0 | 2026-05-31 |
 
 ---
 
@@ -93,6 +94,9 @@ Plan: 1 of 5
 - **Pattern 2 Form A is the codebase-wide subscription-cleanup pattern.** Every feature component declares `private destroyRef = inject(DestroyRef)` as a field initializer and pipes every `.subscribe(...)` through `takeUntilDestroyed(this.destroyRef)`. Bare `takeUntilDestroyed()` (no arg) inside method bodies is forbidden — it triggers NG0203 at runtime (Pitfall 1).
 - **Settings page is error-state-only.** No `<app-empty-state>` — settings is a configuration form, not a data list (RESEARCH §Open Q 2).
 - **Phase 1 chat-page nested subscribes are preserved with takeUntilDestroyed only.** No switchMap refactor in Phase 1 — that's deferred to Phase 3 per CONTEXT.md.
+- **Phase 4 span/event types are SDK-agnostic (Plan 04-01, D-17).** `ChatTurnEvent` and `ClaimSpan`/`Confidence`/`Attribution` live in `ai-chat.model.ts` with NO `@anthropic-ai/sdk` import; `done.stopReason` is a plain `string` and `tool_use_started` carries a structural payload (`toolUseId`/`toolName`/`input`) — the SDK `StopReason`/`ToolUseBlock` are narrowed to these at the loop transport chokepoint, never in the model file.
+- **`parseClaimSpans` never fabricates a grade and never throws (Plan 04-01, D-09/E3).** A pure DI-free module gates every `confidence`/`source` assignment behind allow-list `ReadonlySet`s; a malformed/unknown/absent inline token (`[evidence: ???]`, `superstrong`, none) degrades to an unbadged span. NO LLM retry on a garbled token (re-calling would double cost without guaranteeing a token). `stripTokens` uses a fresh `RegExp` to avoid mutating the shared global-regex `lastIndex` (idempotency).
+- **CLAUDE_MODELS corrected to `claude-opus-4-8` (Plan 04-01).** The stale `claude-opus-4-7` entry was fixed; `claude-sonnet-4-6` and `claude-haiku-4-5` left unchanged (already correct).
 - **Dev-seed pending pill lands on init, not on user click (Plan 03-06 gap closure).** `chat-page` ngOnInit now auto-selects the most-recent conversation (or seed-gated auto-creates one) BEFORE consuming the dev-seed sentinel, so the seed is never destroyed before a pending pill can render. Auto-create is gated on a non-null seed to preserve the Phase 1 empty-state characterization spec. StorageService untouched (minimum surface area).
 
 ### Active Decisions Pending
@@ -133,6 +137,10 @@ Plan: 1 of 5
 ### Blockers
 
 None.
+
+### Recent Sessions (Phase 04 execution)
+
+- **2026-05-31T17:37Z–17:43Z** — Executed plan 04-01 (Wave 1, type: tdd). 3 commits on `main` (bac46da feat — span/event types + opus-4-8 fix; 397f9a7 test/RED; 3c67bf0 feat/GREEN — pure parser). Modified `ai-chat.model.ts` (+ `Confidence`/`Attribution`/`ClaimSpan`/`ChatTurnEvent`, corrected `claude-opus-4-7`→`claude-opus-4-8`); created `confidence-attribution-parser.ts` (pure, DI-free, SDK-agnostic, total `parseClaimSpans` — allow-list `ReadonlySet`s gate every assignment, never fabricates a grade, never throws) + spec (19 specs incl. adversarial `[evidence: ???]`, unknown-grade `superstrong`, nested brackets, empty string, idempotency, multi-claim-per-sentence). TDD gate sequence honored: RED 397f9a7 (15 FAILED/4 SUCCESS) → GREEN 3c67bf0 (19 SUCCESS); no REFACTOR needed. Full Karma: **530 SUCCESS** (was 511 Phase 3 baseline, +19). Production build: exit 0 (pre-existing 4.87 kB budget warning, not a regression). D-17 chokepoint preserved (zero `@anthropic-ai/sdk` imports in either file). Two Rule 1 deviations: reworded JSDoc comments containing the literal strings `@anthropic-ai/sdk` and `@Injectable` so the plan's literal grep gates (which must FAIL on those tokens) stay green — documentation-only, no behavior change (same edge case as Plan 01-10). **CHAT-07/08/09 marked complete in REQUIREMENTS.md.** Wave 1 of Phase 4 advances (1 of 6 plans done).
 
 ### Recent Sessions (Phase 03 gap closure)
 
