@@ -1,6 +1,6 @@
 import { Component, ElementRef, EventEmitter, Input, OnChanges, Output, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ChatMessage, ClaimSpan, Confidence } from '../../models/ai-chat.model';
+import { ChatMessage, ClaimSpan, Confidence, ToolResultBlock } from '../../models/ai-chat.model';
 import { parseClaimSpans } from '../../services/confidence-attribution-parser';
 import { PendingPillComponent } from './pending-pill.component';
 
@@ -53,15 +53,41 @@ export function isLinkableCitation(citation: { type?: string } | undefined | nul
             @switch (block.type) {
               @case ('text') {<span class="block-text">@for (span of spansFor(msg.id, $index, block.text); track $spanIdx; let $spanIdx = $index) {<span class="claim-span">{{ span.text }}@if (span.confidence) {<span class="confidence-chip" [class.tier-calm]="isCalm(span.confidence)" [class.tier-alert]="!isCalm(span.confidence)" [attr.aria-label]="'Confidence: ' + span.confidence"><span class="chip-glyph" aria-hidden="true">{{ confidenceGlyph(span.confidence) }}</span><span class="chip-label">{{ span.confidence }}</span></span>}@if (span.source === 'data') {<span class="source-chip" aria-label="Source: from your data"><span class="chip-glyph" aria-hidden="true">📈</span><span class="chip-label">your data</span></span>}@if (span.source === 'research') {<span class="source-chip" aria-label="Source: from research — general knowledge, not a live source"><span class="chip-glyph" aria-hidden="true">📚</span><span class="chip-label">research</span></span><span class="research-qualifier">general knowledge — not a live source</span>}</span>{{ ' ' }}}</span>}
               @case ('tool_use') {
-                <app-pending-pill
-                  [block]="block"
-                  (approve)="emitAction(msg.id, $index, 'approve')"
-                  (discard)="emitAction(msg.id, $index, 'discard')"
-                  (edit)="emitAction(msg.id, $index, 'edit', $event)"
-                ></app-pending-pill>
+                @if (isQueryTool(block.name)) {
+                  @if (resultFor(msg, block.id); as result) {
+                    <!-- Resolved query: the real expandable disclosure. -->
+                    <details class="tool-disclosure" [id]="'tooluse-' + block.id">
+                      <summary class="tool-summary" [attr.aria-label]="'Show what the AI looked at: ' + toolSummary(block.name, block.input, result.content)">{{ toolSummary(block.name, block.input, result.content) }}</summary>
+                      <div class="tool-body">
+                        <div class="tool-name">Tool: {{ block.name }}</div>
+                        <div class="tool-section-label">Query:</div>
+                        <pre class="tool-pre">{{ formatInput(block.input) }}</pre>
+                        <div class="tool-section-label">Result:</div>
+                        <pre class="tool-pre">{{ result.content }}</pre>
+                      </div>
+                    </details>
+                  } @else {
+                    <!-- In-flight query (no paired result yet): non-expandable, announced. -->
+                    <div class="tool-inflight" role="status" aria-live="polite">
+                      <span class="tool-inflight-text">{{ inFlightSummary(block.name) }}</span><span class="inflight-dots" aria-hidden="true">…</span>
+                    </div>
+                  }
+                } @else {
+                  <app-pending-pill
+                    [block]="block"
+                    (approve)="emitAction(msg.id, $index, 'approve')"
+                    (discard)="emitAction(msg.id, $index, 'discard')"
+                    (edit)="emitAction(msg.id, $index, 'edit', $event)"
+                  ></app-pending-pill>
+                }
               }
               @case ('tool_result') {
-                <div class="tool-result-placeholder" aria-label="Tool result"><strong>Tool result:</strong> {{ block.content }}</div>
+                <!-- The disclosure is rendered from its paired query tool_use (above). A
+                     tool_result with no matching tool_use in this message falls back to the
+                     Phase 3 static placeholder so nothing is silently dropped. -->
+                @if (!hasPairedQueryToolUse(msg, block.tool_use_id)) {
+                  <div class="tool-result-placeholder" aria-label="Tool result"><strong>Tool result:</strong> {{ block.content }}</div>
+                }
               }
             }
           }</div>
@@ -141,51 +167,56 @@ export function isLinkableCitation(citation: { type?: string } | undefined | nul
       white-space: pre-wrap;
     }
 
-    /* Confidence + source badges (04-UI-SPEC LOCKED palette). Inline chips
-       after the claim they qualify. Color is one of three channels (color +
-       icon glyph + text label) so a skimming user distinguishes calm vs alert. */
     .confidence-chip,
     .source-chip {
       display: inline-flex;
       align-items: center;
       gap: 4px;
       padding: 4px 8px;
-      border-radius: 4px;
-      font-size: 14px;
-      font-weight: 600;
-      line-height: 1.2;
       margin: 0 2px;
-      vertical-align: baseline;
+      border-radius: 4px;
+      font: 600 14px/1.2 inherit;
+    }
+    .claim-span { display: inline; flex-wrap: wrap; }
+    .confidence-chip.tier-calm { background: #eef6ec; color: #2e7d32; }
+    .confidence-chip.tier-alert { background: #fdf3e7; color: #b9770e; }
+    .source-chip { background: #f0f0f0; color: #2c3e50; }
+    .research-qualifier {
+      margin-left: 4px;
+      font: italic 0.8125rem/1 inherit;
+      color: #7f8c8d;
     }
 
-    /* Badge row wraps on narrow viewports; chips never overflow the bubble. */
-    .claim-span {
-      display: inline;
-      flex-wrap: wrap;
-    }
-
-    .confidence-chip.tier-calm {
-      background: #eef6ec;
-      color: #2e7d32;
-    }
-
-    .confidence-chip.tier-alert {
-      background: #fdf3e7;
-      color: #b9770e;
-    }
-
-    .source-chip {
-      background: #f0f0f0;
+    .tool-disclosure,
+    .tool-inflight {
+      margin: 0.5rem 0;
+      background: #f8f9fa;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 0.875rem;
       color: #2c3e50;
+    }
+    .tool-summary,
+    .tool-inflight {
+      display: flex;
+      align-items: center;
+      min-height: 44px;
+      padding: 0.25rem 0.75rem;
       font-weight: 600;
     }
-
-    .research-qualifier {
-      font-size: 0.8125rem;
-      font-style: italic;
-      color: #7f8c8d;
-      margin-left: 4px;
+    .tool-summary { cursor: pointer; }
+    .tool-body { padding: 0.5rem 0.75rem 0.75rem; border-top: 1px solid #ddd; }
+    .tool-name,
+    .tool-section-label { font-weight: 600; }
+    .tool-name { font-size: 14px; margin-bottom: 0.25rem; }
+    .tool-section-label { margin-top: 0.5rem; }
+    .tool-pre {
+      margin: 0.25rem 0 0;
+      font: 400 14px/1.4 inherit;
+      white-space: pre-wrap;
+      word-wrap: break-word;
     }
+    .inflight-dots { margin-left: 2px; animation: blink 1.4s infinite; }
 
     .message-time {
       font-size: 0.7rem;
@@ -282,6 +313,98 @@ export class ChatMessageListComponent implements OnChanges {
     if (confidence === 'strong') return '✓';
     if (confidence === 'moderate') return '≈';
     return '⚠';
+  }
+
+  // ── Tool-call disclosures (E12, D-05/D-06) ──────────────────────────────────
+
+  /**
+   * LOCKED per-tool summary verbs (04-UI-SPEC Copywriting). `[inFlight, resolved]`
+   * where resolved is a template using `{n}` (count) and `{range}` placeholders;
+   * the renderer substitutes/omits them — NEVER the model. `query_*` only.
+   */
+  private static readonly TOOL_VERBS: Record<string, { inflight: string; resolved: string; noun: string }> = {
+    query_cardio_sessions: { inflight: '🏃 Reading your cardio sessions', resolved: '🏃 Read', noun: 'cardio sessions' },
+    query_weight_entries: { inflight: '⚖️ Reading your weight entries', resolved: '⚖️ Read', noun: 'weight entries' },
+    query_readings: { inflight: '🩺 Reading your health readings', resolved: '🩺 Read', noun: 'readings' },
+    query_meals_in_range: { inflight: '🍽️ Reading your meals', resolved: '🍽️ Read', noun: 'meals' },
+    query_daily_totals: { inflight: '📊 Reading your daily totals', resolved: '📊 Read', noun: 'daily totals' },
+    query_saved_foods: { inflight: '📚 Reading your saved foods', resolved: '📚 Read', noun: 'saved foods' },
+  };
+
+  /** True for the read-only data-query tool family — these get the disclosure UI. */
+  isQueryTool(name: string): boolean {
+    return Object.prototype.hasOwnProperty.call(ChatMessageListComponent.TOOL_VERBS, name);
+  }
+
+  /** Find the tool_result paired to a tool_use id within the same message. */
+  resultFor(msg: ChatMessage, toolUseId: string): ToolResultBlock | undefined {
+    return msg.blocks.find(
+      (b): b is ToolResultBlock => b.type === 'tool_result' && b.tool_use_id === toolUseId,
+    );
+  }
+
+  /** True when a tool_result's pair is a query_* tool_use (so the disclosure owns it). */
+  hasPairedQueryToolUse(msg: ChatMessage, toolUseId: string): boolean {
+    return msg.blocks.some(
+      (b) => b.type === 'tool_use' && b.id === toolUseId && this.isQueryTool(b.name),
+    );
+  }
+
+  /** Present-tense in-flight line for a query tool (no result yet). */
+  inFlightSummary(name: string): string {
+    return ChatMessageListComponent.TOOL_VERBS[name]?.inflight ?? 'Reading your data';
+  }
+
+  /**
+   * Resolved past-tense summary, e.g. `⚖️ Read 38 weight entries · 2026-01-01..2026-05-31`.
+   * `{n}` is parsed from the tool_result content (`"N total"`); `{range}` from the
+   * tool_use input (`from`/`to`). Both are RENDERER-derived (E12) — never model prose.
+   * The `· {…}` clause is OMITTED when neither count nor range is available.
+   */
+  toolSummary(name: string, input: unknown, resultContent: string): string {
+    const verb = ChatMessageListComponent.TOOL_VERBS[name];
+    if (!verb) return resultContent;
+
+    const count = this.deriveCount(resultContent);
+    const range = this.deriveRange(input);
+    // daily_totals has no count noun ("Read daily totals · {range}").
+    const noun = verb.noun;
+    const head = name === 'query_daily_totals'
+      ? `${verb.resolved} ${noun}`
+      : count !== undefined
+        ? `${verb.resolved} ${count} ${noun}`
+        : `${verb.resolved} ${noun}`;
+
+    const clause = range ?? (count !== undefined && name === 'query_daily_totals' ? `${count}` : undefined);
+    return clause ? `${head} · ${clause}` : head;
+  }
+
+  /** Parse the leading `"… N total"` count from a bounded query result. */
+  private deriveCount(resultContent: string): number | undefined {
+    const m = /(\d+)\s+total/.exec(resultContent);
+    return m ? Number(m[1]) : undefined;
+  }
+
+  /** Derive a `from..to` range string from the tool input, if present. */
+  private deriveRange(input: unknown): string | undefined {
+    if (input && typeof input === 'object') {
+      const o = input as Record<string, unknown>;
+      const from = typeof o['from'] === 'string' ? o['from'] : undefined;
+      const to = typeof o['to'] === 'string' ? o['to'] : undefined;
+      if (from && to) return `${from}..${to}`;
+      if (from) return `from ${from}`;
+      if (to) return `until ${to}`;
+    }
+    return undefined;
+  }
+
+  /** Pretty-print the tool input params for the expanded disclosure body. */
+  formatInput(input: unknown): string {
+    try {
+      return JSON.stringify(input ?? {}, null, 2);
+    } catch {
+      return String(input);
+    }
   }
 
   emitAction(

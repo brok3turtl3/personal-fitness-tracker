@@ -370,9 +370,10 @@ describe('ChatMessageListComponent — tool disclosures (E12, D-05/D-06)', () =>
     expect(details.textContent).toContain('Tool: query_cardio_sessions');
     expect(details.textContent).toContain('Query:');
     expect(details.textContent).toContain('Result:');
-    const pre = details.querySelector('pre');
-    expect(pre).toBeTruthy();
-    expect(pre?.textContent).toContain('Cardio sessions: 5 total');
+    const pres = Array.from(details.querySelectorAll('pre')) as HTMLElement[];
+    // Two <pre> blocks: Query params + Result. The result content lives in one of them.
+    expect(pres.length).toBe(2);
+    expect(pres.some((p) => p.textContent?.includes('Cardio sessions: 5 total'))).toBe(true);
   });
 
   it('an in-flight query_* row (no paired result) is role=status, aria-live, non-expandable', async () => {
