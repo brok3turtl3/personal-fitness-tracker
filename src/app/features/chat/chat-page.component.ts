@@ -7,9 +7,8 @@ import { ChatService } from '../../services/chat.service';
 import { AISettingsService } from '../../services/ai-settings.service';
 import { StorageService } from '../../services/storage.service';
 import { PendingApprovalService } from '../../services/pending-approval.service';
-import { ChatBlock, ChatConversation, ChatMessage, ToolUseBlock } from '../../models/ai-chat.model';
+import { ChatBlock, ChatConversation, ChatMessage, ChatTurnEvent, ToolUseBlock } from '../../models/ai-chat.model';
 import { AnthropicApiError } from '../../services/anthropic-api.service';
-import { generateId } from '../../shared/id';
 import { ChatConversationListComponent } from './chat-conversation-list.component';
 import { ChatMessageListComponent } from './chat-message-list.component';
 import { ChatInputComponent } from './chat-input.component';
@@ -59,6 +58,26 @@ import { ErrorStateComponent } from '../../shared/error-state.component';
               [loading]="sending"
               (blockAction)="onBlockAction($event)"
             />
+
+            @if (turnLimitNotice) {
+              <div class="loop-notice" role="status" aria-live="polite">
+                {{ turnLimitNotice }}
+              </div>
+            }
+
+            @if (terminalNotice) {
+              <div class="loop-notice loop-notice--terminal" role="status" aria-live="polite">
+                {{ terminalNotice }}
+              </div>
+            }
+
+            @if (loopError) {
+              <app-error-state
+                title="The AI request didn't go through"
+                [message]="'Something interrupted the request. Check your connection and API key, then try again.'"
+                (retry)="onRetryLoop()"
+              />
+            }
 
             @if (errorMessage) {
               <div class="error-banner" role="alert">
@@ -185,6 +204,21 @@ import { ErrorStateComponent } from '../../shared/error-state.component';
       font-size: 1.25rem;
       padding: 0 0.25rem;
     }
+
+    .loop-notice {
+      padding: 0.625rem 1rem;
+      margin: 0 1rem;
+      background: #eef2f7;
+      color: #2c3e50;
+      border-radius: 4px;
+      font-size: 0.875rem;
+      line-height: 1.5;
+    }
+
+    .loop-notice--terminal {
+      background: #f4f1ea;
+      color: #5a4a2c;
+    }
   `]
 })
 export class ChatPageComponent implements OnInit {
@@ -197,12 +231,48 @@ export class ChatPageComponent implements OnInit {
   sending = false;
   errorMessage = '';
 
+  /**
+   * LOCKED turn-limit notice copy (04-UI-SPEC D-04). Set when the loop emits a
+   * `turn_limit` event; rendered role="status" aria-live="polite". Empty when
+   * the loop did not hit the cap.
+   */
+  turnLimitNotice = '';
+
+  /**
+   * LOCKED terminal-state notice copy (04-UI-SPEC D-16). Set on a `done` event
+   * with `stopReason` 'max_tokens' (truncation) or 'refusal'. Empty for normal
+   * 'end_turn' / 'stop_sequence' completion.
+   */
+  terminalNotice = '';
+
+  /**
+   * True when the in-flight loop failed with a transport/SDK error (network,
+   * generic API error). Drives the recoverable <app-error-state> with Retry.
+   * The 401 path stays on the inline `errorMessage` banner (Phase 5 owns the
+   * rotate-key UX — 04-UI-SPEC).
+   */
+  loopError = false;
+
+  /** Last user message text — re-sent when the user clicks Retry on a loop error. */
+  private lastUserMessage = '';
+
+  /**
+   * Set once the component is torn down. takeUntilDestroyed completes the loop
+   * subscription on destroy, which fires its `complete` handler — that handler
+   * must NOT re-subscribe through `takeUntilDestroyed(this.destroyRef)` on an
+   * already-destroyed ref (NG0911). This flag short-circuits the post-loop
+   * refresh in that race.
+   */
+  private destroyed = false;
+
   constructor(
     private chatService: ChatService,
     private aiSettingsService: AISettingsService,
     private storageService: StorageService,
     private pendingApprovalService: PendingApprovalService
-  ) {}
+  ) {
+    this.destroyRef.onDestroy(() => { this.destroyed = true; });
+  }
 
   ngOnInit(): void {
     this.storageService.initialize()
@@ -213,125 +283,37 @@ export class ChatPageComponent implements OnInit {
           .subscribe(valid => {
             this.hasApiKey = valid;
             if (valid) {
-              this.initializeActiveConversationAndConsumeSeed();
+              this.initializeActiveConversation();
             }
           });
       });
   }
 
   /**
-   * Init-time orchestration: load conversations, auto-select the most-recent
-   * (or auto-create one if a dev seed is present and no conversations exist),
-   * then consume the dev-seed sentinel. Fixes UAT Test 2 (plan 03-06 gap
-   * closure): the previous `loadConversations(); consumeDevSeedIfPresent();`
-   * pair ran the seed consumer before any activeConversationId was assigned,
-   * silently destroying the sentinel.
-   *
-   * Auto-create is GATED on a non-null dev seed — without that gate, the
-   * Phase 1 empty-state characterization spec ("renders <app-empty-state>
-   * when no conversations exist") would break.
+   * Init-time orchestration: load conversations and auto-select the
+   * most-recent (plan 03-06). The Phase 3 dev-only seed machinery (the
+   * synthetic pending-pill injection on init) was REMOVED in plan 04-06:
+   * real write proposals (D-03) now surface through the live agentic loop,
+   * so a synthetic pill injected on init could collide with / be mistaken
+   * for a real proposal (T-04-06-03). Auto-create on an empty list is
+   * likewise dropped — the empty-state surface is the correct view when no
+   * conversation exists (Phase 1 characterization spec preserved).
    */
-  private initializeActiveConversationAndConsumeSeed(): void {
+  private initializeActiveConversation(): void {
     this.chatService.getConversations()
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(convs => {
         this.conversations = convs;
-
-        // Capture the seed first so we can decide whether to auto-create.
-        // consumeDevSeed() is read-and-remove — once we call it we MUST act
-        // on the value (or accept it's destroyed). The capture-then-branch
-        // sequence below ensures we never destroy a seed we can't honor.
-        const seed = this.storageService.consumeDevSeed();
 
         if (convs.length > 0) {
           // Auto-select most-recent (getConversations sorts by updatedAt DESC).
           const first = convs[0];
           this.activeConversationId = first.id;
           this.activeConversation = first;
-          if (seed) {
-            this.appendSeededPill(first.id, seed);
-          }
-        } else if (seed) {
-          // Empty list + non-null seed → auto-create so the pill has a home.
-          this.chatService.createConversation()
-            .pipe(takeUntilDestroyed(this.destroyRef))
-            .subscribe({
-              next: conv => {
-                this.conversations = [conv];
-                this.activeConversationId = conv.id;
-                this.activeConversation = conv;
-                this.appendSeededPill(conv.id, seed);
-              },
-              error: err => console.error('[chat-page] auto-create conversation failed', err),
-            });
         }
-        // Empty list + no seed → leave activeConversation null; empty-state
-        // surface renders (Phase 1 spec preserved).
+        // Empty list → leave activeConversation null; the empty-state surface
+        // renders (Phase 1 spec preserved).
       });
-  }
-
-  /**
-   * Build the synthetic pending ToolUseBlock for the supplied dev-seed kind
-   * and append it to the active conversation via chat.service. Extracted from
-   * the previous body of consumeDevSeedIfPresent() so both the init path AND
-   * the legacy direct-call path (kept for backwards compat with existing
-   * specs) share a single block builder.
-   */
-  private appendSeededPill(
-    conversationId: string,
-    seed: { kind: 'memory' | 'profile'; at: string },
-  ): void {
-    const block: ToolUseBlock = seed.kind === 'memory'
-      ? {
-          type: 'tool_use',
-          id: generateId(),
-          name: 'memory',
-          input: {
-            command: 'create',
-            path: `/memories/seed-${Date.now()}.md`,
-            file_text: 'This is a seeded memory proposal for development testing.',
-          },
-          status: 'pending',
-        }
-      : {
-          type: 'tool_use',
-          id: generateId(),
-          name: 'update_profile',
-          input: {
-            section: 'goals',
-            value: 'This is a seeded profile-update proposal for development testing.',
-          },
-          status: 'pending',
-        };
-
-    this.chatService.appendAssistantBlocks(conversationId, [block])
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: () => {
-          // Refresh active conversation to surface the new pill in the stream.
-          this.chatService.getConversation(conversationId)
-            .pipe(takeUntilDestroyed(this.destroyRef))
-            .subscribe(conv => { this.activeConversation = conv; });
-        },
-        error: (err) => console.error('[chat-page] dev-seed append failed', err),
-      });
-  }
-
-  /**
-   * Read-and-remove the dev-seed sentinel and append a synthetic pending
-   * pill to the active conversation (D-12). PUBLIC because existing specs
-   * drive it directly. In production, the init path now invokes the
-   * equivalent flow (via initializeActiveConversationAndConsumeSeed) BEFORE
-   * the user clicks anything — see plan 03-06 for the UAT Test 2 gap fix.
-   *
-   * Kept on the component surface (a) for spec ergonomics and (b) as a
-   * defensive re-entry point if init ever fails to consume the seed.
-   */
-  consumeDevSeedIfPresent(): void {
-    const seed = this.storageService.consumeDevSeed();
-    if (!seed) return;
-    if (!this.activeConversationId) return;
-    this.appendSeededPill(this.activeConversationId, seed);
   }
 
   /**
@@ -376,10 +358,12 @@ export class ChatPageComponent implements OnInit {
       return;
     }
 
-    // discard / edit — unchanged: status-only patch via updateMessageBlock.
+    // discard / edit — status-only patch via updateMessageBlock, now stamping
+    // a real resolvedAt so the pending pill renders an honest resolved time.
+    const resolvedAt = new Date().toISOString();
     let patch: Partial<ToolUseBlock> | null = null;
     if (action === 'discard') {
-      patch = { status: 'discarded' };
+      patch = { status: 'discarded', resolvedAt };
     } else if (action === 'edit') {
       const block = this.findToolUseBlock(messageId, blockIndex);
       if (block) {
@@ -387,6 +371,7 @@ export class ChatPageComponent implements OnInit {
           status: 'edited',
           editedFromText: this.extractEditableText(block),
           input: this.applyEditedText(block, editedText ?? ''),
+          resolvedAt,
         };
       }
     }
@@ -474,44 +459,172 @@ export class ChatPageComponent implements OnInit {
       });
   }
 
+  /**
+   * Drive the Wave 2 agentic loop (`ChatService.runAgenticLoop`) from a user
+   * message (Plan 04-06; CHAT-05/CHAT-06). Persists the user turn to disk,
+   * then subscribes to the MULTI-EMIT loop Observable: each `ChatTurnEvent`
+   * refreshes the rendered transcript (in-flight tool rows → resolved
+   * summaries → final prose, D-01) and the terminal/turn-limit notices.
+   *
+   * The subscription is piped through `takeUntilDestroyed(this.destroyRef)` —
+   * navigating away mid-loop tears it down, which flips the loop's `cancelled`
+   * flag and stops it calling the API (stops billing — T-04-06-01).
+   */
   onSendMessage(text: string): void {
     if (!this.activeConversationId || this.sending) return;
 
-    this.sending = true;
-    this.errorMessage = '';
+    const conversationId = this.activeConversationId;
+    this.lastUserMessage = text;
+    this.beginLoopUiState();
 
-    this.chatService.sendMessage(this.activeConversationId, text)
+    // Persist the user turn FIRST (the loop reads the transcript from disk),
+    // then start the loop with the user's API key.
+    this.aiSettingsService.getSettings()
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: () => {
-          this.sending = false;
-          this.loadConversations();
-          // Refresh active conversation to show new messages
-          if (this.activeConversationId) {
-            this.chatService.getConversation(this.activeConversationId)
-              .pipe(takeUntilDestroyed(this.destroyRef))
-              .subscribe(conv => {
-                this.activeConversation = conv;
-              });
+        next: settings => {
+          const apiKey = settings.apiKey;
+          if (!apiKey) {
+            this.sending = false;
+            this.errorMessage = 'No API key configured. Please add your key in Settings.';
+            return;
           }
+          this.chatService.appendUserMessage(conversationId, text)
+            .pipe(takeUntilDestroyed(this.destroyRef))
+            .subscribe({
+              next: () => {
+                this.refreshActiveConversation(conversationId);
+                this.startAgenticLoop(conversationId, apiKey);
+              },
+              error: err => this.handleLoopError(err),
+            });
         },
-        error: (err) => {
+        error: err => this.handleLoopError(err),
+      });
+  }
+
+  /**
+   * Re-run the loop for the last user message after a transport failure
+   * (the Retry button on the loop <app-error-state>). The user message is
+   * already on disk from the failed attempt, so this only re-invokes the loop.
+   */
+  onRetryLoop(): void {
+    if (!this.activeConversationId || this.sending || !this.lastUserMessage) return;
+    const conversationId = this.activeConversationId;
+    this.aiSettingsService.getSettings()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: settings => {
+          const apiKey = settings.apiKey;
+          if (!apiKey) {
+            this.errorMessage = 'No API key configured. Please add your key in Settings.';
+            return;
+          }
+          this.beginLoopUiState();
+          this.startAgenticLoop(conversationId, apiKey);
+        },
+        error: err => this.handleLoopError(err),
+      });
+  }
+
+  /** Reset the per-send loop UI state (notices, errors, spinner). */
+  private beginLoopUiState(): void {
+    this.sending = true;
+    this.errorMessage = '';
+    this.turnLimitNotice = '';
+    this.terminalNotice = '';
+    this.loopError = false;
+  }
+
+  /**
+   * Subscribe to the multi-emit loop. `next` renders each incremental event;
+   * `error` maps transport/401 failures; `complete` clears the spinner.
+   * `takeUntilDestroyed` is the cancellation seam (T-04-06-01).
+   */
+  private startAgenticLoop(conversationId: string, apiKey: string): void {
+    this.chatService.runAgenticLoop(conversationId, apiKey)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: event => this.handleTurnEvent(event, conversationId),
+        error: err => this.handleLoopError(err),
+        complete: () => {
+          // takeUntilDestroyed completes this stream on teardown too — guard
+          // the re-subscriptions so they never hit a destroyed DestroyRef.
+          if (this.destroyed) return;
           this.sending = false;
-          if (err instanceof AnthropicApiError && err.statusCode === 401) {
-            this.errorMessage = 'Invalid API key. Please update it in Settings.';
-          } else {
-            this.errorMessage = err.message || 'Failed to send message. Please try again.';
-          }
-          // Still refresh to show the user message that was saved
           this.loadConversations();
-          if (this.activeConversationId) {
-            this.chatService.getConversation(this.activeConversationId)
-              .pipe(takeUntilDestroyed(this.destroyRef))
-              .subscribe(conv => {
-                this.activeConversation = conv;
-              });
-          }
-        }
+          this.refreshActiveConversation(conversationId);
+        },
+      });
+  }
+
+  /**
+   * Render one incremental loop event (D-01). The loop persists each block to
+   * storage as it emits, so `tool_use_started` / `tool_result` /
+   * `assistant_text` just refresh the active conversation so the extended
+   * message-list (Plan 05) re-renders the new in-flight / resolved / prose
+   * blocks. Focus is NOT moved per event (04-UI-SPEC Focus management — focus
+   * stays on the chat input; only a surfaced pending-pill moves focus, which
+   * is the pill's own existing behavior).
+   */
+  private handleTurnEvent(event: ChatTurnEvent, conversationId: string): void {
+    switch (event.kind) {
+      case 'tool_use_started':
+      case 'tool_result':
+      case 'assistant_text':
+        this.refreshActiveConversation(conversationId);
+        return;
+      case 'turn_limit':
+        // LOCKED copy (04-UI-SPEC D-04).
+        this.turnLimitNotice =
+          `Reached the tool-use limit (${event.turnsUsed} turns) — answering with the data gathered so far.`;
+        return;
+      case 'done':
+        this.applyTerminalNotice(event.stopReason);
+        return;
+    }
+  }
+
+  /**
+   * Map a terminal `stopReason` to the LOCKED terminal-state notice (D-16).
+   * 'max_tokens' → truncation notice; 'refusal' → honest refusal message;
+   * 'end_turn' / 'stop_sequence' / 'pause_turn' → no notice.
+   */
+  private applyTerminalNotice(stopReason: string): void {
+    if (stopReason === 'max_tokens') {
+      this.terminalNotice =
+        'This answer was cut off at the length limit. Ask me to continue if you\'d like the rest.';
+    } else if (stopReason === 'refusal') {
+      this.terminalNotice = "I'm not able to answer that one.";
+    }
+  }
+
+  /**
+   * Map a loop transport failure. The existing 401 mapping is PRESERVED on the
+   * inline banner (Phase 5 owns the rotate-key UX); any other error surfaces a
+   * recoverable <app-error-state> with Retry (never console-only — T-04-06-04).
+   */
+  private handleLoopError(err: unknown): void {
+    this.sending = false;
+    if (err instanceof AnthropicApiError && err.statusCode === 401) {
+      this.errorMessage = 'Invalid API key. Please update it in Settings.';
+      this.loopError = false;
+    } else {
+      this.loopError = true;
+    }
+    // Refresh so any persisted partial transcript (user turn, tool rows) shows.
+    if (this.activeConversationId) {
+      this.refreshActiveConversation(this.activeConversationId);
+    }
+  }
+
+  /** Re-read the active conversation from storage so the view reflects disk. */
+  private refreshActiveConversation(conversationId: string): void {
+    if (this.destroyed) return;
+    this.chatService.getConversation(conversationId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(conv => {
+        if (conv) this.activeConversation = conv;
       });
   }
 }

@@ -9,13 +9,14 @@
  */
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { of } from 'rxjs';
+import { Subject, of } from 'rxjs';
 
 import { ChatPageComponent } from './chat-page.component';
 import { ChatService } from '../../services/chat.service';
 import { AISettingsService } from '../../services/ai-settings.service';
 import { StorageService } from '../../services/storage.service';
-import { ChatConversation, ChatMessage, ToolUseBlock } from '../../models/ai-chat.model';
+import { AISettings, ChatConversation, ChatMessage, ChatTurnEvent, ToolUseBlock } from '../../models/ai-chat.model';
+import { AnthropicApiError } from '../../services/anthropic-api.service';
 import { PendingApprovalService } from '../../services/pending-approval.service';
 import { expectNoSeriousA11yViolations } from '../../shared/a11y-test-helpers';
 
@@ -79,6 +80,8 @@ function makeSpies(opts: {
     'createConversation',
     'deleteConversation',
     'sendMessage',
+    'runAgenticLoop',
+    'appendUserMessage',
     'updateMessageBlock',
     'approveToolUseBlock',
     'appendAssistantBlocks',
@@ -87,6 +90,14 @@ function makeSpies(opts: {
   chatService.getConversation.and.returnValue(of(opts.activeConversation ?? null));
   chatService.updateMessageBlock.and.returnValue(of(undefined));
   chatService.approveToolUseBlock.and.returnValue(of(undefined));
+  chatService.runAgenticLoop.and.returnValue(of());
+  chatService.appendUserMessage.and.returnValue(of({
+    id: 'user-msg',
+    role: 'user',
+    blocks: [{ type: 'text', text: 'Hello' }],
+    tokenEstimate: 1,
+    createdAt: '2026-04-15T10:00:00.000Z',
+  } as ChatMessage));
   chatService.appendAssistantBlocks.and.returnValue(of({
     id: 'appended-msg',
     role: 'assistant',
@@ -100,6 +111,12 @@ function makeSpies(opts: {
     ['hasValidApiKey', 'getSettings', 'saveSettings', 'clearApiKey'],
   );
   aiSettingsService.hasValidApiKey.and.returnValue(of(opts.hasApiKey ?? true));
+  const settings: AISettings = {
+    apiKey: 'sk-ant-test-key',
+    selectedModel: 'claude-opus-4-8',
+    maxResponseTokens: 4096,
+  };
+  aiSettingsService.getSettings.and.returnValue(of(settings));
 
   const storageService = jasmine.createSpyObj<StorageService>('StorageService', [
     'initialize', 'getData', 'saveData', 'getBackup',
@@ -417,76 +434,33 @@ describe('ChatPageComponent (characterization)', () => {
     expect(spies.pendingApproval.executeApprovedToolUse).not.toHaveBeenCalled();
   });
 
-  it('consumeDevSeed("memory") on init appends an assistant message with a pending memory tool_use block', async () => {
-    const conv = createValidConversation({ id: 'c-active' });
+  // ---------------------------------------------------------------------------
+  // Plan 04-06 Task 2 — the Phase 3 dev-only seed machinery was REMOVED so a
+  // synthetic pending pill can never fire alongside a real loop proposal
+  // (T-04-06-03). The component no longer reads `consumeDevSeed` and no longer
+  // exposes `consumeDevSeedIfPresent`. (Was: three consumeDevSeed specs.)
+  // ---------------------------------------------------------------------------
+
+  it('does NOT consume the dev-seed sentinel on init (dev-seed machinery removed — plan 04-06)', async () => {
+    const convA = createValidConversation({ id: 'c-a' });
     const spies = makeSpies({
       hasApiKey: true,
-      conversations: [conv],
-      activeConversation: conv,
-      devSeed: { kind: 'memory', at: '2026-05-03T00:00:00.000Z' },
+      conversations: [convA],
+      activeConversation: convA,
+      devSeed: { kind: 'memory', at: '2026-05-31T12:00:00.000Z' },
     });
-    // Make activeConversation auto-set after loadConversations
-    spies.chatService.getConversation.and.returnValue(of(conv));
+    spies.chatService.getConversation.and.returnValue(of(convA));
     await configureBed(spies);
 
     const fixture = TestBed.createComponent(ChatPageComponent);
     fixture.detectChanges();
-    // Manually set active conversation since the Phase 1 spec doesn't auto-select
-    fixture.componentInstance.activeConversationId = 'c-active';
-    fixture.componentInstance.activeConversation = conv;
-    fixture.componentInstance.consumeDevSeedIfPresent();
 
-    expect(spies.storageService.consumeDevSeed).toHaveBeenCalled();
-    expect(spies.chatService.appendAssistantBlocks).toHaveBeenCalled();
-    const [convId, blocks] = spies.chatService.appendAssistantBlocks.calls.mostRecent().args;
-    expect(convId).toBe('c-active');
-    expect(blocks.length).toBe(1);
-    expect(blocks[0].type).toBe('tool_use');
-    expect((blocks[0] as ToolUseBlock).name).toBe('memory');
-    expect((blocks[0] as ToolUseBlock).status).toBe('pending');
-  });
-
-  it('consumeDevSeed("profile") on init appends an assistant message with a pending update_profile tool_use block', async () => {
-    const conv = createValidConversation({ id: 'c-active' });
-    const spies = makeSpies({
-      hasApiKey: true,
-      conversations: [conv],
-      activeConversation: conv,
-      devSeed: { kind: 'profile', at: '2026-05-03T00:00:00.000Z' },
-    });
-    spies.chatService.getConversation.and.returnValue(of(conv));
-    await configureBed(spies);
-
-    const fixture = TestBed.createComponent(ChatPageComponent);
-    fixture.detectChanges();
-    fixture.componentInstance.activeConversationId = 'c-active';
-    fixture.componentInstance.activeConversation = conv;
-    fixture.componentInstance.consumeDevSeedIfPresent();
-
-    expect(spies.chatService.appendAssistantBlocks).toHaveBeenCalled();
-    const blocks = spies.chatService.appendAssistantBlocks.calls.mostRecent().args[1];
-    expect(blocks.length).toBe(1);
-    expect((blocks[0] as ToolUseBlock).name).toBe('update_profile');
-    expect((blocks[0] as ToolUseBlock).status).toBe('pending');
-  });
-
-  it('no consumeDevSeed sentinel does NOT append a message', async () => {
-    const conv = createValidConversation({ id: 'c-active' });
-    const spies = makeSpies({
-      hasApiKey: true,
-      conversations: [conv],
-      activeConversation: conv,
-      devSeed: null,
-    });
-    await configureBed(spies);
-
-    const fixture = TestBed.createComponent(ChatPageComponent);
-    fixture.detectChanges();
-    fixture.componentInstance.activeConversationId = 'c-active';
-    fixture.componentInstance.activeConversation = conv;
-    fixture.componentInstance.consumeDevSeedIfPresent();
-
+    // The seed is never read, and no synthetic pill is appended.
+    expect(spies.storageService.consumeDevSeed).not.toHaveBeenCalled();
     expect(spies.chatService.appendAssistantBlocks).not.toHaveBeenCalled();
+    // The dev-only public re-entry point is gone.
+    expect((fixture.componentInstance as unknown as Record<string, unknown>)['consumeDevSeedIfPresent'])
+      .toBeUndefined();
   });
 
   it('expectNoSeriousA11yViolations when a pending pill is in the chat stream', async () => {
@@ -521,15 +495,14 @@ describe('ChatPageComponent (characterization)', () => {
   // activeConversationId assignment. Root cause:
   //   .planning/debug/dev-seed-pending-pill-not-rendering.md
   // ---------------------------------------------------------------------------
-  describe('ngOnInit dev-seed regression (UAT Test 2 — gap-closure plan 03-06)', () => {
-    it('consumes dev seed AND renders pending pill when ngOnInit runs and conversations already exist (no manual activeConversationId)', async () => {
-      // Arrange: 1 pre-existing conversation, seed sentinel present.
+  describe('ngOnInit auto-select (plan 03-06 regression — dev-seed removed in 04-06)', () => {
+    it('ngOnInit auto-selects the most-recent conversation with NO manual activeConversationId (plan 03-06 not regressed)', async () => {
+      // Arrange: 1 conversation, no seed needed (machinery removed).
       const convA = createValidConversation({ id: 'c-a', title: 'Existing' });
       const spies = makeSpies({
         hasApiKey: true,
         conversations: [convA],
         activeConversation: convA,
-        devSeed: { kind: 'memory', at: '2026-05-31T12:00:00.000Z' },
       });
       spies.chatService.getConversation.and.returnValue(of(convA));
       await configureBed(spies);
@@ -538,83 +511,20 @@ describe('ChatPageComponent (characterization)', () => {
       const fixture = TestBed.createComponent(ChatPageComponent);
       fixture.detectChanges();
 
-      // Assert — production lifecycle did the work.
-      expect(spies.storageService.consumeDevSeed).toHaveBeenCalledTimes(1);
-      expect(spies.chatService.appendAssistantBlocks).toHaveBeenCalledTimes(1);
-      const [convId, blocks] = spies.chatService.appendAssistantBlocks.calls.mostRecent().args;
-      expect(convId).toBe('c-a');
-      expect(blocks.length).toBe(1);
-      expect(blocks[0].type).toBe('tool_use');
-      expect((blocks[0] as ToolUseBlock).name).toBe('memory');
-      expect((blocks[0] as ToolUseBlock).status).toBe('pending');
-
-      // Auto-select happened — activeConversationId was assigned without a user click.
+      // Assert: auto-select happened without a user click; no pill appended.
       expect(fixture.componentInstance.activeConversationId).toBe('c-a');
       expect(fixture.componentInstance.activeConversation?.id).toBe('c-a');
-
-      // We had a conversation, so create was NOT invoked.
-      expect(spies.chatService.createConversation).not.toHaveBeenCalled();
-    });
-
-    it('consumes dev seed AND auto-creates a conversation when ngOnInit runs with NO conversations and a seed is present', async () => {
-      // Arrange: empty list + seed.
-      const created = createValidConversation({ id: 'c-new', title: 'Chat — new' });
-      const spies = makeSpies({
-        hasApiKey: true,
-        conversations: [],
-        activeConversation: created,
-        devSeed: { kind: 'profile', at: '2026-05-31T12:00:00.000Z' },
-      });
-      spies.chatService.createConversation.and.returnValue(of(created));
-      spies.chatService.getConversation.and.returnValue(of(created));
-      await configureBed(spies);
-
-      // Act
-      const fixture = TestBed.createComponent(ChatPageComponent);
-      fixture.detectChanges();
-
-      // Assert
-      expect(spies.chatService.createConversation).toHaveBeenCalledTimes(1);
-      expect(spies.chatService.appendAssistantBlocks).toHaveBeenCalledTimes(1);
-      const [convId, blocks] = spies.chatService.appendAssistantBlocks.calls.mostRecent().args;
-      expect(convId).toBe('c-new');
-      expect((blocks[0] as ToolUseBlock).name).toBe('update_profile');
-      expect((blocks[0] as ToolUseBlock).status).toBe('pending');
-      expect(fixture.componentInstance.activeConversationId).toBe('c-new');
-    });
-
-    it('ngOnInit auto-selects most-recent but does NOT append a pill when no dev seed sentinel is present', async () => {
-      // Arrange: 1 conversation, no seed.
-      const convA = createValidConversation({ id: 'c-a' });
-      const spies = makeSpies({
-        hasApiKey: true,
-        conversations: [convA],
-        activeConversation: convA,
-        devSeed: null,
-      });
-      spies.chatService.getConversation.and.returnValue(of(convA));
-      await configureBed(spies);
-
-      // Act
-      const fixture = TestBed.createComponent(ChatPageComponent);
-      fixture.detectChanges();
-
-      // Assert: seed was peeked (read-and-remove fired once), no pill appended,
-      // auto-select still happened.
-      expect(spies.storageService.consumeDevSeed).toHaveBeenCalledTimes(1);
       expect(spies.chatService.appendAssistantBlocks).not.toHaveBeenCalled();
-      expect(fixture.componentInstance.activeConversationId).toBe('c-a');
       expect(spies.chatService.createConversation).not.toHaveBeenCalled();
     });
 
-    it('ngOnInit with NO conversations and NO seed leaves activeConversation null (empty-state surface preserved — Phase 1 spec invariant)', async () => {
-      // Arrange: empty list, no seed. This is the surface the Phase 1
-      // empty-state characterization spec depends on.
+    it('ngOnInit with NO conversations leaves activeConversation null (empty-state surface preserved — Phase 1 spec invariant)', async () => {
+      // Arrange: empty list. This is the surface the Phase 1 empty-state
+      // characterization spec depends on. No seed-gated auto-create anymore.
       const spies = makeSpies({
         hasApiKey: true,
         conversations: [],
         activeConversation: null,
-        devSeed: null,
       });
       await configureBed(spies);
 
@@ -622,12 +532,224 @@ describe('ChatPageComponent (characterization)', () => {
       const fixture = TestBed.createComponent(ChatPageComponent);
       fixture.detectChanges();
 
-      // Assert: no auto-create when no seed; activeConversation stays null
-      // so the empty-state surface renders.
+      // Assert: no auto-create; activeConversation stays null so the
+      // empty-state surface renders.
       expect(spies.chatService.createConversation).not.toHaveBeenCalled();
       expect(spies.chatService.appendAssistantBlocks).not.toHaveBeenCalled();
       expect(fixture.componentInstance.activeConversationId).toBeNull();
       expect(fixture.componentInstance.activeConversation).toBeNull();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Plan 04-06 Task 1 — runAgenticLoop orchestration: multi-emit events drive
+  // the view; turn-limit + terminal notices; takeUntilDestroyed cancellation;
+  // 401 path preserved + generic transport error → <app-error-state>.
+  // ---------------------------------------------------------------------------
+  describe('runAgenticLoop orchestration (plan 04-06)', () => {
+    function selectActive(fixture: ReturnType<typeof TestBed.createComponent<ChatPageComponent>>, id: string): void {
+      fixture.componentInstance.onSelectConversation(id);
+      fixture.detectChanges();
+    }
+
+    it('onSendMessage persists the user turn then subscribes to runAgenticLoop', async () => {
+      const conv = createValidConversation({ id: 'c-1' });
+      const events = new Subject<ChatTurnEvent>();
+      const spies = makeSpies({ hasApiKey: true, conversations: [conv], activeConversation: conv });
+      spies.chatService.runAgenticLoop.and.returnValue(events.asObservable());
+      await configureBed(spies);
+
+      const fixture = TestBed.createComponent(ChatPageComponent);
+      fixture.detectChanges();
+      selectActive(fixture, 'c-1');
+
+      fixture.componentInstance.onSendMessage('how is my weight trending?');
+
+      expect(spies.chatService.appendUserMessage)
+        .toHaveBeenCalledWith('c-1', 'how is my weight trending?');
+      expect(spies.chatService.runAgenticLoop)
+        .toHaveBeenCalledWith('c-1', 'sk-ant-test-key');
+      // The single-shot path is NOT used anymore.
+      expect(spies.chatService.sendMessage).not.toHaveBeenCalled();
+    });
+
+    it('successive loop events refresh the rendered conversation from storage (D-01)', async () => {
+      const conv = createValidConversation({ id: 'c-1' });
+      const events = new Subject<ChatTurnEvent>();
+      const spies = makeSpies({ hasApiKey: true, conversations: [conv], activeConversation: conv });
+      spies.chatService.runAgenticLoop.and.returnValue(events.asObservable());
+      await configureBed(spies);
+
+      const fixture = TestBed.createComponent(ChatPageComponent);
+      fixture.detectChanges();
+      selectActive(fixture, 'c-1');
+
+      spies.chatService.getConversation.calls.reset();
+      fixture.componentInstance.onSendMessage('hi');
+
+      // appendUserMessage refresh + each event refresh re-reads the conversation.
+      events.next({ kind: 'tool_use_started', toolUseId: 't1', toolName: 'query_weight_entries', input: {} });
+      events.next({ kind: 'tool_result', toolUseId: 't1', summary: '20 total' });
+      events.next({ kind: 'assistant_text', blocks: [{ type: 'text', text: 'Your weight is trending down.' }] });
+
+      // 1 (appendUserMessage refresh) + 3 (events) = 4 storage refreshes.
+      expect(spies.chatService.getConversation).toHaveBeenCalledTimes(4);
+    });
+
+    it('a turn_limit event renders the LOCKED notice with role="status"', async () => {
+      const conv = createValidConversation({ id: 'c-1' });
+      const events = new Subject<ChatTurnEvent>();
+      const spies = makeSpies({ hasApiKey: true, conversations: [conv], activeConversation: conv });
+      spies.chatService.runAgenticLoop.and.returnValue(events.asObservable());
+      await configureBed(spies);
+
+      const fixture = TestBed.createComponent(ChatPageComponent);
+      fixture.detectChanges();
+      selectActive(fixture, 'c-1');
+      fixture.componentInstance.onSendMessage('hi');
+
+      events.next({ kind: 'turn_limit', turnsUsed: 8 });
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.turnLimitNotice)
+        .toBe('Reached the tool-use limit (8 turns) — answering with the data gathered so far.');
+      const compiled = fixture.nativeElement as HTMLElement;
+      const notice = compiled.querySelector('.loop-notice[role="status"]');
+      expect(notice?.textContent).toContain('Reached the tool-use limit (8 turns)');
+      expect(notice?.getAttribute('aria-live')).toBe('polite');
+    });
+
+    it('a done max_tokens event renders the LOCKED truncation notice', async () => {
+      const conv = createValidConversation({ id: 'c-1' });
+      const events = new Subject<ChatTurnEvent>();
+      const spies = makeSpies({ hasApiKey: true, conversations: [conv], activeConversation: conv });
+      spies.chatService.runAgenticLoop.and.returnValue(events.asObservable());
+      await configureBed(spies);
+
+      const fixture = TestBed.createComponent(ChatPageComponent);
+      fixture.detectChanges();
+      selectActive(fixture, 'c-1');
+      fixture.componentInstance.onSendMessage('hi');
+
+      events.next({ kind: 'done', stopReason: 'max_tokens' });
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.terminalNotice)
+        .toBe('This answer was cut off at the length limit. Ask me to continue if you\'d like the rest.');
+      const compiled = fixture.nativeElement as HTMLElement;
+      expect(compiled.querySelector('.loop-notice--terminal')?.textContent)
+        .toContain('cut off at the length limit');
+    });
+
+    it('a done refusal event renders the LOCKED refusal message', async () => {
+      const conv = createValidConversation({ id: 'c-1' });
+      const events = new Subject<ChatTurnEvent>();
+      const spies = makeSpies({ hasApiKey: true, conversations: [conv], activeConversation: conv });
+      spies.chatService.runAgenticLoop.and.returnValue(events.asObservable());
+      await configureBed(spies);
+
+      const fixture = TestBed.createComponent(ChatPageComponent);
+      fixture.detectChanges();
+      selectActive(fixture, 'c-1');
+      fixture.componentInstance.onSendMessage('hi');
+
+      events.next({ kind: 'done', stopReason: 'refusal' });
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.terminalNotice).toBe("I'm not able to answer that one.");
+    });
+
+    it('a done end_turn event renders NO terminal notice (normal completion)', async () => {
+      const conv = createValidConversation({ id: 'c-1' });
+      const events = new Subject<ChatTurnEvent>();
+      const spies = makeSpies({ hasApiKey: true, conversations: [conv], activeConversation: conv });
+      spies.chatService.runAgenticLoop.and.returnValue(events.asObservable());
+      await configureBed(spies);
+
+      const fixture = TestBed.createComponent(ChatPageComponent);
+      fixture.detectChanges();
+      selectActive(fixture, 'c-1');
+      fixture.componentInstance.onSendMessage('hi');
+
+      events.next({ kind: 'done', stopReason: 'end_turn' });
+      events.complete();
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.terminalNotice).toBe('');
+      expect(fixture.componentInstance.sending).toBeFalse();
+    });
+
+    it('the loop subscription is piped through takeUntilDestroyed — teardown stops further event processing (T-04-06-01)', async () => {
+      const conv = createValidConversation({ id: 'c-1' });
+      const events = new Subject<ChatTurnEvent>();
+      const spies = makeSpies({ hasApiKey: true, conversations: [conv], activeConversation: conv });
+      spies.chatService.runAgenticLoop.and.returnValue(events.asObservable());
+      await configureBed(spies);
+
+      const fixture = TestBed.createComponent(ChatPageComponent);
+      fixture.detectChanges();
+      selectActive(fixture, 'c-1');
+      fixture.componentInstance.onSendMessage('hi');
+
+      // The component subscribed to the loop.
+      expect(events.observed).toBeTrue();
+
+      // Tear down the component → takeUntilDestroyed unsubscribes.
+      fixture.destroy();
+      expect(events.observed).toBeFalse();
+
+      // A post-teardown emission is NOT processed (no notice set).
+      events.next({ kind: 'turn_limit', turnsUsed: 8 });
+      expect(fixture.componentInstance.turnLimitNotice).toBe('');
+    });
+
+    it('a 401 AnthropicApiError still routes to the inline 401 banner (existing behavior preserved)', async () => {
+      const conv = createValidConversation({ id: 'c-1' });
+      const events = new Subject<ChatTurnEvent>();
+      const spies = makeSpies({ hasApiKey: true, conversations: [conv], activeConversation: conv });
+      spies.chatService.runAgenticLoop.and.returnValue(events.asObservable());
+      await configureBed(spies);
+
+      const fixture = TestBed.createComponent(ChatPageComponent);
+      fixture.detectChanges();
+      selectActive(fixture, 'c-1');
+      fixture.componentInstance.onSendMessage('hi');
+
+      events.error(new AnthropicApiError('Unauthorized', 401));
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.errorMessage).toContain('Invalid API key');
+      expect(fixture.componentInstance.loopError).toBeFalse();
+      const compiled = fixture.nativeElement as HTMLElement;
+      expect(compiled.querySelector('.error-banner[role="alert"]')).toBeTruthy();
+    });
+
+    it('a generic transport error surfaces <app-error-state> with Retry (T-04-06-04)', async () => {
+      const conv = createValidConversation({ id: 'c-1' });
+      const events = new Subject<ChatTurnEvent>();
+      const spies = makeSpies({ hasApiKey: true, conversations: [conv], activeConversation: conv });
+      spies.chatService.runAgenticLoop.and.returnValue(events.asObservable());
+      await configureBed(spies);
+
+      const fixture = TestBed.createComponent(ChatPageComponent);
+      fixture.detectChanges();
+      selectActive(fixture, 'c-1');
+      fixture.componentInstance.onSendMessage('hi');
+
+      events.error(new Error('network down'));
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.loopError).toBeTrue();
+      const compiled = fixture.nativeElement as HTMLElement;
+      const errorState = compiled.querySelector('app-error-state');
+      expect(errorState).toBeTruthy();
+      expect(errorState?.textContent).toContain("The AI request didn't go through");
+      // Retry re-invokes the loop for the last user message.
+      spies.chatService.runAgenticLoop.calls.reset();
+      const retryEvents = new Subject<ChatTurnEvent>();
+      spies.chatService.runAgenticLoop.and.returnValue(retryEvents.asObservable());
+      fixture.componentInstance.onRetryLoop();
+      expect(spies.chatService.runAgenticLoop).toHaveBeenCalledWith('c-1', 'sk-ant-test-key');
     });
   });
 });

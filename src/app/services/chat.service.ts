@@ -659,7 +659,11 @@ export class ChatService {
           return throwError(() => new Error(`Block at index ${blockIndex} is not tool_use (got: ${block.type})`));
         }
 
-        const approvedBlock: ToolUseBlock = { ...block, status: 'approved' };
+        const approvedBlock: ToolUseBlock = {
+          ...block,
+          status: 'approved',
+          resolvedAt: new Date().toISOString(),
+        };
         const resultBlock: ToolResultBlock = {
           type: 'tool_result',
           tool_use_id: block.id,
@@ -734,6 +738,52 @@ export class ChatService {
           ],
         };
         return this.storageService.saveData(updatedData).pipe(map(() => newMessage));
+      }),
+    );
+  }
+
+  /**
+   * Persist a single user text message to a conversation (Plan 04-06). The
+   * agentic loop (`runAgenticLoop`) reads the persisted transcript from disk,
+   * so the chat-page persists the user's turn through this method BEFORE
+   * starting the loop (mirrors the user-message write at the head of
+   * `sendMessage`, but without the single-shot API call). Returns the new
+   * ChatMessage so the caller can surface it immediately.
+   */
+  appendUserMessage(
+    conversationId: string,
+    text: string,
+  ): Observable<ChatMessage> {
+    const now = new Date().toISOString();
+    const userMessage: ChatMessage = {
+      id: generateId(),
+      role: 'user',
+      blocks: [{ type: 'text', text }],
+      tokenEstimate: approxMessageTokens(text),
+      createdAt: now,
+    };
+    return this.storageService.getData().pipe(
+      switchMap(data => {
+        if (!data) return throwError(() => new Error('Storage not initialized'));
+
+        const idx = data.chatConversations.findIndex(c => c.id === conversationId);
+        if (idx === -1) return throwError(() => new Error(`Conversation not found: ${conversationId}`));
+
+        const conv = data.chatConversations[idx];
+        const updatedConv: ChatConversation = {
+          ...conv,
+          messages: [...conv.messages, userMessage],
+          updatedAt: now,
+        };
+        const updatedData: AppData = {
+          ...data,
+          chatConversations: [
+            ...data.chatConversations.slice(0, idx),
+            updatedConv,
+            ...data.chatConversations.slice(idx + 1),
+          ],
+        };
+        return this.storageService.saveData(updatedData).pipe(map(() => userMessage));
       }),
     );
   }
