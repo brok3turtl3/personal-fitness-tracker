@@ -495,4 +495,120 @@ describe('ChatPageComponent (characterization)', () => {
       disableRules: ['color-contrast'],
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // Plan 03-06 (gap closure) — UAT Test 2 regression: dev-seed pending pill
+  // must render via the production ngOnInit lifecycle, with NO manual
+  // activeConversationId assignment. Root cause:
+  //   .planning/debug/dev-seed-pending-pill-not-rendering.md
+  // ---------------------------------------------------------------------------
+  describe('ngOnInit dev-seed regression (UAT Test 2 — gap-closure plan 03-06)', () => {
+    it('consumes dev seed AND renders pending pill when ngOnInit runs and conversations already exist (no manual activeConversationId)', async () => {
+      // Arrange: 1 pre-existing conversation, seed sentinel present.
+      const convA = createValidConversation({ id: 'c-a', title: 'Existing' });
+      const spies = makeSpies({
+        hasApiKey: true,
+        conversations: [convA],
+        activeConversation: convA,
+        devSeed: { kind: 'memory', at: '2026-05-31T12:00:00.000Z' },
+      });
+      spies.chatService.getConversation.and.returnValue(of(convA));
+      await configureBed(spies);
+
+      // Act — drive ngOnInit only; NO manual state assignment.
+      const fixture = TestBed.createComponent(ChatPageComponent);
+      fixture.detectChanges();
+
+      // Assert — production lifecycle did the work.
+      expect(spies.storageService.consumeDevSeed).toHaveBeenCalledTimes(1);
+      expect(spies.chatService.appendAssistantBlocks).toHaveBeenCalledTimes(1);
+      const [convId, blocks] = spies.chatService.appendAssistantBlocks.calls.mostRecent().args;
+      expect(convId).toBe('c-a');
+      expect(blocks.length).toBe(1);
+      expect(blocks[0].type).toBe('tool_use');
+      expect((blocks[0] as ToolUseBlock).name).toBe('memory');
+      expect((blocks[0] as ToolUseBlock).status).toBe('pending');
+
+      // Auto-select happened — activeConversationId was assigned without a user click.
+      expect(fixture.componentInstance.activeConversationId).toBe('c-a');
+      expect(fixture.componentInstance.activeConversation?.id).toBe('c-a');
+
+      // We had a conversation, so create was NOT invoked.
+      expect(spies.chatService.createConversation).not.toHaveBeenCalled();
+    });
+
+    it('consumes dev seed AND auto-creates a conversation when ngOnInit runs with NO conversations and a seed is present', async () => {
+      // Arrange: empty list + seed.
+      const created = createValidConversation({ id: 'c-new', title: 'Chat — new' });
+      const spies = makeSpies({
+        hasApiKey: true,
+        conversations: [],
+        activeConversation: created,
+        devSeed: { kind: 'profile', at: '2026-05-31T12:00:00.000Z' },
+      });
+      spies.chatService.createConversation.and.returnValue(of(created));
+      spies.chatService.getConversation.and.returnValue(of(created));
+      await configureBed(spies);
+
+      // Act
+      const fixture = TestBed.createComponent(ChatPageComponent);
+      fixture.detectChanges();
+
+      // Assert
+      expect(spies.chatService.createConversation).toHaveBeenCalledTimes(1);
+      expect(spies.chatService.appendAssistantBlocks).toHaveBeenCalledTimes(1);
+      const [convId, blocks] = spies.chatService.appendAssistantBlocks.calls.mostRecent().args;
+      expect(convId).toBe('c-new');
+      expect((blocks[0] as ToolUseBlock).name).toBe('update_profile');
+      expect((blocks[0] as ToolUseBlock).status).toBe('pending');
+      expect(fixture.componentInstance.activeConversationId).toBe('c-new');
+    });
+
+    it('ngOnInit auto-selects most-recent but does NOT append a pill when no dev seed sentinel is present', async () => {
+      // Arrange: 1 conversation, no seed.
+      const convA = createValidConversation({ id: 'c-a' });
+      const spies = makeSpies({
+        hasApiKey: true,
+        conversations: [convA],
+        activeConversation: convA,
+        devSeed: null,
+      });
+      spies.chatService.getConversation.and.returnValue(of(convA));
+      await configureBed(spies);
+
+      // Act
+      const fixture = TestBed.createComponent(ChatPageComponent);
+      fixture.detectChanges();
+
+      // Assert: seed was peeked (read-and-remove fired once), no pill appended,
+      // auto-select still happened.
+      expect(spies.storageService.consumeDevSeed).toHaveBeenCalledTimes(1);
+      expect(spies.chatService.appendAssistantBlocks).not.toHaveBeenCalled();
+      expect(fixture.componentInstance.activeConversationId).toBe('c-a');
+      expect(spies.chatService.createConversation).not.toHaveBeenCalled();
+    });
+
+    it('ngOnInit with NO conversations and NO seed leaves activeConversation null (empty-state surface preserved — Phase 1 spec invariant)', async () => {
+      // Arrange: empty list, no seed. This is the surface the Phase 1
+      // empty-state characterization spec depends on.
+      const spies = makeSpies({
+        hasApiKey: true,
+        conversations: [],
+        activeConversation: null,
+        devSeed: null,
+      });
+      await configureBed(spies);
+
+      // Act
+      const fixture = TestBed.createComponent(ChatPageComponent);
+      fixture.detectChanges();
+
+      // Assert: no auto-create when no seed; activeConversation stays null
+      // so the empty-state surface renders.
+      expect(spies.chatService.createConversation).not.toHaveBeenCalled();
+      expect(spies.chatService.appendAssistantBlocks).not.toHaveBeenCalled();
+      expect(fixture.componentInstance.activeConversationId).toBeNull();
+      expect(fixture.componentInstance.activeConversation).toBeNull();
+    });
+  });
 });
