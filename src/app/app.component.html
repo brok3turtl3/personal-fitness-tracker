@@ -11,6 +11,37 @@
       (continueEmpty)="onContinueEmpty()"
     ></app-recovery-banner>
   } @else {
+    <!--
+      Banner stacking by severity (05-UI-SPEC Layout):
+      95% block > multi-tab > 70% warn. The quota banner collapses to the
+      single most-severe applicable state via `quotaMode`; the multi-tab
+      banner sits between block and warn. None steal focus (aria-live only).
+    -->
+    @if (quotaMode === 'block') {
+      <app-quota-banner
+        [mode]="quotaMode"
+        [pct]="quotaPct"
+        [backupJson]="allDataJson"
+        (manageStorage)="onManageStorage()"
+        (copyJson)="onCopyJson()"
+      ></app-quota-banner>
+    }
+
+    @if (showMultiTabBanner) {
+      <app-multi-tab-banner
+        (refresh)="onMultiTabRefresh()"
+        (dismiss)="onMultiTabDismiss()"
+      ></app-multi-tab-banner>
+    }
+
+    @if (quotaMode === 'warn') {
+      <app-quota-banner
+        [mode]="quotaMode"
+        [pct]="quotaPct"
+        (dismiss)="onQuotaDismiss()"
+      ></app-quota-banner>
+    }
+
     <router-outlet />
   }
 </main>
