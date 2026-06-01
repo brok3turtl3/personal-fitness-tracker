@@ -12,8 +12,8 @@
 - [x] **Phase 1: Foundations** — Test scaffolds, shared utilities, subscription hygiene, schema-migration discipline. No feature work; everything later phases stand on. (FOUND-01..07) — completed 2026-05-02
 - [ ] **Phase 2: Diet UX Overhaul** — Multi-unit foods, frictionless meal logging, daily totals, charts integration, V5→V6 schema. (DIET-01..10) [parallel with Phase 3]
 - [x] **Phase 3: AI Memory + Tool Plumbing** — V4→V5 schema, memory tool, user profile, tool registry, settings UI. Plumbing only — no behavior change for the user yet. (CHAT-01, CHAT-03, CHAT-04, CHAT-11, CHAT-12) [parallel with Phase 2] (completed 2026-05-31)
-- [ ] **Phase 4: Agentic Loop + Citation UI** — Activate the `while(stop_reason=='tool_use')` loop, data-query tools, slim system prompt, block-aware chat rendering, confidence badges. (CHAT-02, CHAT-05, CHAT-06, CHAT-07, CHAT-08, CHAT-09, CHAT-10)
-- [ ] **Phase 5: Web Search Grounding + Quality Sweep** — Web search server tool with grounded citations, then the final quality pass (CRUD parity, quota detection, multi-tab safety, CSP, archival, 401 rotation, a11y, mutation tests). (RESCH-01..03, QUAL-01..10)
+- [x] **Phase 4: Agentic Loop + Citation UI** — Activate the `while(stop_reason=='tool_use')` loop, data-query tools, slim system prompt, block-aware chat rendering, confidence badges. (CHAT-02, CHAT-05, CHAT-06, CHAT-07, CHAT-08, CHAT-09, CHAT-10) — completed 2026-05-31
+- [x] **Phase 5: Web Search Grounding + Quality Sweep** — Web search server tool with grounded citations, then the final quality pass (CRUD parity, quota detection, multi-tab safety, CSP, archival, 401 rotation, a11y, mutation tests). (RESCH-01..03, QUAL-01..10) — completed 2026-06-01
 
 ---
 
@@ -134,23 +134,23 @@
 **Plans**: 9 plans across 5 waves
 
 **Wave 1** *(no dependencies — runs first; file-disjoint)*
-- [ ] 05-web-search-grounding-quality-sweep/05-01-PLAN.md — Wave-0 infra: Stryker install+config, F1–F14 web-search fixtures, CSP assertion spec, lift color-contrast deferral (QUAL-06/08/10)
-- [ ] 05-web-search-grounding-quality-sweep/05-02-PLAN.md — Web-citation parser + V6 migration + serializer verbatim server-tool/citation passthrough (RESCH-02, Pitfall 1)
-- [ ] 05-web-search-grounding-quality-sweep/05-03-PLAN.md — CRUD update methods on cardio/weight/readings services, identity-preserving (QUAL-03, D-12)
+- [x] 05-web-search-grounding-quality-sweep/05-01-PLAN.md — Wave-0 infra: Stryker install+config, F1–F14 web-search fixtures, CSP assertion spec, lift color-contrast deferral (QUAL-06/08/10) — completed 2026-05-31 (172aa16, 64ea680, fce067c, 602ba76; SUMMARY: 05-01-SUMMARY.md)
+- [x] 05-web-search-grounding-quality-sweep/05-02-PLAN.md — Web-citation parser + V6 migration + serializer verbatim server-tool/citation passthrough (RESCH-02, Pitfall 1) — completed 2026-05-31 (8c2d562, 1dc3f8d, f5c71b0, 0784509, 46045e1; SUMMARY: 05-02-SUMMARY.md)
+- [x] 05-web-search-grounding-quality-sweep/05-03-PLAN.md — CRUD update methods on cardio/weight/readings services, identity-preserving (QUAL-03, D-12) — completed 2026-05-31 (07705cb, c249495, 04ac1fa, 9eb622d, 1a1673a; SUMMARY: 05-03-SUMMARY.md)
 
 **Wave 2** *(blocked on Wave 1)*
-- [ ] 05-web-search-grounding-quality-sweep/05-04-PLAN.md — Storage quota (estimate + cross-browser) + multi-tab read + lazy chat archival keys (QUAL-02/04/05) [depends 02]
-- [ ] 05-web-search-grounding-quality-sweep/05-06-PLAN.md — Edit-mode UI on cardio/weight/readings pages (QUAL-03) [depends 03]
+- [x] 05-web-search-grounding-quality-sweep/05-04-PLAN.md — Storage quota (estimate + cross-browser) + multi-tab read + lazy chat archival keys (QUAL-02/04/05) [depends 02] — completed 2026-05-31 (1976d16, c596b48, b9dbb87; SUMMARY: 05-04-SUMMARY.md)
+- [x] 05-web-search-grounding-quality-sweep/05-06-PLAN.md — Edit-mode UI on cardio/weight/readings pages (QUAL-03) [depends 03] — completed 2026-05-31 (6d6b95c, 153eb28, 9db1073; SUMMARY: 05-06-SUMMARY.md)
 
 **Wave 3** *(blocked on Wave 2)*
-- [ ] 05-web-search-grounding-quality-sweep/05-05-PLAN.md — web_search server tool wired into the loop: transport + render-only + pause_turn + read-only guard + system-prompt D-08/D-10 (RESCH-01) [depends 02,04]
-- [ ] 05-web-search-grounding-quality-sweep/05-07-PLAN.md — App-level quota + multi-tab banners + CSP meta tag (QUAL-02/04/06) [depends 04]
+- [x] 05-web-search-grounding-quality-sweep/05-05-PLAN.md — web_search server tool wired into the loop: transport + render-only + pause_turn + read-only guard + system-prompt D-08/D-10 (RESCH-01) [depends 02,04] — completed 2026-05-31 (ebb1bda, 5ec6c54, 981c0f0, b7c1c2e; SUMMARY: 05-05-SUMMARY.md)
+- [x] 05-web-search-grounding-quality-sweep/05-07-PLAN.md — App-level quota + multi-tab banners + CSP meta tag (QUAL-02/04/06) [depends 04] — completed 2026-05-31 (9f021c1, ae2abb2, fdf4555; SUMMARY: 05-07-SUMMARY.md)
 
 **Wave 4** *(blocked on Wave 3)*
-- [ ] 05-web-search-grounding-quality-sweep/05-08-PLAN.md — Grounded footnotes + Sources list + grounded badge + live search row + E1 adversarial + archival affordance + settings cost helper (RESCH-02/03, QUAL-05, D-06) [depends 02,04,05]
+- [x] 05-web-search-grounding-quality-sweep/05-08-PLAN.md — Grounded footnotes + Sources list + grounded badge + live search row + E1 adversarial + archival affordance + settings cost helper (RESCH-02/03, QUAL-05, D-06) [depends 02,04,05] — completed 2026-05-31 (b9265f6, e708b20, cb49489, c638485, 6cc6a57; SUMMARY: 05-08-SUMMARY.md)
 
 **Wave 5** *(blocked on Wave 4)*
-- [ ] 05-web-search-grounding-quality-sweep/05-09-PLAN.md — 401 rotate-key + block-action errors + QUAL-01 type sweep + QUAL-10 mutation floor + QUAL-08 final a11y pass (checkpoint) (QUAL-01/07/08/09/10) [depends 01-08]
+- [x] 05-web-search-grounding-quality-sweep/05-09-PLAN.md — 401 rotate-key + block-action errors + QUAL-01 type sweep + QUAL-10 mutation floor + QUAL-08 final a11y pass (checkpoint) (QUAL-01/07/08/09/10) [depends 01-08] — completed 2026-06-01 (3ae88b4, 17fd5a2, 1498e6d; SUMMARY: 05-09-SUMMARY.md). Human keyboard/contrast checkpoint approved 2026-06-01. Phase verified PASS 5/5 (05-VERIFICATION.md).
 
 > **Cross-phase note:** Phase 5 bumps CURRENT_SCHEMA_VERSION to V6 for the chat-block citation/server-tool shape change. Phase 2's diet schema work (DIET-10, currently labeled "V5→V6") must therefore target V6→V7 once Phase 5 lands first.
 
@@ -166,8 +166,8 @@
 | 1. Foundations | 10/10 | Complete | 2026-05-02 |
 | 2. Diet UX Overhaul | 0/? | Not started | - |
 | 3. AI Memory + Tool Plumbing | 7/7 | Complete    | 2026-05-31 |
-| 4. Agentic Loop + Citation UI | 0/6 | Planned | - |
-| 5. Web Search Grounding + Quality Sweep | 0/9 | Planned | - |
+| 4. Agentic Loop + Citation UI | 6/6 | Complete | 2026-05-31 |
+| 5. Web Search Grounding + Quality Sweep | 9/9 | Complete | 2026-06-01 |
 
 ---
 

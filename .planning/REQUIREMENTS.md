@@ -49,22 +49,22 @@ Requirements for the refinement milestone. Each maps to roadmap phases (filled i
 
 ### RESCH — AI research grounding (web search)
 
-- [ ] **RESCH-01**: Anthropic `web_search_20250305` server tool is wired into `tools[]` when `aiToolSettings.enableWebSearch === true` (default off)
-- [ ] **RESCH-02**: Web-search citations render as inline footnotes; only `https:` URLs are clickable; `web_search_tool_result` blocks display in the message stream
-- [ ] **RESCH-03**: Cost-aware controls — `webSearchMaxUses` cap configurable in settings; adversarial regression test verifies that "find a study about X" prompts cannot produce free-generated (un-grounded) citation links
+- [x] **RESCH-01**: Anthropic `web_search_20250305` server tool is wired into `tools[]` when `aiToolSettings.enableWebSearch === true` (default off)
+- [x] **RESCH-02**: Web-search citations render as inline footnotes; only `https:` URLs are clickable; `web_search_tool_result` blocks display in the message stream
+- [x] **RESCH-03**: Cost-aware controls — `webSearchMaxUses` cap configurable in settings; adversarial regression test verifies that "find a study about X" prompts cannot produce free-generated (un-grounded) citation links
 
 ### QUAL — Quality pass (final sweep across the app)
 
-- [ ] **QUAL-01**: Type tightening — no `any` remains in production paths; any documented exceptions carry a `// TODO: type when …` rationale
-- [ ] **QUAL-02**: LocalStorage quota detection + visible UI banner — warn at ≥70%, block writes at ≥95%; uses `navigator.storage.estimate()` instead of hardcoded 5 MB; cross-browser error name matching (`QuotaExceededError`, Firefox `NS_ERROR_DOM_QUOTA_REACHED`)
-- [ ] **QUAL-03**: CRUD parity — add `update*` operations for cardio, weight, and readings (gap flagged in CONCERNS.md)
-- [ ] **QUAL-04**: Multi-tab safety — `storage` event listener with "data changed elsewhere — refresh" banner
-- [ ] **QUAL-05**: Chat archival — pre-summary messages are moved to a lazy-loaded archive key so the active conversation slice stays small (cap-pressure relief)
-- [ ] **QUAL-06**: CSP header configured: `default-src 'self'; connect-src 'self' https://api.anthropic.com; script-src 'self'; object-src 'none'; img-src 'self' data:`
-- [ ] **QUAL-07**: API key error handling — 401 from Anthropic surfaces a "rotate / re-enter key" prompt instead of a console error
-- [ ] **QUAL-08**: Final accessibility pass — automated `axe-core` per route + manual keyboard navigation + manual color-contrast review across all 8 feature pages
-- [ ] **QUAL-09**: UX consistency review — forms, validation messages, empty states, error states are visually and behaviorally consistent across all 8 feature pages
-- [ ] **QUAL-10**: Mutation testing applied to at least one critical service (likely `StorageService` or `validators.ts`) to validate that coverage represents real confidence, not theater
+- [x] **QUAL-01**: Type tightening — no `any` remains in production paths; any documented exceptions carry a `// TODO: type when …` rationale
+- [x] **QUAL-02**: LocalStorage quota detection + visible UI banner — warn at ≥70%, block writes at ≥95%; uses `navigator.storage.estimate()` instead of hardcoded 5 MB; cross-browser error name matching (`QuotaExceededError`, Firefox `NS_ERROR_DOM_QUOTA_REACHED`)
+- [x] **QUAL-03**: CRUD parity — add `update*` operations for cardio, weight, and readings (gap flagged in CONCERNS.md)
+- [x] **QUAL-04**: Multi-tab safety — `storage` event listener with "data changed elsewhere — refresh" banner
+- [x] **QUAL-05**: Chat archival — pre-summary messages are moved to a lazy-loaded archive key so the active conversation slice stays small (cap-pressure relief)
+- [x] **QUAL-06**: CSP header configured: `default-src 'self'; connect-src 'self' https://api.anthropic.com; script-src 'self'; object-src 'none'; img-src 'self' data:`
+- [x] **QUAL-07**: API key error handling — 401 from Anthropic surfaces a "rotate / re-enter key" prompt instead of a console error
+- [x] **QUAL-08**: Final accessibility pass — automated `axe-core` per route + manual keyboard navigation + manual color-contrast review across all 8 feature pages
+- [x] **QUAL-09**: UX consistency review — forms, validation messages, empty states, error states are visually and behaviorally consistent across all 8 feature pages
+- [x] **QUAL-10**: Mutation testing applied to at least one critical service (likely `StorageService` or `validators.ts`) to validate that coverage represents real confidence, not theater
 
 ---
 
@@ -150,19 +150,19 @@ Mapped by the roadmapper.
 | CHAT-10 | Phase 4 | Complete |
 | CHAT-11 | Phase 3 | Complete |
 | CHAT-12 | Phase 3 | Complete |
-| RESCH-01 | Phase 5 | Pending |
-| RESCH-02 | Phase 5 | Pending |
-| RESCH-03 | Phase 5 | Pending |
-| QUAL-01 | Phase 5 | Pending |
-| QUAL-02 | Phase 5 | Pending |
-| QUAL-03 | Phase 5 | Pending |
-| QUAL-04 | Phase 5 | Pending |
-| QUAL-05 | Phase 5 | Pending |
-| QUAL-06 | Phase 5 | Pending |
-| QUAL-07 | Phase 5 | Pending |
-| QUAL-08 | Phase 5 | Pending |
-| QUAL-09 | Phase 5 | Pending |
-| QUAL-10 | Phase 5 | Pending |
+| RESCH-01 | Phase 5 | Complete |
+| RESCH-02 | Phase 5 | Complete |
+| RESCH-03 | Phase 5 | Complete |
+| QUAL-01 | Phase 5 | Complete |
+| QUAL-02 | Phase 5 | Complete |
+| QUAL-03 | Phase 5 | Complete |
+| QUAL-04 | Phase 5 | Complete |
+| QUAL-05 | Phase 5 | Complete |
+| QUAL-06 | Phase 5 | Complete |
+| QUAL-07 | Phase 5 | Complete |
+| QUAL-08 | Phase 5 | Complete |
+| QUAL-09 | Phase 5 | Complete |
+| QUAL-10 | Phase 5 | Complete |
 
 **Coverage:**
 - v2 requirements: 42 total
