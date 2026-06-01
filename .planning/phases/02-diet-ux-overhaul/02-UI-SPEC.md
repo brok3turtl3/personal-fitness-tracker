@@ -28,11 +28,14 @@ created: 2026-06-01
 | Font | System stack: `-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif` (from `src/styles.css` body) |
 | Charts | chart.js (existing charts-page; diet series extend the established `ChartData<'line'>` dataset pattern) |
 
+**Component-internal values note:** implementors will encounter `font-weight: 500` on existing `.form-group label` and `.btn` rules in `src/styles.css`, and `padding: 0.625rem 1.25rem` (10px vertical) on `.btn` — these are component-internal values of those classes, not design-system tokens. Do not introduce them as new tokens, do not add further typography weights, and do not add `0.625rem`/10px to the spacing scale. Reuse the classes as-is.
+
 **Reuse map (do not re-style — consume the existing globals):**
 
 | New diet surface | Reuse this existing asset |
 |------------------|---------------------------|
 | Inline quick-add food form (D-01) | `.inline-form` + `.form-row` + `.form-group` inside the existing `.panel`; the `mealItemForm`/`addFoodForm`/`pendingItems` pattern already in `diet-page.component.ts` |
+| Buttons (all CTAs / actions) | `.btn` / `.btn-primary` / `.btn-secondary` / `.btn-danger` / `.btn-sm` as-is. **Component-internal:** `.btn` ships `padding: 0.625rem 1.25rem` (10px vertical / 20px horizontal) and `font-weight: 500` — keep these exactly; do not introduce a second button height, second padding rhythm, or a new weight token. |
 | Unit picker (D-03) | `.form-group select` (native `<select>`, already styled globally with focus ring `#2471a3`) |
 | Search results / recents / favorites (D-06) | `.subpanel` + `.pill` / `.pill-row` (recents/favorites as pills); results list reuses `.history-list`/`.history-item` shape |
 | Daily totals + target bars (D-07/08) | `.totals` + `.totals-grid` + `.k`/`.v` (already in diet-page); target bars are a NEW `.target-bar` element defined below |
@@ -44,22 +47,25 @@ created: 2026-06-01
 
 ## Spacing Scale
 
-The codebase uses **rem-based spacing** (root 16px). Declared values in active use, mapped to px:
+The codebase uses **rem-based spacing** (root 16px). Declared scale — all multiples of 4 (px):
 
 | Token | rem | px | Usage |
 |-------|-----|-----|-------|
 | xs | 0.25rem | 4px | Inline gaps, error-message top margin, pill vertical padding |
 | sm | 0.5rem | 8px | Label-to-input gap, totals-grid gap, pill-row gap |
-| md-1 | 0.75rem | 12px | Form-actions gap, form-error padding, totals-grid padding *(off 8-pt grid — see exceptions)* |
+| md-1 | 0.75rem | 12px | Form-actions gap, form-error padding, totals-grid padding *(accepted-legacy — see exceptions)* |
 | md | 1rem | 16px | Default element/control gap, subpanel padding, form-group bottom margin |
-| md-plus | 1.25rem | 20px | Panel padding, `.btn` horizontal padding *(off 8-pt grid — see exceptions)* |
+| md-plus | 1.25rem | 20px | Panel padding, `.btn` horizontal padding *(accepted-legacy — see exceptions)* |
 | lg | 1.5rem | 24px | Page-container padding, panel bottom margin, section breaks (`h1` margin) |
 | xl | 2rem | 32px | Main-content padding, empty-state padding |
 
-**Exceptions (documented, intentional — DO NOT "fix"):**
-- **12px (`0.75rem`) and 20px (`1.25rem`) are off the strict 8-point grid** but are the EXISTING in-tree rhythm (`.panel` padding `1.25rem`, `.form-actions` gap `0.75rem`, `.btn` padding `0.625rem 1.25rem`). New diet UI MUST match the existing rhythm rather than re-grid the page — visual consistency with the 7 sibling pages outweighs grid purity for an overhaul. The checker should treat these as accepted legacy tokens.
-- **Button padding `0.625rem` (10px) vertical** is the established `.btn` value — keep it; do not introduce a second button height.
+Declared scale: **{4, 8, 12, 16, 20, 24, 32}**.
+
+**Accepted-legacy exceptions (documented, intentional — DO NOT "fix"):**
+- **12px (`0.75rem`) and 20px (`1.25rem`)** are off the strict 8-point grid but are the EXISTING in-tree rhythm (`.panel` padding `1.25rem`, `.form-actions` gap `0.75rem`, `.btn` horizontal padding `1.25rem`). New diet UI MUST match the existing rhythm rather than re-grid the page — visual consistency with the 7 sibling pages outweighs grid purity for an overhaul. The checker should treat these two values as accepted legacy tokens.
 - **Touch target:** icon-only/compact actions use `.btn-sm` (`0.35rem 0.6rem`); ensure the row action hit-area (delete a pending item, repeat-yesterday) stays ≥ the existing `.history-item-actions` `gap: 0.75rem` so targets don't collide.
+
+> Note on `.btn` vertical padding: the `.btn` class ships `0.625rem` (10px) vertical padding. This is **not** a spacing token — it is a component-internal value of `.btn` (documented in the Design System reuse map). New surfaces reuse `.btn` as-is and never apply `0.625rem`/10px as a layout spacing value.
 
 ---
 
@@ -71,12 +77,12 @@ Root is 16px; the codebase sizes in rem. Exactly the roles in active use (4 size
 |------|------|--------|-------------|----------------|
 | Display (page H1) | 1.75rem / 28px | 600 (via `color #2c3e50` heading treatment) | 1.2 | `.page-container h1` — diet page title |
 | Heading (panel H2 / subpanel) | 1.25rem / 20px | 600 | 1.3 | `.panel h2`, `.subpanel-title`, `.totals-title` |
-| Body | 1rem / 16px | 400 | 1.5 | `body`, form inputs, `.btn` — default reading + input text |
+| Body | 1rem / 16px | 400 | 1.5 | `body`, form inputs — default reading + input text |
 | Small / meta | 0.875rem / 14px | 400 (600 for emphasis values) | 1.4 | `.history-item-date`, `.muted` (0.95rem variant rounds here), `.pill` (0.85rem), error-message, `.btn-sm` |
 
-**Weights:** exactly two — **regular 400** (body, labels via `font-weight: 500` is the one label exception below) and **semibold 600** (values `.v`, `.history-item-value`, `.subpanel-title`, headings).
+**Weights — exactly two:** **regular 400** (body, inputs, meta) and **semibold 600** (values `.v`, `.history-item-value`, `.subpanel-title`, headings). Declared typography scale = **{400, 600}**.
 
-**Documented weight note:** form labels and `.btn` use `font-weight: 500` (medium) — this is the EXISTING global treatment (`.form-group label`, `.btn`). Treat 500 as the established label/button weight; do not introduce additional weights beyond {400, 500, 600}.
+**Component-internal weight note:** implementors will encounter `font-weight: 500` on the existing `.form-group label` and `.btn` rules in `src/styles.css` — this is a component-internal value of those classes, not a typography-scale weight. Do not introduce it as a new token and do not add further weights. Reuse the classes as authored.
 
 ---
 
@@ -101,7 +107,7 @@ Extracted palette. The 60/30/10 split maps cleanly to the existing surface hiera
 **Accent (`#2471a3`) reserved EXCLUSIVELY for:**
 1. `.btn-primary` background — the meal-log primary CTA ("Add to meal" / "Save meal") and the quick-add "Add new food" confirm.
 2. Input focus ring (`border-color #2471a3` + `box-shadow rgba(52,152,219,0.2)`) — already global.
-3. The filled portion of a daily-totals **target progress bar** (see Spacing/new element) when the metric is at/under target.
+3. The filled portion of a daily-totals **target progress bar** (see new element below) when the metric is at/under target.
 
 Accent is NOT used for: pills, recents/favorites chips, body links, panel headers, checkbox controls, or "decorative" emphasis.
 
