@@ -10,7 +10,7 @@
 ## Phases
 
 - [x] **Phase 1: Foundations** — Test scaffolds, shared utilities, subscription hygiene, schema-migration discipline. No feature work; everything later phases stand on. (FOUND-01..07) — completed 2026-05-02
-- [ ] **Phase 2: Diet UX Overhaul** — Multi-unit foods, frictionless meal logging, daily totals, charts integration, V5→V6 schema. (DIET-01..10) [parallel with Phase 3]
+- [ ] **Phase 2: Diet UX Overhaul** — Multi-unit foods, frictionless meal logging, daily totals, charts integration, V6→V7 schema. (DIET-01..10) [parallel with Phase 3]
 - [x] **Phase 3: AI Memory + Tool Plumbing** — V4→V5 schema, memory tool, user profile, tool registry, settings UI. Plumbing only — no behavior change for the user yet. (CHAT-01, CHAT-03, CHAT-04, CHAT-11, CHAT-12) [parallel with Phase 2] (completed 2026-05-31)
 - [x] **Phase 4: Agentic Loop + Citation UI** — Activate the `while(stop_reason=='tool_use')` loop, data-query tools, slim system prompt, block-aware chat rendering, confidence badges. (CHAT-02, CHAT-05, CHAT-06, CHAT-07, CHAT-08, CHAT-09, CHAT-10) — completed 2026-05-31
 - [x] **Phase 5: Web Search Grounding + Quality Sweep** — Web search server tool with grounded citations, then the final quality pass (CRUD parity, quota detection, multi-tab safety, CSP, archival, 401 rotation, a11y, mutation tests). (RESCH-01..03, QUAL-01..10) — completed 2026-06-01
@@ -65,8 +65,21 @@
   3. A user can log a meal with search-as-you-type, recent foods, and auto-ranked favorites — and can copy a previous day's meal with one action.
   4. A user logging a meal sees scannable daily totals (kcal, protein, fat, carbs, net carbs) update live, with optional macro/calorie targets shown as %-of-target when set, and a charts-page surface showing diet history alongside cardio/weight/readings.
   5. A user editing a saved food sees zero retroactive change to historical meal entries (nutrition, serving, and unit are snapshotted at log time), and day-boundary math uses local time consistently across diet, charts, and reports — including across DST transitions.
-**Plans**: TBD
+**Plans**: 5 plans across 3 waves
 **UI hint**: yes
+
+> **Cross-phase note:** DIET-10's "V5→V6" label in REQUIREMENTS.md is superseded — Phase 5 shipped V6; this phase targets **V6→V7** (D-13).
+
+**Wave 1** *(no dependencies — runs first; contracts + pure logic)*
+- [ ] 02-diet-ux-overhaul/02-01-PLAN.md — Models widen (FoodUnit union, densityGramsPerMl, preferredUnits, widened MealItemSnapshot, DailyTargets, CURRENT_SCHEMA_VERSION→7, diet.model barrel) + pure `units.ts` (conversion, density-throw) + pure `food-ranking.ts` (filter/rank/recents) + `sumByDay` — all with specs (DIET-02, DIET-03, DIET-04, DIET-08)
+
+**Wave 2** *(blocked on 02-01; file-disjoint pair — parallel)*
+- [ ] 02-diet-ux-overhaul/02-02-PLAN.md — `LegacyAppDataV6` + additive `migrateV6ToV7` (derive density from gramsPerTbsp, preserve fdcId, byte-stable mealEntries) + V6/V7 fixtures + 3-case malformed matrix + migration spec (DIET-10)
+- [ ] 02-diet-ux-overhaul/02-03-PLAN.md — `DietService` extend: toBaseUnits→units.ts delegation, widened unit + density/target validators, copy-meal helper, getMealsInRange, DailyTargets get/set/clear, snapshot-immutability tests (DIET-01, DIET-05, DIET-06, DIET-09)
+
+**Wave 3** *(blocked on 02-01 + 02-03; file-disjoint pair — parallel)*
+- [ ] 02-diet-ux-overhaul/02-04-PLAN.md — `diet-page` overhaul: inline quick-add, search/Recent/Frequent picker, density-gated unit select, copy-a-meal, live totals + %-of-target bars, inline button-swap confirms (replace window.confirm), delete toBaseUnitsForPreview (DIET-01, DIET-04, DIET-05, DIET-06, DIET-09)
+- [ ] 02-diet-ux-overhaul/02-05-PLAN.md — `charts-page` diet series: inject DietService, calories + toggleable macro datasets via `sumByDay` (sum-per-local-day, DST-correct), locked palette + multi-axis treatment, date-range filter reuse (DIET-07, DIET-08)
 
 ### Phase 3: AI Memory + Tool Plumbing
 **Goal**: All the AI infrastructure the agentic loop will need is in place — schema migrated for memory + profile + structured chat blocks, memory tool wired to a typed store, user profile editable, tool registry ready to dispatch — but the user still sees today's chat behavior. No regressions.
@@ -164,7 +177,7 @@
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundations | 10/10 | Complete | 2026-05-02 |
-| 2. Diet UX Overhaul | 0/? | Not started | - |
+| 2. Diet UX Overhaul | 0/5 | Planned | - |
 | 3. AI Memory + Tool Plumbing | 7/7 | Complete    | 2026-05-31 |
 | 4. Agentic Loop + Citation UI | 6/6 | Complete | 2026-05-31 |
 | 5. Web Search Grounding + Quality Sweep | 9/9 | Complete | 2026-06-01 |
@@ -174,8 +187,8 @@
 ## Phase Ordering Rationale
 
 - **Phase 1 before everything**: Test scaffolding, subscription hygiene, shared utilities, and typed-legacy schema-migration discipline are reused by every later phase. Doing them first is cheaper than retrofitting.
-- **V4→V5 (Phase 3) before V5→V6 (Phase 2)**: Strictly speaking, Phase 3 ships the V4→V5 migration which includes the most invasive data change (`ChatMessage.content: string` → `ChatMessage.blocks: ChatBlock[]`). Phase 2's V5→V6 migration must build on V5 as its baseline. Both ride on FOUND-07's typed-legacy + backup discipline. **If Phases 2 and 3 are truly run in parallel, the V4→V5 migration must land in main first**; the diet schema work then targets the V5 baseline.
-- **Phases 2 and 3 are file-disjoint**: Phase 2 touches `features/diet/**`, `services/diet.service.ts`, `services/units.ts` (new), `models/diet.model.ts`, `migrateV5ToV6`. Phase 3 touches `features/chat/**`, `features/settings/**`, `services/chat.service.ts`, `services/anthropic-api.service.ts`, `services/fitness-context.service.ts`, new memory/profile/tool-registry services, `models/ai-chat.model.ts`, `models/app-data.model.ts`, `migrateV4ToV5`. Both can be developed in parallel branches.
+- **V4→V5 (Phase 3) before V5→V6 (Phase 2)**: Strictly speaking, Phase 3 ships the V4→V5 migration which includes the most invasive data change (`ChatMessage.content: string` → `ChatMessage.blocks: ChatBlock[]`). Phase 2's V5→V6 migration must build on V5 as its baseline. Both ride on FOUND-07's typed-legacy + backup discipline. **If Phases 2 and 3 are truly run in parallel, the V4→V5 migration must land in main first**; the diet schema work then targets the V5 baseline. (Actual: Phases 3+5 shipped first; diet schema now targets **V6→V7**.)
+- **Phases 2 and 3 are file-disjoint**: Phase 2 touches `features/diet/**`, `features/charts/**`, `services/diet.service.ts`, `services/units.ts` (new), `services/food-ranking.ts` (new), `models/diet.model.ts`, `migrateV6ToV7`. Phase 3 touches `features/chat/**`, `features/settings/**`, `services/chat.service.ts`, `services/anthropic-api.service.ts`, `services/fitness-context.service.ts`, new memory/profile/tool-registry services, `models/ai-chat.model.ts`, `models/app-data.model.ts`, `migrateV4ToV5`. Both can be developed in parallel branches.
 - **Phase 3 before Phase 4**: The agentic loop in Phase 4 requires Phase 3's tool registry, memory executor, extended API types, profile service, and `ChatMessage.blocks` shape. Splitting plumbing (3) from activation (4) makes each independently reviewable and lets the loop be tested against stubbed API responses before serving real users.
 - **Phase 4 before Phase 5**: Web search is one more tool kind once the agentic loop handles `end_turn`, `max_tokens`, refusal, and `pause_turn` reliably. The quality sweep applies Phase 1 instrumentation to all new code from Phases 2/3/4 and closes the cross-cutting concerns surfaced in CONCERNS.md (CRUD parity, quota, multi-tab, CSP, archival, 401, a11y).
 
