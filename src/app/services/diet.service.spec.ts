@@ -4,7 +4,7 @@ import { of } from 'rxjs';
 import { DietService } from './diet.service';
 import { StorageService } from './storage.service';
 import { AppData, createEmptyAppData } from '../models/app-data.model';
-import { CreateSavedFood, NutritionTotals, SavedFoodServing } from '../models/diet.model';
+import { CreateSavedFood, MealEntry, NutritionTotals, SavedFoodServing } from '../models/diet.model';
 
 describe('DietService', () => {
   let service: DietService;
@@ -336,6 +336,167 @@ describe('DietService', () => {
           expect(meal.items[0].snapshot.unit).toBe('g');
           expect(meal.items[0].snapshot.servingLabel).toBe('50 g');
           done();
+        });
+      });
+    });
+  });
+
+  // ==========================================================================
+  // Task 2: meals-in-range + copy-meal + DailyTargets pass-through + immutability
+  // ==========================================================================
+
+  describe('getMealsInRange', () => {
+    beforeEach(() => {
+      mockAppData.mealEntries = [
+        { id: 'a', dateTime: '2026-01-10T12:00:00.000Z', items: [], totals: { ...perUnit }, createdAt: '', updatedAt: '' },
+        { id: 'b', dateTime: '2026-01-20T12:00:00.000Z', items: [], totals: { ...perUnit }, createdAt: '', updatedAt: '' },
+        { id: 'c', dateTime: '2026-02-01T12:00:00.000Z', items: [], totals: { ...perUnit }, createdAt: '', updatedAt: '' }
+      ];
+      storageServiceSpy.getData.and.returnValue(of(mockAppData));
+    });
+
+    it('should return only meals whose dateTime falls within [start, end], sorted by dateTime', (done) => {
+      const start = Date.parse('2026-01-15T00:00:00.000Z');
+      const end = Date.parse('2026-01-31T23:59:59.999Z');
+      service.getMealsInRange(start, end).subscribe(meals => {
+        expect(meals.map(m => m.id)).toEqual(['b']);
+        done();
+      });
+    });
+
+    it('should include the boundary meals (inclusive range) sorted ascending', (done) => {
+      const start = Date.parse('2026-01-10T12:00:00.000Z');
+      const end = Date.parse('2026-02-01T12:00:00.000Z');
+      service.getMealsInRange(start, end).subscribe(meals => {
+        expect(meals.map(m => m.id)).toEqual(['a', 'b', 'c']);
+        done();
+      });
+    });
+
+    it('should return an empty array when no meals fall in range', (done) => {
+      service.getMealsInRange(Date.parse('2025-01-01T00:00:00.000Z'), Date.parse('2025-12-31T00:00:00.000Z'))
+        .subscribe(meals => {
+          expect(meals).toEqual([]);
+          done();
+        });
+    });
+  });
+
+  describe('copyMealItems (D-09 / A5 re-derive from current food)', () => {
+    it('should re-derive preview from the CURRENT food (not the snapshot) when the food still exists', (done) => {
+      service.addSavedFood(createFood()).subscribe(savedFood => {
+        mockAppData.savedFoods = [savedFood];
+        storageServiceSpy.getData.and.returnValue(of(mockAppData));
+
+        service.addMeal({
+          dateTime: '2026-01-31T12:00:00.000Z',
+          items: [{ savedFoodId: savedFood.id, servingId: serving.id, quantity: 2 }]
+        }).subscribe(meal => {
+          // Original preview: 100 base units * 2 kcal/unit = 200 kcal.
+          // Now edit the food to double calories per unit.
+          const editedFood = { ...savedFood, nutrientsPerUnit: { ...perUnit, caloriesKcal: 4 } };
+          const copied = service.copyMealItems(meal, [editedFood]);
+
+          expect(copied.length).toBe(1);
+          expect(copied[0].savedFoodId).toBe(savedFood.id);
+          expect(copied[0].servingId).toBe(serving.id);
+          expect(copied[0].quantity).toBe(2);
+          // Re-derived from CURRENT (edited) food: 100 base units * 4 = 400 kcal.
+          expect(copied[0].preview.caloriesKcal).toBeCloseTo(400, 6);
+          done();
+        });
+      });
+    });
+
+    it('should fall back to the snapshot totals when the food no longer exists', (done) => {
+      service.addSavedFood(createFood()).subscribe(savedFood => {
+        mockAppData.savedFoods = [savedFood];
+        storageServiceSpy.getData.and.returnValue(of(mockAppData));
+
+        service.addMeal({
+          dateTime: '2026-01-31T12:00:00.000Z',
+          items: [{ savedFoodId: savedFood.id, servingId: serving.id, quantity: 2 }]
+        }).subscribe(meal => {
+          const snapshotKcal = meal.items[0].snapshot.totals.caloriesKcal; // 200
+          const copied = service.copyMealItems(meal, []); // food deleted
+          expect(copied[0].preview.caloriesKcal).toBeCloseTo(snapshotKcal, 6);
+          done();
+        });
+      });
+    });
+  });
+
+  describe('DailyTargets get/set/clear (D-08)', () => {
+    it('should return undefined when no targets are persisted', (done) => {
+      service.getDailyTargets().subscribe(t => {
+        expect(t).toBeUndefined();
+        done();
+      });
+    });
+
+    it('should persist and round-trip targets', (done) => {
+      const targets = { caloriesKcal: 2000, proteinG: 150 };
+      service.setDailyTargets(targets).subscribe(saved => {
+        expect(saved).toEqual(targets);
+        const persisted = storageServiceSpy.saveData.calls.mostRecent().args[0];
+        expect(persisted.dailyTargets).toEqual(targets);
+        done();
+      });
+    });
+
+    it('should reject invalid targets via DietValidationError', (done) => {
+      service.setDailyTargets({ proteinG: -5 }).subscribe({
+        next: () => done.fail('expected validation error'),
+        error: (err) => {
+          expect(err.name).toBe('DietValidationError');
+          done();
+        }
+      });
+    });
+
+    it('should clear targets without writing null', (done) => {
+      mockAppData.dailyTargets = { caloriesKcal: 1800 };
+      storageServiceSpy.getData.and.returnValue(of(mockAppData));
+      service.clearDailyTargets().subscribe(() => {
+        const persisted = storageServiceSpy.saveData.calls.mostRecent().args[0];
+        expect(persisted.dailyTargets).toBeUndefined();
+        expect('dailyTargets' in persisted ? persisted.dailyTargets : undefined).toBeUndefined();
+        done();
+      });
+    });
+  });
+
+  describe('snapshot immutability (DIET-09, D-12)', () => {
+    it('should leave logged MealEntry.totals and MealItem.snapshot byte-identical after a food edit', (done) => {
+      service.addSavedFood(createFood()).subscribe(savedFood => {
+        mockAppData.savedFoods = [savedFood];
+        storageServiceSpy.getData.and.returnValue(of(mockAppData));
+
+        service.addMeal({
+          dateTime: '2026-01-31T12:00:00.000Z',
+          items: [{ savedFoodId: savedFood.id, servingId: serving.id, quantity: 2 }]
+        }).subscribe(meal => {
+          // Capture deep copies of the historical totals + snapshot.
+          const capturedTotals = JSON.parse(JSON.stringify(meal.totals));
+          const capturedSnapshot = JSON.parse(JSON.stringify(meal.items[0].snapshot));
+
+          mockAppData.mealEntries = [meal];
+          storageServiceSpy.getData.and.returnValue(of(mockAppData));
+
+          // Edit the food's macros — historical meal must NOT change.
+          service.updateSavedFood(savedFood.id, {
+            name: savedFood.name,
+            nutrientsPerUnit: { ...perUnit, caloriesKcal: 999, proteinG: 99 }
+          }).subscribe(() => {
+            // Re-read the stored meal from the most recent save (updateSavedFood
+            // only touches savedFoods, never mealEntries).
+            const persisted = storageServiceSpy.saveData.calls.mostRecent().args[0];
+            const storedMeal = persisted.mealEntries.find((m: MealEntry) => m.id === meal.id)!;
+
+            expect(storedMeal.totals).toEqual(capturedTotals);
+            expect(storedMeal.items[0].snapshot).toEqual(capturedSnapshot);
+            done();
+          });
         });
       });
     });

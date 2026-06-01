@@ -379,6 +379,107 @@ export class DietService {
   computeDailyTotals(meals: MealEntry[]): NutritionTotals {
     return sumTotals(meals.map(m => m.totals));
   }
+
+  /**
+   * All meals whose `dateTime` falls within `[startMs, endMs]` (inclusive),
+   * sorted ascending by `dateTime`. Consumed by the charts page (plan 02-05);
+   * `getMealsForDay` stays for the single-day diet view.
+   */
+  getMealsInRange(startMs: number, endMs: number): Observable<MealEntry[]> {
+    return this.storageService.getData().pipe(
+      map(data => {
+        if (!data) return [];
+        return [...data.mealEntries]
+          .filter(m => {
+            const t = Date.parse(m.dateTime);
+            return Number.isFinite(t) && t >= startMs && t <= endMs;
+          })
+          .sort((a, b) => Date.parse(a.dateTime) - Date.parse(b.dateTime));
+      })
+    );
+  }
+
+  /**
+   * Map a previous meal's items into the editable pending-item shape used by the
+   * diet page, RE-DERIVING the live `preview` from the CURRENT `SavedFood`
+   * ("what I'm eating now" — D-09 / A5), NOT from the historical snapshot. If the
+   * food no longer exists in `currentFoods`, fall back to the item's frozen
+   * snapshot totals. Pure mapping helper — the component owns the read of
+   * `currentFoods` and calling this.
+   */
+  copyMealItems(
+    meal: MealEntry,
+    currentFoods: SavedFood[]
+  ): Array<{ savedFoodId: string; servingId: string; quantity: number; label: string; preview: NutritionTotals }> {
+    return meal.items.map(it => {
+      const food = currentFoods.find(f => f.id === it.savedFoodId);
+      let preview: NutritionTotals;
+
+      if (food) {
+        const serving = food.servings.find(s => s.id === it.servingId);
+        if (serving) {
+          try {
+            const baseUnits = toBaseUnits(food, serving.unit, serving.amount * it.quantity);
+            preview = scaleFoodTotals(food, baseUnits);
+          } catch {
+            // Food can no longer resolve this serving's unit (e.g. density removed)
+            // — fall back to the frozen snapshot rather than failing the copy.
+            preview = it.snapshot.totals;
+          }
+        } else {
+          preview = it.snapshot.totals;
+        }
+      } else {
+        preview = it.snapshot.totals;
+      }
+
+      return {
+        savedFoodId: it.savedFoodId,
+        servingId: it.servingId,
+        quantity: it.quantity,
+        label: `${it.savedFoodName} - ${it.servingLabel} x${it.quantity}`,
+        preview
+      };
+    });
+  }
+
+  /** The persisted daily nutrition targets, or `undefined` when unset (D-08). */
+  getDailyTargets(): Observable<DailyTargets | undefined> {
+    return this.storageService.getData().pipe(
+      map(data => data?.dailyTargets)
+    );
+  }
+
+  /**
+   * Persist daily nutrition targets (validated via `validateDailyTargets`).
+   * Throws `DietValidationError` on an invalid metric.
+   */
+  setDailyTargets(targets: DailyTargets): Observable<DailyTargets> {
+    const errors = validateDailyTargets(targets);
+    if (errors.length) {
+      return throwError(() => new DietValidationError(errors));
+    }
+
+    return this.storageService.getData().pipe(
+      switchMap(data => {
+        if (!data) return throwError(() => new Error('Storage not initialized'));
+        const updatedData: AppData = { ...data, dailyTargets: targets };
+        return this.storageService.saveData(updatedData).pipe(map(() => targets));
+      })
+    );
+  }
+
+  /** Remove the persisted daily targets — omits the field entirely, never null. */
+  clearDailyTargets(): Observable<void> {
+    return this.storageService.getData().pipe(
+      switchMap(data => {
+        if (!data) return throwError(() => new Error('Storage not initialized'));
+        const { dailyTargets: _removed, ...rest } = data;
+        const updatedData: AppData = { ...rest };
+        return this.storageService.saveData(updatedData).pipe(map(() => undefined));
+      })
+    );
+  }
 }
 
 function sameMealItems(existing: MealEntry, input: CreateMealEntry): boolean {
