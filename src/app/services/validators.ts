@@ -1,6 +1,7 @@
 import { CreateCardioSession, CardioType, CARDIO_TYPES } from '../models/cardio-session.model';
 import { CreateWeightEntry } from '../models/weight-entry.model';
 import { CreateBloodPressure, CreateBloodGlucose, CreateKetone } from '../models/health-reading.model';
+import { DailyTargets } from '../models/diet.model';
 
 /**
  * Validation error with field and message details.
@@ -322,6 +323,71 @@ export function validateGlucose(data: CreateBloodGlucose): ValidationResult {
   }
 
   return errors.length > 0 ? invalidResult(errors) : validResult();
+}
+
+// ============================================================================
+// Diet — Density + Daily-Targets Validation (Phase 2, DIET-03 / D-04 / D-08)
+// ============================================================================
+
+/**
+ * Validates an optional per-food density (g/ml).
+ *
+ * Density gates cross-dimension (mass↔volume) conversion in `units.ts`; there is
+ * NEVER a global default (DIET-03 / D-04). When present it must be a positive,
+ * finite number. `undefined` is valid (the food simply cannot cross dimensions).
+ *
+ * Returns a list of plain-string messages (empty when valid) to match the
+ * `DietService` `string[]` error convention.
+ */
+export function validateDensity(d: number | undefined): string[] {
+  if (d === undefined) return [];
+  if (!Number.isFinite(d) || d <= 0) {
+    return ['Density must be a positive number'];
+  }
+  return [];
+}
+
+/**
+ * Validates an optional persistent `DailyTargets` set (D-08).
+ *
+ * Every metric is optional — a user may target only calories. For each PRESENT
+ * metric the value must be finite and non-negative; the calories metric reuses
+ * the existing 0-20000 kcal range (`VALIDATION_LIMITS.CALORIES_*`). `undefined`
+ * (no targets) and `{}` (all metrics omitted) are both valid.
+ *
+ * Returns a list of plain-string messages (empty when valid).
+ */
+export function validateDailyTargets(t: DailyTargets | undefined): string[] {
+  if (t === undefined) return [];
+
+  const errors: string[] = [];
+
+  const nonNegativeMetric = (value: number | undefined, label: string): void => {
+    if (value === undefined) return;
+    if (!Number.isFinite(value) || value < 0) {
+      errors.push(`${label} target must be a non-negative number`);
+    }
+  };
+
+  // Calories reuse the existing 0-20000 kcal range.
+  if (t.caloriesKcal !== undefined) {
+    if (
+      !Number.isFinite(t.caloriesKcal) ||
+      t.caloriesKcal < VALIDATION_LIMITS.CALORIES_MIN ||
+      t.caloriesKcal > VALIDATION_LIMITS.CALORIES_MAX
+    ) {
+      errors.push(
+        `Calories target must be between ${VALIDATION_LIMITS.CALORIES_MIN} and ${VALIDATION_LIMITS.CALORIES_MAX} kcal`
+      );
+    }
+  }
+
+  nonNegativeMetric(t.proteinG, 'Protein');
+  nonNegativeMetric(t.fatG, 'Fat');
+  nonNegativeMetric(t.carbsG, 'Carbs');
+  nonNegativeMetric(t.netCarbsG, 'Net carbs');
+
+  return errors;
 }
 
 // ============================================================================

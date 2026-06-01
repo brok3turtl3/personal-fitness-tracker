@@ -184,4 +184,160 @@ describe('DietService', () => {
       done();
     });
   });
+
+  // ==========================================================================
+  // Task 1: toBaseUnits delegation to units.ts + widened unit/density validation
+  // ==========================================================================
+
+  describe('widened unit acceptance (DIET-01 service path)', () => {
+    it('should accept a food with baseUnit "oz" (a widened MeasuredUnit)', (done) => {
+      service.addSavedFood(createFood({ baseUnit: 'oz', servings: [] as any })).subscribe(food => {
+        expect(food.baseUnit).toBe('oz');
+        done();
+      });
+    });
+
+    it('should accept a food with baseUnit "ml"', (done) => {
+      service.addSavedFood(createFood({ baseUnit: 'ml', servings: [] as any })).subscribe(food => {
+        expect(food.baseUnit).toBe('ml');
+        done();
+      });
+    });
+
+    it('should reject a food with an invalid base unit', (done) => {
+      service.addSavedFood(createFood({ baseUnit: 'furlong' as any, servings: [] as any })).subscribe({
+        next: () => done.fail('expected validation error'),
+        error: (err) => {
+          expect(err.name).toBe('DietValidationError');
+          done();
+        }
+      });
+    });
+
+    it('should accept a serving expressed in a widened unit (cup)', (done) => {
+      service.addSavedFood(createFood({
+        servings: [{ id: 's-cup', label: '1 cup', unit: 'cup', amount: 1 }] as any,
+        densityGramsPerMl: 1
+      })).subscribe(food => {
+        expect(food.servings.some(s => s.unit === 'cup')).toBeTrue();
+        done();
+      });
+    });
+
+    it('should reject a serving with an invalid unit', (done) => {
+      service.addSavedFood(createFood({
+        servings: [{ id: 's-bad', label: 'bad', unit: 'furlong', amount: 1 }] as any
+      })).subscribe({
+        next: () => done.fail('expected validation error'),
+        error: (err) => {
+          expect(err.name).toBe('DietValidationError');
+          done();
+        }
+      });
+    });
+
+    it('should reject a non-positive densityGramsPerMl on add', (done) => {
+      service.addSavedFood(createFood({ densityGramsPerMl: 0 })).subscribe({
+        next: () => done.fail('expected validation error'),
+        error: (err) => {
+          expect(err.name).toBe('DietValidationError');
+          done();
+        }
+      });
+    });
+  });
+
+  describe('toBaseUnits delegation to units.ts', () => {
+    it('should use a named-serving amount directly (baseUnit g, serving 50 g)', (done) => {
+      // perUnit is per 1 g; serving 50 g x quantity 2 => 100 base units => 200 kcal
+      service.addSavedFood(createFood()).subscribe(savedFood => {
+        mockAppData.savedFoods = [savedFood];
+        storageServiceSpy.getData.and.returnValue(of(mockAppData));
+
+        service.addMeal({
+          dateTime: '2026-01-31T12:00:00.000Z',
+          items: [{ savedFoodId: savedFood.id, servingId: serving.id, quantity: 2 }]
+        }).subscribe(meal => {
+          expect(meal.items[0].snapshot.baseUnits).toBeCloseTo(100, 6);
+          done();
+        });
+      });
+    });
+
+    it('should convert a same-dimension serving unit (oz serving on a g-based food)', (done) => {
+      // baseUnit g, serving 1 oz => 28.349523125 g per quantity
+      service.addSavedFood(createFood({
+        servings: [{ id: 's-oz', label: '1 oz', unit: 'oz', amount: 1 }] as any
+      })).subscribe(savedFood => {
+        mockAppData.savedFoods = [savedFood];
+        storageServiceSpy.getData.and.returnValue(of(mockAppData));
+
+        service.addMeal({
+          dateTime: '2026-01-31T12:00:00.000Z',
+          items: [{ savedFoodId: savedFood.id, servingId: 's-oz', quantity: 1 }]
+        }).subscribe(meal => {
+          expect(meal.items[0].snapshot.baseUnits).toBeCloseTo(28.349523125, 6);
+          done();
+        });
+      });
+    });
+
+    it('should convert a cross-dimension serving WITH density (tbsp serving on a g-based food)', (done) => {
+      // baseUnit g, density 0.9 g/ml, serving 1 tbsp (14.78676478125 ml) => 13.308 g
+      service.addSavedFood(createFood({
+        densityGramsPerMl: 0.9,
+        servings: [{ id: 's-tbsp', label: '1 tbsp', unit: 'tbsp', amount: 1 }] as any
+      })).subscribe(savedFood => {
+        mockAppData.savedFoods = [savedFood];
+        storageServiceSpy.getData.and.returnValue(of(mockAppData));
+
+        service.addMeal({
+          dateTime: '2026-01-31T12:00:00.000Z',
+          items: [{ savedFoodId: savedFood.id, servingId: 's-tbsp', quantity: 1 }]
+        }).subscribe(meal => {
+          expect(meal.items[0].snapshot.baseUnits).toBeCloseTo(14.78676478125 * 0.9, 6);
+          done();
+        });
+      });
+    });
+
+    it('should THROW for a cross-dimension serving WITHOUT density (no default density)', (done) => {
+      // baseUnit g, NO density, serving 1 tbsp (volume) => cannot convert
+      service.addSavedFood(createFood({
+        servings: [{ id: 's-tbsp', label: '1 tbsp', unit: 'tbsp', amount: 1 }] as any
+      })).subscribe(savedFood => {
+        mockAppData.savedFoods = [savedFood];
+        storageServiceSpy.getData.and.returnValue(of(mockAppData));
+
+        service.addMeal({
+          dateTime: '2026-01-31T12:00:00.000Z',
+          items: [{ savedFoodId: savedFood.id, servingId: 's-tbsp', quantity: 1 }]
+        }).subscribe({
+          next: () => done.fail('expected a conversion error (no density)'),
+          error: (err) => {
+            expect(err).toBeTruthy();
+            done();
+          }
+        });
+      });
+    });
+  });
+
+  describe('snapshot carries resolved unit + serving label (D-09)', () => {
+    it('should store the resolved unit and servingLabel on the snapshot', (done) => {
+      service.addSavedFood(createFood()).subscribe(savedFood => {
+        mockAppData.savedFoods = [savedFood];
+        storageServiceSpy.getData.and.returnValue(of(mockAppData));
+
+        service.addMeal({
+          dateTime: '2026-01-31T12:00:00.000Z',
+          items: [{ savedFoodId: savedFood.id, servingId: serving.id, quantity: 1 }]
+        }).subscribe(meal => {
+          expect(meal.items[0].snapshot.unit).toBe('g');
+          expect(meal.items[0].snapshot.servingLabel).toBe('50 g');
+          done();
+        });
+      });
+    });
+  });
 });

@@ -4,11 +4,14 @@ import {
   validateBloodPressure,
   validateGlucose,
   validateKetone,
+  validateDensity,
+  validateDailyTargets,
   VALIDATION_LIMITS
 } from './validators';
 import { CreateCardioSession } from '../models/cardio-session.model';
 import { CreateWeightEntry } from '../models/weight-entry.model';
 import { CreateBloodPressure, CreateBloodGlucose, CreateKetone } from '../models/health-reading.model';
+import { DailyTargets } from '../models/diet.model';
 
 describe('Validators', () => {
   const validDate = '2025-01-25T10:00:00Z';
@@ -344,6 +347,77 @@ describe('Validators', () => {
       const result = validateKetone({ ...validKetone, notes: 'a'.repeat(501) });
       expect(result.valid).toBe(false);
       expect(result.errors.some(e => e.field === 'notes')).toBe(true);
+    });
+  });
+
+  // ============================================================================
+  // Density Validation Tests (Phase 2, DIET-03 / D-04)
+  // ============================================================================
+
+  describe('validateDensity', () => {
+    it('should return no errors when density is undefined (optional)', () => {
+      expect(validateDensity(undefined)).toEqual([]);
+    });
+
+    it('should accept a positive finite density', () => {
+      expect(validateDensity(0.92)).toEqual([]);
+      expect(validateDensity(1)).toEqual([]);
+    });
+
+    it('should reject zero', () => {
+      expect(validateDensity(0).length).toBe(1);
+    });
+
+    it('should reject a negative density', () => {
+      expect(validateDensity(-1).length).toBe(1);
+    });
+
+    it('should reject NaN', () => {
+      expect(validateDensity(NaN).length).toBe(1);
+    });
+
+    it('should reject Infinity', () => {
+      expect(validateDensity(Infinity).length).toBe(1);
+    });
+  });
+
+  // ============================================================================
+  // Daily Targets Validation Tests (Phase 2, D-08)
+  // ============================================================================
+
+  describe('validateDailyTargets', () => {
+    it('should return no errors when targets is undefined', () => {
+      expect(validateDailyTargets(undefined)).toEqual([]);
+    });
+
+    it('should return no errors for an empty targets object (all metrics omitted)', () => {
+      expect(validateDailyTargets({})).toEqual([]);
+    });
+
+    it('should accept a fully specified, valid target set', () => {
+      const t: DailyTargets = { caloriesKcal: 2000, proteinG: 150, fatG: 70, carbsG: 100, netCarbsG: 80 };
+      expect(validateDailyTargets(t)).toEqual([]);
+    });
+
+    it('should accept zero for a metric', () => {
+      expect(validateDailyTargets({ netCarbsG: 0 })).toEqual([]);
+    });
+
+    it('should reject a negative metric', () => {
+      expect(validateDailyTargets({ proteinG: -1 }).length).toBe(1);
+    });
+
+    it('should reject a non-finite metric', () => {
+      expect(validateDailyTargets({ fatG: NaN }).length).toBe(1);
+    });
+
+    it('should reject calories above the existing 0-20000 range', () => {
+      expect(validateDailyTargets({ caloriesKcal: VALIDATION_LIMITS.CALORIES_MAX + 1 }).length).toBe(1);
+    });
+
+    it('should accept calories at the 0-20000 boundaries', () => {
+      expect(validateDailyTargets({ caloriesKcal: VALIDATION_LIMITS.CALORIES_MIN })).toEqual([]);
+      expect(validateDailyTargets({ caloriesKcal: VALIDATION_LIMITS.CALORIES_MAX })).toEqual([]);
     });
   });
 });

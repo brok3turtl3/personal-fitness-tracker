@@ -6,6 +6,7 @@ import { AppData } from '../models/app-data.model';
 import {
   CreateMealEntry,
   CreateSavedFood,
+  DailyTargets,
   FoodUnit,
   MealEntry,
   MealItem,
@@ -13,6 +14,12 @@ import {
   SavedFood,
   SavedFoodServing
 } from '../models/diet.model';
+import {
+  convertMeasured,
+  isMeasuredUnit,
+  UnitConversionError
+} from './units';
+import { validateDailyTargets, validateDensity } from './validators';
 
 export class DietValidationError extends Error {
   public readonly errors: string[];
@@ -42,17 +49,18 @@ export class DietService {
   addSavedFood(input: CreateSavedFood): Observable<SavedFood> {
     const errors: string[] = [];
     if (!input.name || !input.name.trim().length) errors.push('Food name is required');
-    if (input.baseUnit !== 'g' && input.baseUnit !== 'tbsp') errors.push('Food base unit is required');
+    if (!isMeasuredUnit(input.baseUnit)) errors.push('Food base unit is required');
     if (input.gramsPerTbsp !== undefined) {
       if (!Number.isFinite(input.gramsPerTbsp) || input.gramsPerTbsp <= 0) {
         errors.push('Grams per tbsp must be > 0');
       }
     }
+    errors.push(...validateDensity(input.densityGramsPerMl));
     const servingsInput = (input.servings ?? []).filter(Boolean);
     if (servingsInput.length > 0) {
       for (const s of servingsInput) {
         if (!s.label || !s.label.trim().length) errors.push('Serving label is required');
-        if (s.unit !== 'g' && s.unit !== 'tbsp') errors.push('Serving unit is required');
+        if (!isMeasuredUnit(s.unit)) errors.push('Serving unit is required');
         if (!Number.isFinite(s.amount) || s.amount <= 0) errors.push('Serving amount must be > 0');
       }
     }
@@ -68,6 +76,8 @@ export class DietService {
       name: input.name.trim(),
       baseUnit: input.baseUnit,
       gramsPerTbsp: input.gramsPerTbsp,
+      densityGramsPerMl: input.densityGramsPerMl,
+      preferredUnits: input.preferredUnits,
       nutrientsPerUnit: normalizeTotals(input.nutrientsPerUnit),
       servings: (servingsInput.length ? servingsInput : defaultServings).map(s => ({
         id: s.id || generateId(),
@@ -95,7 +105,7 @@ export class DietService {
     const errors: string[] = [];
     if (!savedFoodId) errors.push('Saved food ID is required');
     if (!label || !label.trim().length) errors.push('Serving label is required');
-    if (unit !== 'g' && unit !== 'tbsp') errors.push('Serving unit is required');
+    if (!isMeasuredUnit(unit)) errors.push('Serving unit is required');
     if (!Number.isFinite(amount) || amount <= 0) errors.push('Serving amount must be > 0');
     if (errors.length) {
       return throwError(() => new DietValidationError(errors));
@@ -126,6 +136,7 @@ export class DietService {
   updateSavedFood(savedFoodId: string, update: {
     name: string;
     gramsPerTbsp?: number;
+    densityGramsPerMl?: number;
     nutrientsPerUnit: NutritionTotals;
   }): Observable<SavedFood> {
     const errors: string[] = [];
@@ -136,6 +147,7 @@ export class DietService {
         errors.push('Grams per tbsp must be > 0');
       }
     }
+    errors.push(...validateDensity(update.densityGramsPerMl));
     if (errors.length) {
       return throwError(() => new DietValidationError(errors));
     }
@@ -161,6 +173,12 @@ export class DietService {
           ...existing,
           name: update.name.trim(),
           gramsPerTbsp: update.gramsPerTbsp,
+          // Preserve the existing per-food density when the caller omits it; an
+          // explicit value (validated > 0) overrides. Never write null.
+          densityGramsPerMl:
+            update.densityGramsPerMl !== undefined
+              ? update.densityGramsPerMl
+              : existing.densityGramsPerMl,
           nutrientsPerUnit: normalizeTotals(update.nutrientsPerUnit),
           servings,
           updatedAt: now
@@ -249,7 +267,9 @@ export class DietService {
             quantity: it.quantity,
             snapshot: {
               baseUnits,
-              totals
+              totals,
+              unit: serving.unit,
+              servingLabel: serving.label
             }
           });
         }
@@ -402,7 +422,9 @@ function buildMealItems(data: AppData, input: CreateMealEntry): { items: MealIte
       quantity: it.quantity,
       snapshot: {
         baseUnits,
-        totals
+        totals,
+        unit: serving.unit,
+        servingLabel: serving.label
       }
     });
   }
@@ -476,27 +498,49 @@ function defaultServingsFor(baseUnit: FoodUnit, gramsPerTbsp?: number): SavedFoo
   return servings;
 }
 
+/** ml per tablespoon — the canonical factor units.ts uses (for legacy derivation). */
+const ML_PER_TBSP = 14.78676478125;
+
+/**
+ * Resolve a food's effective per-food density (g/ml).
+ *
+ * Prefers the explicit `densityGramsPerMl`; for legacy foods that only carry a
+ * positive `gramsPerTbsp`, derive `density = gramsPerTbsp / ML_PER_TBSP` (mirrors
+ * the V6→V7 migration so in-memory pre-migration data still converts). Returns
+ * `undefined` when neither is usable — NEVER a global default (DIET-03 / D-04).
+ */
+function effectiveDensity(food: SavedFood): number | undefined {
+  if (food.densityGramsPerMl !== undefined && Number.isFinite(food.densityGramsPerMl) && food.densityGramsPerMl > 0) {
+    return food.densityGramsPerMl;
+  }
+  const gpt = food.gramsPerTbsp;
+  if (gpt !== undefined && Number.isFinite(gpt) && gpt > 0) {
+    return gpt / ML_PER_TBSP;
+  }
+  return undefined;
+}
+
+/**
+ * Resolve a measured (`unit`, `amount`) into the food's `baseUnit` count by
+ * DELEGATING to the pure `units.ts` conversion (D-04). Identity returns the
+ * amount unchanged; same-dimension converts via the fixed table; cross-dimension
+ * requires the food's effective density and otherwise THROWS — no default density
+ * ever leaks into the service path. `UnitConversionError` is mapped to the typed
+ * `DietValidationError` so callers get the domain error.
+ */
 function toBaseUnits(food: SavedFood, unit: FoodUnit, amount: number): number {
   if (unit === food.baseUnit) return amount;
 
-  // Conversion required
-  const gpt = food.gramsPerTbsp;
-  if (!gpt || !Number.isFinite(gpt) || gpt <= 0) {
-    throw new DietValidationError(['Cannot convert between g and tbsp without grams-per-tbsp for this food']);
+  try {
+    return convertMeasured(amount, unit, food.baseUnit, effectiveDensity(food));
+  } catch (e) {
+    if (e instanceof UnitConversionError) {
+      throw new DietValidationError([
+        `Cannot convert ${unit} to ${food.baseUnit} for this food without a density`
+      ]);
+    }
+    throw e;
   }
-
-  // unit != baseUnit implies one is g and the other is tbsp
-  if (food.baseUnit === 'g' && unit === 'tbsp') {
-    // amount tbsp -> grams
-    return amount * gpt;
-  }
-
-  if (food.baseUnit === 'tbsp' && unit === 'g') {
-    // amount grams -> tbsp
-    return amount / gpt;
-  }
-
-  throw new DietValidationError(['Unsupported unit conversion']);
 }
 
 export function sumTotals(totals: NutritionTotals[]): NutritionTotals {
