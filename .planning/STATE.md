@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-06-01T23:12:22.447Z"
+last_updated: "2026-06-01T23:19:51.000Z"
 progress:
   total_phases: 5
   completed_phases: 4
@@ -24,17 +24,37 @@ progress:
 
 **Milestone:** Refinement (v2) — diet UX overhaul + AI chat depth + full quality pass on the existing Angular 18 + Electron app at v1.2.3.
 
-**Current Focus:** Phase 2 — Diet UX Overhaul. **Context gathered** (02-CONTEXT.md, 2026-06-01) — all gray areas delegated to Claude (D-01..D-14 locked). Ready for `/gsd-plan-phase 2` (or `/gsd-ui-phase 2` + `/gsd-ai-integration-phase` is N/A here — no AI hint needed beyond the deferred AI-macro idea). (Phase 05 COMPLETE 9/9, verified PASS 5/5.)
+**Current Focus:** Phase 2 — Diet UX Overhaul. **EXECUTING** (started 2026-06-01) — 5 plans across 3 waves, run sequentially on `main` (worktrees unsafe: node_modules gitignored). Wave 1: 02-01 (type contracts + pure modules). Wave 2: 02-02 (V6→V7 migration), 02-03 (DietService extension). Wave 3: 02-04 (diet-page UI overhaul), 02-05 (charts diet series). (Phase 05 COMPLETE 9/9, verified PASS 5/5.)
 
 ---
 
 ## Current Position
 
-**Phase:** 5 (web-search-grounding-quality-sweep) — **COMPLETE** (9/9 plans across 5 waves)
-**Plan:** 05-09 (final) landed 2026-06-01 — 401 rotate-key + block-action errors + QUAL-01 type sweep + D-17 tree-wide gate + QUAL-10 mutation floor + QUAL-08/09 a11y pass (human keyboard/contrast checkpoint approved).
-**Status:** Ready to execute
-**Resume file:** .planning/phases/02-diet-ux-overhaul/02-UI-SPEC.md
-**Plan-checker:** PASS on iteration 2 (Phase 5 planning).
+**Phase:** 2 (diet-ux-overhaul) — **EXECUTING** (0/5 plans, started 2026-06-01)
+**Plan:** Wave 1 starting — 02-01 (type contracts + pure-logic modules).
+**Status:** Executing Phase 2 sequentially on `main`
+**Resume file:** .planning/phases/02-diet-ux-overhaul/02-01-PLAN.md
+**Plan-checker:** PASS (Phase 2 planning — 5 plans, 3 waves, all gates green).
+
+**Wave structure (Phase 2):**
+
+- Wave 1: 02-01 (widened diet unit model + `densityGramsPerMl` + `DailyTargets` + widened `MealItemSnapshot` + pure `units.ts`/`food-ranking.ts`/`sumByDay`)
+- Wave 2: 02-02 (additive V6→V7 migration: `LegacyAppDataV6` + `migrateV6ToV7` + fixtures), 02-03 (extend `DietService`: delegate `toBaseUnits`, widen validation, copy-meal, meals-in-range, `DailyTargets` get/set, DIET-09 immutability)
+- Wave 3: 02-04 (diet-page UI overhaul: inline quick-add, match-as-you-type recents/frequent, copy-a-meal, live totals + %-of-target bars, inline confirms), 02-05 (charts diet series: calories + macro toggles via `sumByDay`)
+
+**Phase 2 Plan Execution Log:**
+
+| Plan | Wave | Status |
+|------|------|--------|
+| 02-01 | 1 | pending |
+| 02-02 | 2 | pending |
+| 02-03 | 2 | pending |
+| 02-04 | 3 | pending |
+| 02-05 | 3 | pending |
+
+---
+
+**Prior phase (Phase 5) snapshot:**
 
 **Wave structure (Phase 5):**
 
