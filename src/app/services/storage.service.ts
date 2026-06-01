@@ -19,6 +19,7 @@ import {
   LegacyAppDataV5,
   LegacyAppDataV6,
   LegacySavedFoodV2,
+  LegacySavedFoodV6,
 } from './legacy-schemas';
 
 /**
@@ -785,7 +786,13 @@ export class StorageService {
       cardioSessions: data.cardioSessions ?? [],
       weightEntries: data.weightEntries ?? [],
       healthReadings: data.healthReadings ?? [],
-      savedFoods: data.savedFoods ?? [],
+      // V5 stored savedFoods structurally hold the NARROW pre-V7 shape
+      // (baseUnit 'g'|'tbsp', optional gramsPerTbsp, no density). The V5 type
+      // declared them as the widened `SavedFood`; narrow them back to
+      // `LegacySavedFoodV6` for the honestly-narrow V6 migration input. This is
+      // a pure runtime no-op (no field added/removed) — only the static type
+      // tightens so migrateV6ToV7 cannot assume V7-only fields are present.
+      savedFoods: (data.savedFoods ?? []) as unknown as LegacySavedFoodV6[],
       mealEntries: data.mealEntries ?? [],
       aiSettings: data.aiSettings,
       // V5 chat blocks are already valid V6 blocks (additive union); pass through.
@@ -838,22 +845,38 @@ export class StorageService {
 const ML_PER_TBSP = 14.78676478125;
 
 /**
- * V6 → V7 saved-food widening. Additive: keeps `baseUnit`, `gramsPerTbsp`,
- * `servings`, and the legacy `fdcId` runtime extra intact; derives
- * `densityGramsPerMl` from a positive finite `gramsPerTbsp` only when absent.
+ * V6 → V7 saved-food widening (D-13, DIET-10). Additive only: every existing
+ * field of the NARROW `LegacySavedFoodV6` (baseUnit, gramsPerTbsp, servings,
+ * nutrientsPerUnit, id/name/timestamps, and the legacy `fdcId` runtime extra)
+ * is carried through unchanged. A positive finite `gramsPerTbsp` derives a
+ * `densityGramsPerMl` via the US-customary tbsp constant — WITHOUT removing
+ * `gramsPerTbsp` or any tbsp serving (Pitfall 3). The legacy V6 shape has no
+ * `densityGramsPerMl`, so the derivation always runs when `gramsPerTbsp` is
+ * usable; a non-positive / non-finite / wrong-type `gramsPerTbsp` leaves
+ * `densityGramsPerMl` undefined (never `null`). `fdcId` is preserved via the
+ * exact spread-preserve idiom used by migrateSavedFoodV2ToV3.
  */
-function migrateSavedFoodV6ToV7(food: SavedFood): SavedFood {
+function migrateSavedFoodV6ToV7(food: LegacySavedFoodV6): SavedFood {
   const gpt = food.gramsPerTbsp;
-  const next: SavedFood = { ...food };
-  if (
-    next.densityGramsPerMl === undefined &&
-    typeof gpt === 'number' &&
-    Number.isFinite(gpt) &&
-    gpt > 0
-  ) {
-    next.densityGramsPerMl = gpt / ML_PER_TBSP;
-  }
-  return next;
+  // Carry every V6 field through additively. `fdcId` is spread from source.
+  const base: SavedFood = {
+    id: food.id,
+    name: food.name,
+    baseUnit: food.baseUnit,
+    nutrientsPerUnit: food.nutrientsPerUnit,
+    servings: food.servings,
+    createdAt: food.createdAt,
+    updatedAt: food.updatedAt,
+    // Keep the legacy gramsPerTbsp (additive — never dropped).
+    ...(food.gramsPerTbsp !== undefined ? { gramsPerTbsp: food.gramsPerTbsp } : {}),
+    // Derive densityGramsPerMl from a positive finite gramsPerTbsp.
+    ...(typeof gpt === 'number' && Number.isFinite(gpt) && gpt > 0
+      ? { densityGramsPerMl: gpt / ML_PER_TBSP }
+      : {}),
+  };
+  return food.fdcId !== undefined
+    ? ({ ...base, fdcId: food.fdcId } as SavedFood)
+    : base;
 }
 
 /**

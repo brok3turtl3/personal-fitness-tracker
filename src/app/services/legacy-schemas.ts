@@ -15,7 +15,7 @@
 import { CardioSession } from '../models/cardio-session.model';
 import { WeightEntry } from '../models/weight-entry.model';
 import { HealthReading } from '../models/health-reading.model';
-import { SavedFood, MealEntry } from '../models/diet.model';
+import { SavedFood, MealEntry, NutritionTotals, SavedFoodServing } from '../models/diet.model';
 import type {
   AISettings,
   AIToolSettings,
@@ -201,22 +201,54 @@ export interface LegacyAppDataV5 {
 }
 
 /**
+ * V6 saved-food shape — the NARROW pre-V7 diet structure (D-13, Plan 02-02).
+ *
+ * V6 foods carried only `baseUnit: 'g' | 'tbsp'` and an optional
+ * `gramsPerTbsp?`; the Phase 2 V7 widening adds `densityGramsPerMl?`,
+ * `preferredUnits?`, and the full `MeasuredUnit` base-unit union. Typing
+ * `LegacyAppDataV6.savedFoods` as this interface (NOT the widened `SavedFood`)
+ * keeps the migration INPUT honestly narrow — strict-TS guarantees
+ * `migrateSavedFoodV6ToV7` only reads pre-V7 fields and never assumes the new
+ * ones are already present.
+ *
+ * The legacy `fdcId` runtime extra (carried on some imported foods) is declared
+ * here so the spread-preserve passthrough in `migrateSavedFoodV6ToV7` survives
+ * strict typing. `nutrientsPerUnit`/`servings` reuse the already-migrated
+ * (V3+) shapes — those did not change between V3 and V6.
+ */
+export interface LegacySavedFoodV6 {
+  id: string;
+  fdcId?: number;
+  name: string;
+  /** V6 base unit — pre-widening. V7 widens to the full MeasuredUnit union. */
+  baseUnit: 'g' | 'tbsp';
+  /** Legacy density bridge. V6→V7 derives `densityGramsPerMl` from this. */
+  gramsPerTbsp?: number;
+  nutrientsPerUnit: NutritionTotals;
+  servings: SavedFoodServing[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
  * V6 shape (Phase 5): structurally identical to V5 for every non-chat slice;
  * the V5→V6 transform only widened the persisted `ChatBlock` union (additive),
  * so the AppData-level shape is unchanged apart from `schemaVersion: 6`.
  *
- * The narrow pre-V7 diet fields still hold: `savedFoods` carries `gramsPerTbsp?`
- * but NO `densityGramsPerMl`/`preferredUnits`, and there is NO `dailyTargets`.
- * `migrateV6ToV7` widens these additively. (Plan 02-02 owns the dedicated V6/V7
- * fixtures + malformed matrix; this interface lands here so the V7 chain hop —
- * introduced in plan 02-01 to keep CURRENT_SCHEMA_VERSION=7 consistent — is typed.)
+ * The narrow pre-V7 diet fields still hold: `savedFoods` is typed
+ * `LegacySavedFoodV6[]` — carries `gramsPerTbsp?` but NO
+ * `densityGramsPerMl`/`preferredUnits` — and there is NO `dailyTargets` at the
+ * AppData level. `migrateV6ToV7` widens these additively. (Plan 02-02 owns the
+ * dedicated V6/V7 fixtures + malformed matrix; this interface lands here so the
+ * V7 chain hop — introduced in plan 02-01 to keep CURRENT_SCHEMA_VERSION=7
+ * consistent — is typed against the honestly-narrow V6 input.)
  */
 export interface LegacyAppDataV6 {
   schemaVersion: 6;
   cardioSessions: CardioSession[];
   weightEntries: WeightEntry[];
   healthReadings: HealthReading[];
-  savedFoods: SavedFood[];
+  savedFoods: LegacySavedFoodV6[];
   mealEntries: MealEntry[];
   aiSettings?: AISettings;
   chatConversations: LegacyChatConversationV5[];
