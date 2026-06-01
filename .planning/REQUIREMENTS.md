@@ -30,7 +30,7 @@ Requirements for the refinement milestone. Each maps to roadmap phases (filled i
 - [ ] **DIET-07**: Diet history is integrated into the charts page (calories + macros over time, with date-range filter)
 - [ ] **DIET-08**: Day boundaries use the user's local time consistently (no UTC drift across diet, charts, reports)
 - [ ] **DIET-09**: Editing a saved food does NOT retroactively change historical meal entries (nutrition + serving + unit are snapshotted at log time)
-- [ ] **DIET-10**: V5→V6 schema migration ships cleanly (`SavedFood.densityGramsPerMl?`, `preferredUnits?`, widened `baseUnit`) with backup, fixture tests, and malformed-input coverage
+- [x] **DIET-10**: Diet schema migration ships cleanly (`SavedFood.densityGramsPerMl?`, `preferredUnits?`, widened `baseUnit`) with backup, fixture tests, and malformed-input coverage — landed as V6→V7 (the schema base advanced to V6 in Phase 5; plans 02-01 + 02-02, 2026-06-01)
 
 ### CHAT — AI chat depth upgrade
 
@@ -137,7 +137,7 @@ Mapped by the roadmapper.
 | DIET-07 | Phase 2 | Pending |
 | DIET-08 | Phase 2 | Pending |
 | DIET-09 | Phase 2 | Pending |
-| DIET-10 | Phase 2 | Pending |
+| DIET-10 | Phase 2 | Complete (plans 02-01 + 02-02, 2026-06-01) |
 | CHAT-01 | Phase 3 | Complete |
 | CHAT-02 | Phase 4 | Complete |
 | CHAT-03 | Phase 3 | Complete |
