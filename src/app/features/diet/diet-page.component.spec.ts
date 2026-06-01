@@ -14,7 +14,7 @@ import { of, throwError } from 'rxjs';
 import { DietPageComponent } from './diet-page.component';
 import { DietService } from '../../services/diet.service';
 import { StorageService, StorageError } from '../../services/storage.service';
-import { MealEntry, NutritionTotals, SavedFood } from '../../models/diet.model';
+import { DailyTargets, MealEntry, NutritionTotals, SavedFood } from '../../models/diet.model';
 import { expectNoSeriousA11yViolations } from '../../shared/a11y-test-helpers';
 
 // ---------------------------------------------------------------------------
@@ -97,11 +97,14 @@ function makeSpies(opts: {
   initialize?: ReturnType<jasmine.Spy>;
   savedFoods?: SavedFood[];
   meals?: MealEntry[];
+  rangeMeals?: MealEntry[];
+  dailyTargets?: DailyTargets;
   computeTotals?: NutritionTotals;
 } = {}): DietSpies {
   const dietService = jasmine.createSpyObj<DietService>('DietService', [
     'getSavedFoods',
     'getMealsForDay',
+    'getMealsInRange',
     'computeDailyTotals',
     'addSavedFood',
     'updateSavedFood',
@@ -110,9 +113,15 @@ function makeSpies(opts: {
     'addMeal',
     'updateMeal',
     'deleteMeal',
+    'copyMealItems',
+    'getDailyTargets',
+    'setDailyTargets',
+    'clearDailyTargets',
   ]);
   dietService.getSavedFoods.and.returnValue(of(opts.savedFoods ?? []));
   dietService.getMealsForDay.and.returnValue(of(opts.meals ?? []));
+  dietService.getMealsInRange.and.returnValue(of(opts.rangeMeals ?? opts.meals ?? []));
+  dietService.getDailyTargets.and.returnValue(of(opts.dailyTargets));
   dietService.computeDailyTotals.and.returnValue(opts.computeTotals ?? emptyTotals());
 
   const storageService = jasmine.createSpyObj<StorageService>('StorageService', [
