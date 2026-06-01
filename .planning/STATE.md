@@ -24,7 +24,7 @@ progress:
 
 **Milestone:** Refinement (v2) — diet UX overhaul + AI chat depth + full quality pass on the existing Angular 18 + Electron app at v1.2.3.
 
-**Current Focus:** Phase 05 — web-search-grounding-quality-sweep **COMPLETE** (9/9 plans; verified PASS 5/5, 05-VERIFICATION.md, 2026-06-01). Next: Phase 2 — Diet UX Overhaul (not started; only remaining phase in the v2 milestone).
+**Current Focus:** Phase 2 — Diet UX Overhaul. **Context gathered** (02-CONTEXT.md, 2026-06-01) — all gray areas delegated to Claude (D-01..D-14 locked). Ready for `/gsd-plan-phase 2` (or `/gsd-ui-phase 2` + `/gsd-ai-integration-phase` is N/A here — no AI hint needed beyond the deferred AI-macro idea). (Phase 05 COMPLETE 9/9, verified PASS 5/5.)
 
 ---
 
@@ -154,6 +154,10 @@ progress:
 ### Blockers
 
 None.
+
+### Recent Sessions (Phase 02)
+
+- **2026-06-01** — `/gsd-discuss-phase 2` (Diet UX Overhaul). No SPEC.md, no prior plans. Scouted: diet model is only `FoodUnit = 'g' | 'tbsp'` + `gramsPerTbsp?`; `diet.service.ts` already has substantial CRUD; charts-page plots only cardio calories (diet history is new); no `units.ts`/`convert` lib yet; **schema is at V6** so the diet migration is **V6→V7** (DIET-10's "V5→V6" label is stale). User deferred ALL gray areas to Claude (standing pattern) with vision: effortless first-time macro entry + permanent library reuse, flexible/easy units, feature-rich-but-easy. Locked D-01..D-14 in 02-CONTEXT.md: inline no-modal quick-add (D-01); widened units g/oz/lb + ml/tsp/tbsp/cup + named servings with optional per-food `densityGramsPerMl` and a new pure `units.ts` (D-03/04/05); substring search + auto-ranked recents/favorites (D-06); live totals + optional persistent `DailyTargets` with %-of-target bars (D-07/08); copy-from-previous-day as editable pending items (D-09); diet series into existing charts (D-10); local-time boundaries + snapshot immutability (D-11/12); V6→V7 migration preserving the `gramsPerTbsp`/`fdcId` legacy passthroughs (D-13); **no external food DB** — manual entry + reuse, since an external nutrition API would break the Phase 5 CSP egress lock (D-14). 3 keyword-matched todos reviewed, none folded (all already resolved / other-phase). Committed 02-CONTEXT.md + 02-DISCUSSION-LOG.md (850d17b). STATE.md updated manually (state.record-session handler incompatibility). Deferred ideas: AI-assisted macro estimation, external food DB, manual favorite pinning, per-day target overrides.
 
 ### Recent Sessions (Phase 05)
 
