@@ -261,6 +261,146 @@ describe('DietPageComponent (characterization)', () => {
     expect(compiled.querySelector('app-error-state')).toBeTruthy();
   });
 
+  it('should update live daily totals when a pending item is added', async () => {
+    // Arrange: a food with a serving + one already-saved meal (155 kcal).
+    const food = createValidSavedFood();
+    const spies = makeSpies({ savedFoods: [food], meals: [createValidMeal()] });
+    // computeDailyTotals reflects the single saved meal.
+    spies.dietService.computeDailyTotals.and.returnValue({ ...emptyTotals(), caloriesKcal: 155 });
+    await configureBed(spies);
+
+    const fixture = TestBed.createComponent(DietPageComponent);
+    fixture.detectChanges();
+    const cmp = fixture.componentInstance;
+
+    // Baseline live totals = saved meal only.
+    expect(cmp.liveTotals.caloriesKcal).toBe(155);
+
+    // Act: select the food, choose its serving, add to meal (stages a pending item).
+    cmp.selectFood(food);
+    cmp.mealItemForm.patchValue({ servingId: 'serv-1', quantity: 1 });
+    cmp.onAddMealItem();
+    fixture.detectChanges();
+
+    // Assert: a pending item exists and live net-carbs reflects the running sum.
+    expect(cmp.pendingItems.length).toBe(1);
+    // 1 serving = 50g of egg @ 0.011 net carbs/g ≈ 0.55g net carbs added.
+    expect(cmp.liveTotals.netCarbsG).toBeCloseTo(0.55, 2);
+    // Live calories grew beyond the saved-meal baseline.
+    expect(cmp.liveTotals.caloriesKcal).toBeGreaterThan(155);
+
+    // DOM shape: the totals grid net-carbs cell reflects the live sum (>0).
+    const compiled = fixture.nativeElement as HTMLElement;
+    const totalsText = (compiled.querySelector('.totals-grid')?.textContent ?? '').toLowerCase();
+    expect(totalsText).toContain('net carbs');
+  });
+
+  it('should render a %-of-target bar with an always-present text label, destructive over-target state, and over-by copy', async () => {
+    // Arrange: calorie target of 100 with a saved meal of 155 kcal → over target.
+    const targets: DailyTargets = { caloriesKcal: 100 };
+    const spies = makeSpies({
+      savedFoods: [createValidSavedFood()],
+      meals: [createValidMeal()],
+      dailyTargets: targets,
+    });
+    spies.dietService.computeDailyTotals.and.returnValue({ ...emptyTotals(), caloriesKcal: 155 });
+    await configureBed(spies);
+
+    const fixture = TestBed.createComponent(DietPageComponent);
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    // Assert: a target bar exists with the destructive over-target modifier.
+    const bar = compiled.querySelector('.target-bar.over');
+    expect(bar).toBeTruthy();
+
+    // Text label is ALWAYS present (color is never the only signal) and uses the over-by copy.
+    const labelText = (compiled.querySelector('.target-label')?.textContent ?? '');
+    expect(labelText).toContain('over by');
+    expect(labelText).toContain('155 / 100 kcal');
+  });
+
+  it('should render a %-of-target bar with a percentage label when under target', async () => {
+    const targets: DailyTargets = { caloriesKcal: 1000 };
+    const spies = makeSpies({
+      savedFoods: [createValidSavedFood()],
+      meals: [createValidMeal()],
+      dailyTargets: targets,
+    });
+    spies.dietService.computeDailyTotals.and.returnValue({ ...emptyTotals(), caloriesKcal: 155 });
+    await configureBed(spies);
+
+    const fixture = TestBed.createComponent(DietPageComponent);
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    // Under target → no .over modifier, but the percentage label is still present.
+    expect(compiled.querySelector('.target-bar.over')).toBeFalsy();
+    const labelText = (compiled.querySelector('.target-label')?.textContent ?? '');
+    expect(labelText).toContain('155 / 1000 kcal');
+    expect(labelText).toContain('%');
+  });
+
+  it('should populate editable pending items from a prior day when "Repeat yesterday" is used (DIET-05)', async () => {
+    // Arrange: yesterday has one meal; copyMealItems re-derives editable pending items.
+    const food = createValidSavedFood();
+    const sourceMeal = createValidMeal();
+    const spies = makeSpies({ savedFoods: [food], meals: [] });
+    // getMealsForDay is used both for the selected day (empty) and the copy source.
+    // Return the source meal regardless of the day key for this test.
+    spies.dietService.getMealsForDay.and.returnValue(of([sourceMeal]));
+    spies.dietService.copyMealItems.and.returnValue([
+      {
+        savedFoodId: 'food-1',
+        servingId: 'serv-1',
+        quantity: 2,
+        label: 'Egg, large - 1 large (50g) x2',
+        preview: { ...emptyTotals(), caloriesKcal: 155 },
+      },
+    ]);
+    await configureBed(spies);
+
+    const fixture = TestBed.createComponent(DietPageComponent);
+    fixture.detectChanges();
+    const cmp = fixture.componentInstance;
+
+    // Act
+    cmp.repeatYesterday();
+    fixture.detectChanges();
+
+    // Assert: copyMealItems was used (re-derive in service) and items landed as editable pending.
+    expect(spies.dietService.copyMealItems).toHaveBeenCalled();
+    expect(cmp.pendingItems.length).toBe(1);
+    expect(cmp.pendingItems[0].savedFoodId).toBe('food-1');
+    expect(cmp.copyResult).toContain('Copied 1 items');
+    // Editable: a removable pending row is rendered.
+    const compiled = fixture.nativeElement as HTMLElement;
+    const removeBtn = Array.from(compiled.querySelectorAll('.items-list .history-item button'))
+      .find(b => (b.textContent ?? '').trim() === 'Remove');
+    expect(removeBtn).toBeTruthy();
+  });
+
+  it('should render logged-meal history from the stored snapshot, not a re-resolved food (DIET-09)', async () => {
+    // Arrange: the live food was edited to 999 kcal/unit, but the meal snapshot is frozen at 155.
+    const editedFood = createValidSavedFood({
+      nutrientsPerUnit: { ...emptyTotals(), caloriesKcal: 999 },
+    });
+    const meal = createValidMeal(); // totals.caloriesKcal === 155 (snapshot)
+    const spies = makeSpies({ savedFoods: [editedFood], meals: [meal] });
+    spies.dietService.computeDailyTotals.and.returnValue({ ...emptyTotals(), caloriesKcal: 155 });
+    await configureBed(spies);
+
+    const fixture = TestBed.createComponent(DietPageComponent);
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    // Assert: the history row shows the snapshot value (155 kcal), never the live food's 999.
+    const historyRow = compiled.querySelector('section[aria-label="Meals history"] .history-item');
+    const rowText = historyRow?.textContent ?? '';
+    expect(rowText).toContain('155');
+    expect(rowText).not.toContain('999');
+  });
+
   it('should have no serious or critical axe-core violations on initial load', async () => {
     // Arrange: render the steady-state happy path (a few foods + meals)
     // so axe sees the realistic surface.
