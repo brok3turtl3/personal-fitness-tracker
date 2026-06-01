@@ -128,15 +128,15 @@ Mapped by the roadmapper.
 | FOUND-05 | Phase 1 | Complete (plans 01-05 + 01-08, 2026-05-02) |
 | FOUND-06 | Phase 1 | Complete |
 | FOUND-07 | Phase 1 | Complete (plans 01-04 + 01-09 + 01-10, 2026-05-02) |
-| DIET-01 | Phase 2 | Pending |
+| DIET-01 | Phase 2 | In progress — service path ready (addSavedFood widened-unit + immediate addMeal, plan 02-03, 2026-06-01); quick-add modal UI pending (02-04) |
 | DIET-02 | Phase 2 | Pending |
-| DIET-03 | Phase 2 | Pending |
+| DIET-03 | Phase 2 | In progress — DietService.toBaseUnits delegates to units.ts with per-food density, no global default (plan 02-03, 2026-06-01); native-unit UI pending (02-04) |
 | DIET-04 | Phase 2 | Pending |
-| DIET-05 | Phase 2 | Pending |
-| DIET-06 | Phase 2 | Pending |
+| DIET-05 | Phase 2 | In progress — copyMealItems re-derive helper on DietService (plan 02-03, 2026-06-01); one-action copy UI pending (02-04) |
+| DIET-06 | Phase 2 | In progress — live net-carbs totals + DailyTargets get/set/clear storage on DietService (plan 02-03, 2026-06-01); %-of-target bars UI pending (02-04) |
 | DIET-07 | Phase 2 | Pending |
 | DIET-08 | Phase 2 | Pending |
-| DIET-09 | Phase 2 | Pending |
+| DIET-09 | Phase 2 | In progress — snapshot immutability proven by deep-equal test; updateSavedFood never writes mealEntries (plan 02-03, 2026-06-01); end-to-end UI verification pending (02-04) |
 | DIET-10 | Phase 2 | Complete (plans 02-01 + 02-02, 2026-06-01) |
 | CHAT-01 | Phase 3 | Complete |
 | CHAT-02 | Phase 4 | Complete |
