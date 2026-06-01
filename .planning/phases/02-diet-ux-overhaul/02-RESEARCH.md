@@ -352,7 +352,7 @@ return food.fdcId !== undefined ? { ...base, fdcId: food.fdcId } as SavedFood : 
 | A4 | Single persistent `DailyTargets` (not per-day) is the right default | §Open Q4, D-08 | LOW — D-08 explicitly locks single-set-first; per-day deferred. |
 | A5 | Copy-meal should re-derive preview from the CURRENT food (not the old snapshot) since the user is creating a NEW meal | §Open Q4 | MEDIUM — alternative: copy the snapshot verbatim. Recommend re-derive (the copied meal is "what I'm eating now", and the food may have been corrected). Flag for discuss-phase. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 ### Open Q1 — D-05: `convert` library vs hand-rolled `units.ts` → **RECOMMEND HAND-ROLLED**
 
