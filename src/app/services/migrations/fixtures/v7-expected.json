@@ -1,0 +1,139 @@
+{
+  "schemaVersion": 7,
+  "cardioSessions": [
+    {
+      "id": "c1",
+      "type": "running",
+      "date": "2026-04-15",
+      "durationMinutes": 30,
+      "distanceKm": 5,
+      "createdAt": "2026-04-15T10:00:00Z",
+      "updatedAt": "2026-04-15T10:00:00Z"
+    }
+  ],
+  "weightEntries": [
+    {
+      "id": "w1",
+      "date": "2026-04-15",
+      "weightLbs": 180,
+      "createdAt": "2026-04-15T08:00:00Z",
+      "updatedAt": "2026-04-15T08:00:00Z"
+    }
+  ],
+  "healthReadings": [],
+  "savedFoods": [
+    {
+      "id": "food-oil",
+      "name": "Olive oil",
+      "baseUnit": "g",
+      "gramsPerTbsp": 13.5,
+      "densityGramsPerMl": 0.9129786129497609,
+      "nutrientsPerUnit": {
+        "caloriesKcal": 8.84,
+        "proteinG": 0,
+        "fatG": 1,
+        "carbsG": 0,
+        "fiberG": 0,
+        "sugarG": 0,
+        "sodiumMg": 0.02,
+        "netCarbsG": 0
+      },
+      "servings": [
+        { "id": "s-tbsp", "label": "1 tbsp", "unit": "tbsp", "amount": 1 },
+        { "id": "s-100g", "label": "100 g", "unit": "g", "amount": 100 }
+      ],
+      "createdAt": "2026-04-10T09:00:00Z",
+      "updatedAt": "2026-04-10T09:00:00Z",
+      "fdcId": 123456
+    },
+    {
+      "id": "food-egg",
+      "name": "Egg, large",
+      "baseUnit": "g",
+      "nutrientsPerUnit": {
+        "caloriesKcal": 1.55,
+        "proteinG": 0.13,
+        "fatG": 0.11,
+        "carbsG": 0.011,
+        "fiberG": 0,
+        "sugarG": 0.011,
+        "sodiumMg": 1.42,
+        "netCarbsG": 0.011
+      },
+      "servings": [
+        { "id": "s-egg", "label": "1 egg (50 g)", "unit": "g", "amount": 50 }
+      ],
+      "createdAt": "2026-04-11T09:00:00Z",
+      "updatedAt": "2026-04-11T09:00:00Z"
+    }
+  ],
+  "mealEntries": [
+    {
+      "id": "meal-1",
+      "dateTime": "2026-04-15T12:30:00Z",
+      "mealType": "lunch",
+      "notes": "post-workout",
+      "items": [
+        {
+          "id": "mi-1",
+          "savedFoodId": "food-egg",
+          "savedFoodName": "Egg, large",
+          "servingId": "s-egg",
+          "servingLabel": "1 egg (50 g)",
+          "unit": "g",
+          "quantity": 2,
+          "snapshot": {
+            "baseUnits": 100,
+            "totals": {
+              "caloriesKcal": 155,
+              "proteinG": 13,
+              "fatG": 11,
+              "carbsG": 1.1,
+              "fiberG": 0,
+              "sugarG": 1.1,
+              "sodiumMg": 142,
+              "netCarbsG": 1.1
+            }
+          }
+        }
+      ],
+      "totals": {
+        "caloriesKcal": 155,
+        "proteinG": 13,
+        "fatG": 11,
+        "carbsG": 1.1,
+        "fiberG": 0,
+        "sugarG": 1.1,
+        "sodiumMg": 142,
+        "netCarbsG": 1.1
+      },
+      "createdAt": "2026-04-15T12:30:00Z",
+      "updatedAt": "2026-04-15T12:30:00Z"
+    }
+  ],
+  "aiSettings": {
+    "apiKey": "sk-ant-test",
+    "selectedModel": "claude-sonnet-4-5-20250929",
+    "maxResponseTokens": 4096
+  },
+  "chatConversations": [],
+  "memoryFiles": {},
+  "userProfile": {
+    "goals": "",
+    "preferences": "",
+    "dietaryConstraints": "",
+    "trainingHistory": "",
+    "updatedAt": ""
+  },
+  "aiToolSettings": {
+    "enableDataQueryTools": true,
+    "enableMemoryTool": true,
+    "enableWebSearch": false,
+    "webSearchMaxUses": 3,
+    "maxAgentTurns": 10,
+    "redactHealthReadings": false,
+    "redactWeightEntries": false,
+    "redactMealNotes": false
+  },
+  "lastModified": "2026-04-15T12:30:00Z"
+}

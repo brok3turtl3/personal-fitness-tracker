@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 6,
+  "cardioSessions": [],
+  "weightEntries": [],
+  "healthReadings": [],
+  "savedFoods": [
+    {
+      "id": "food-bad",
+      "name": "Mystery powder",
+      "baseUnit": "g",
+      "gramsPerTbsp": "abc",
+      "nutrientsPerUnit": {
+        "caloriesKcal": 4,
+        "proteinG": 0.1,
+        "fatG": 0,
+        "carbsG": 0.9,
+        "fiberG": 0,
+        "sugarG": 0,
+        "sodiumMg": 0,
+        "netCarbsG": 0.9
+      },
+      "servings": [
+        { "id": "s-100g", "label": "100 g", "unit": "g", "amount": 100 }
+      ],
+      "createdAt": "2026-04-12T09:00:00Z",
+      "updatedAt": "2026-04-12T09:00:00Z"
+    }
+  ],
+  "mealEntries": [],
+  "aiSettings": { "apiKey": "sk-ant-test", "maxResponseTokens": 4096 },
+  "chatConversations": [],
+  "memoryFiles": {},
+  "userProfile": {
+    "goals": "",
+    "preferences": "",
+    "dietaryConstraints": "",
+    "trainingHistory": "",
+    "updatedAt": ""
+  },
+  "aiToolSettings": {
+    "enableDataQueryTools": true,
+    "enableMemoryTool": true,
+    "enableWebSearch": false,
+    "webSearchMaxUses": 3,
+    "maxAgentTurns": 10,
+    "redactHealthReadings": false,
+    "redactWeightEntries": false,
+    "redactMealNotes": false
+  },
+  "lastModified": "2026-04-15T12:30:00Z"
+}

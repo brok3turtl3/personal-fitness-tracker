@@ -30,6 +30,8 @@ import v2Fixture from './migrations/fixtures/v2.json';
 import v3Fixture from './migrations/fixtures/v3.json';
 import v4Fixture from './migrations/fixtures/v4.json';
 import v5ExpectedFixture from './migrations/fixtures/v5-expected.json';
+import v6Fixture from './migrations/fixtures/v6.json';
+import v7ExpectedFixture from './migrations/fixtures/v7-expected.json';
 
 // Malformed-input matrix (D-17).
 import malformedNull from './migrations/fixtures/malformed/null.json';
@@ -42,6 +44,11 @@ import malformedV4MissingChat from './migrations/fixtures/malformed/v4-missing-c
 import malformedV4WrongTypeContent from './migrations/fixtures/malformed/v4-wrong-type-content.json';
 import malformedV4NullContent from './migrations/fixtures/malformed/v4-null-content.json';
 import malformedV4MissingTokenEstimate from './migrations/fixtures/malformed/v4-missing-token-estimate.json';
+
+// V6 malformed matrix (Phase 2 V6→V7 — DIET-10, D-13, T-02-02-04).
+import malformedV6MissingSavedFoods from './migrations/fixtures/malformed/v6-missing-savedfoods.json';
+import malformedV6WrongTypeDensity from './migrations/fixtures/malformed/v6-wrong-type-density.json';
+import malformedV6Null from './migrations/fixtures/malformed/v6-null.json';
 
 const BACKUP_PREFIX = 'fitness_tracker_data.backup.';
 
@@ -430,6 +437,147 @@ describe('StorageService migrations (fixture-driven)', () => {
         k.startsWith(BACKUP_PREFIX),
       );
       expect(backupKeys.length).toBe(0);
+    });
+  });
+
+  describe('V6 → V7 migration (DIET-10, D-13)', () => {
+    /** US-customary millilitres per tablespoon — the legacy density bridge (A2). */
+    const ML_PER_TBSP = 14.78676478125;
+
+    it('migrates a V6 fixture to schemaVersion 7 carrying every field through', async () => {
+      localStorageMock[STORAGE_KEY] = JSON.stringify(v6Fixture);
+      await firstValueFrom(service.initialize());
+      const data = await firstValueFrom(service.getData());
+
+      expect(data?.schemaVersion).toBe(7);
+      expect(data?.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+
+      // Non-diet slices carried through unchanged (JSON round-trip narrows the
+      // strict-TS enum widening on imported fixtures).
+      expect(JSON.parse(JSON.stringify(data?.cardioSessions))).toEqual(v6Fixture.cardioSessions);
+      expect(JSON.parse(JSON.stringify(data?.weightEntries))).toEqual(v6Fixture.weightEntries);
+      expect(data?.aiSettings?.apiKey).toBe('sk-ant-test');
+    });
+
+    it('derives densityGramsPerMl from a positive gramsPerTbsp while KEEPING gramsPerTbsp, the tbsp serving, and fdcId', async () => {
+      localStorageMock[STORAGE_KEY] = JSON.stringify(v6Fixture);
+      await firstValueFrom(service.initialize());
+      const data = await firstValueFrom(service.getData());
+
+      const oil = data!.savedFoods.find(f => f.id === 'food-oil')!;
+      expect(oil).toBeTruthy();
+      // Density DERIVED additively.
+      expect(oil.densityGramsPerMl).toBeCloseTo(13.5 / ML_PER_TBSP, 10);
+      // gramsPerTbsp RETAINED (additive — never dropped, Pitfall 3).
+      expect(oil.gramsPerTbsp).toBe(13.5);
+      // The tbsp serving still works (not stripped).
+      expect(oil.servings.some(s => s.unit === 'tbsp')).toBeTrue();
+      // fdcId runtime passthrough survives the migration untouched.
+      expect((oil as unknown as { fdcId?: number }).fdcId).toBe(123456);
+    });
+
+    it('leaves a g-only food (no gramsPerTbsp) WITHOUT a derived density', async () => {
+      localStorageMock[STORAGE_KEY] = JSON.stringify(v6Fixture);
+      await firstValueFrom(service.initialize());
+      const data = await firstValueFrom(service.getData());
+
+      const egg = data!.savedFoods.find(f => f.id === 'food-egg')!;
+      expect(egg).toBeTruthy();
+      expect(egg.gramsPerTbsp).toBeUndefined();
+      expect(egg.densityGramsPerMl).toBeUndefined();
+    });
+
+    it('keeps mealEntries (snapshots) byte-stable across the migration (D-12)', async () => {
+      localStorageMock[STORAGE_KEY] = JSON.stringify(v6Fixture);
+      await firstValueFrom(service.initialize());
+      const data = await firstValueFrom(service.getData());
+
+      // mealEntries are carried through untransformed — deep-equal the V6 input.
+      expect(JSON.parse(JSON.stringify(data?.mealEntries))).toEqual(v6Fixture.mealEntries);
+    });
+
+    it('leaves dailyTargets UNDEFINED (never null) until the user sets it', async () => {
+      localStorageMock[STORAGE_KEY] = JSON.stringify(v6Fixture);
+      await firstValueFrom(service.initialize());
+      const data = await firstValueFrom(service.getData());
+
+      expect(data?.dailyTargets).toBeUndefined();
+      // Must not be null (CLAUDE.md — no null for absent optional fields).
+      expect('dailyTargets' in (data as object) ? data!.dailyTargets : undefined).toBeUndefined();
+    });
+
+    it('matches the full v7-expected fixture (deep equal modulo lastModified rewrite)', async () => {
+      localStorageMock[STORAGE_KEY] = JSON.stringify(v6Fixture);
+      await firstValueFrom(service.initialize());
+      const data = await firstValueFrom(service.getData());
+
+      const actual = JSON.parse(JSON.stringify(data)) as Record<string, unknown>;
+      const expected = JSON.parse(JSON.stringify(v7ExpectedFixture)) as Record<string, unknown>;
+      // saveData() rewrites lastModified on persist; compare every other slice.
+      delete actual['lastModified'];
+      delete expected['lastModified'];
+      expect(actual).toEqual(expected);
+    });
+
+    it('writes a pre-migration backup keyed v6 (FOUND-07)', async () => {
+      localStorageMock[STORAGE_KEY] = JSON.stringify(v6Fixture);
+      await firstValueFrom(service.initialize());
+
+      const backupKeys = Object.keys(localStorageMock).filter(k =>
+        k.startsWith(BACKUP_PREFIX),
+      );
+      expect(backupKeys.length).toBe(1);
+      expect(backupKeys[0]).toMatch(/\.backup\.v6\./);
+    });
+
+    describe('malformed V6 matrix (load-with-defaults OR fail loud — never corrupt)', () => {
+      it('V6 with savedFoods absent loads with an empty foods array (defensive ?? [])', async () => {
+        localStorageMock[STORAGE_KEY] = JSON.stringify(malformedV6MissingSavedFoods);
+        await firstValueFrom(service.initialize());
+        const data = await firstValueFrom(service.getData());
+
+        expect(data?.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+        expect(data?.savedFoods).toEqual([]);
+      });
+
+      it('V6 with a wrong-type gramsPerTbsp ("abc") loads the food WITHOUT a derived density (no crash)', async () => {
+        localStorageMock[STORAGE_KEY] = JSON.stringify(malformedV6WrongTypeDensity);
+        await firstValueFrom(service.initialize());
+        const data = await firstValueFrom(service.getData());
+
+        expect(data?.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+        const bad = data!.savedFoods.find(f => f.id === 'food-bad')!;
+        expect(bad).toBeTruthy();
+        // A non-numeric gramsPerTbsp NEVER derives a density (would be NaN).
+        expect(bad.densityGramsPerMl).toBeUndefined();
+        // The food still loaded — never silently dropped or corrupted.
+        expect(bad.name).toBe('Mystery powder');
+      });
+
+      it('literal null V6 input is tolerated — initializes with defaults OR throws MIGRATION_FAILED (never corrupts)', async () => {
+        localStorageMock[STORAGE_KEY] = JSON.stringify(malformedV6Null);
+
+        let didThrow = false;
+        let thrown: unknown;
+        try {
+          await firstValueFrom(service.initialize());
+        } catch (e) {
+          didThrow = true;
+          thrown = e;
+        }
+
+        if (didThrow) {
+          expect(thrown instanceof StorageError).toBe(true);
+          expect((thrown as StorageError).code).toBe('MIGRATION_FAILED');
+          const backups = Object.keys(localStorageMock).filter(k =>
+            k.startsWith(BACKUP_PREFIX),
+          );
+          expect(backups.length).toBeGreaterThan(0);
+        } else {
+          const data = await firstValueFrom(service.getData());
+          expect(data?.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+        }
+      });
     });
   });
 

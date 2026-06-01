@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 6,
+  "cardioSessions": [],
+  "weightEntries": [],
+  "healthReadings": [],
+  "mealEntries": [],
+  "aiSettings": { "apiKey": "sk-ant-test", "maxResponseTokens": 4096 },
+  "chatConversations": [],
+  "memoryFiles": {},
+  "userProfile": {
+    "goals": "",
+    "preferences": "",
+    "dietaryConstraints": "",
+    "trainingHistory": "",
+    "updatedAt": ""
+  },
+  "aiToolSettings": {
+    "enableDataQueryTools": true,
+    "enableMemoryTool": true,
+    "enableWebSearch": false,
+    "webSearchMaxUses": 3,
+    "maxAgentTurns": 10,
+    "redactHealthReadings": false,
+    "redactWeightEntries": false,
+    "redactMealNotes": false
+  },
+  "lastModified": "2026-04-15T12:30:00Z"
+}
