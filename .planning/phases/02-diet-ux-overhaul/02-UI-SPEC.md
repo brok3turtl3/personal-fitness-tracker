@@ -1,10 +1,11 @@
 ---
 phase: 2
 slug: diet-ux-overhaul
-status: draft
+status: approved
 shadcn_initialized: false
 preset: none
 created: 2026-06-01
+reviewed_at: 2026-06-01
 ---
 
 # Phase 2 — UI Design Contract
