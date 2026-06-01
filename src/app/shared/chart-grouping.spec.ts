@@ -1,4 +1,4 @@
-import { groupByDay, toDateKey, round2 } from './chart-grouping';
+import { groupByDay, sumByDay, toDateKey, round2 } from './chart-grouping';
 
 describe('chart-grouping', () => {
   describe('toDateKey', () => {
@@ -52,6 +52,77 @@ describe('chart-grouping', () => {
         r => [r.a, r.b],
       );
       expect(averages).toEqual([[15, 150]]);
+    });
+  });
+
+  describe('sumByDay', () => {
+    interface Meal {
+      dateTime: string;
+      cals: number;
+      protein: number;
+    }
+    const dateOf = (m: Meal) => m.dateTime;
+    const extract = (m: Meal) => [m.cals, m.protein];
+
+    it('returns empty labels and values for empty input', () => {
+      const { labels, values } = sumByDay<Meal>([], dateOf, extract);
+      expect(labels).toEqual([]);
+      expect(values).toEqual([]);
+    });
+
+    it('SUMS (not averages) multiple meals on the same local day into one label', () => {
+      // 2026-03-08, both local-time on the same day, late + morning.
+      const late = new Date(2026, 2, 8, 23, 30, 0).toISOString();
+      const morning = new Date(2026, 2, 8, 8, 0, 0).toISOString();
+      const { labels, values } = sumByDay<Meal>(
+        [
+          { dateTime: late, cals: 600, protein: 30 },
+          { dateTime: morning, cals: 400, protein: 20 },
+        ],
+        dateOf,
+        extract,
+      );
+      expect(labels).toEqual(['2026-03-08']);
+      expect(values).toEqual([[1000, 50]]); // summed, NOT averaged (would be 500/25)
+    });
+
+    it('keys a 23:30-local meal to the correct LOCAL day across US spring-forward (2026-03-08)', () => {
+      // Spring-forward: 2026-03-08 02:00 → 03:00. A 23:30-local meal must stay on 2026-03-08.
+      const springForward = new Date(2026, 2, 8, 23, 30, 0).toISOString();
+      const { labels } = sumByDay<Meal>(
+        [{ dateTime: springForward, cals: 500, protein: 25 }],
+        dateOf,
+        extract,
+      );
+      expect(labels).toEqual(['2026-03-08']);
+    });
+
+    it('keys correctly across US fall-back (2026-11-01) with no day drift', () => {
+      // Fall-back: 2026-11-01 02:00 → 01:00. A 23:30-local meal must stay on 2026-11-01.
+      const fallBack = new Date(2026, 10, 1, 23, 30, 0).toISOString();
+      const { labels } = sumByDay<Meal>(
+        [{ dateTime: fallBack, cals: 700, protein: 40 }],
+        dateOf,
+        extract,
+      );
+      expect(labels).toEqual(['2026-11-01']);
+    });
+
+    it('returns labels sorted ascending with values aligned to labels', () => {
+      const day1 = new Date(2026, 4, 1, 12, 0, 0).toISOString();
+      const day2 = new Date(2026, 4, 2, 12, 0, 0).toISOString();
+      const day3 = new Date(2026, 4, 3, 12, 0, 0).toISOString();
+      const { labels, values } = sumByDay<Meal>(
+        [
+          { dateTime: day3, cals: 3, protein: 30 },
+          { dateTime: day1, cals: 1, protein: 10 },
+          { dateTime: day2, cals: 2, protein: 20 },
+        ],
+        dateOf,
+        extract,
+      );
+      expect(labels).toEqual(['2026-05-01', '2026-05-02', '2026-05-03']);
+      expect(values).toEqual([[1, 10], [2, 20], [3, 30]]);
     });
   });
 
