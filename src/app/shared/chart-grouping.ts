@@ -54,6 +54,51 @@ export function groupByDay<T extends { date: string }>(
   return { labels, averages };
 }
 
+/**
+ * Sum numeric fields per calendar day, keyed on a caller-supplied date accessor.
+ *
+ * Sibling to {@link groupByDay} but SUMS instead of averages, and keys via
+ * `toDateKey(dateOf(item))` (REUSE the shared local-time keying contract — D-11;
+ * do NOT fork it) rather than a hardcoded `.date` field (e.g. MealEntry has
+ * `dateTime`). Returns one summed data point per local day, ordered ascending.
+ *
+ * Critical (RESEARCH Pitfall 2): diet macros must NOT go through groupByDay —
+ * averaging would halve a two-meal day. This sums.
+ */
+export function sumByDay<T>(
+  items: T[],
+  dateOf: (t: T) => string,
+  extractor: (t: T) => number[],
+): { labels: string[]; values: number[][] } {
+  const map = new Map<string, number[][]>();
+
+  for (const item of items) {
+    const key = toDateKey(dateOf(item));
+    if (!map.has(key)) {
+      map.set(key, []);
+    }
+    map.get(key)!.push(extractor(item));
+  }
+
+  const sortedKeys = Array.from(map.keys()).sort();
+  const labels: string[] = [];
+  const values: number[][] = [];
+
+  for (const key of sortedKeys) {
+    const group = map.get(key)!;
+    const fieldCount = group[0].length;
+    const sums: number[] = [];
+    for (let i = 0; i < fieldCount; i++) {
+      const sum = group.reduce((s, vals) => s + vals[i], 0);
+      sums.push(round2(sum));
+    }
+    labels.push(key);
+    values.push(sums);
+  }
+
+  return { labels, values };
+}
+
 /** Round a value to two decimal places. */
 export function round2(value: number): number {
   return Math.round(value * 100) / 100;

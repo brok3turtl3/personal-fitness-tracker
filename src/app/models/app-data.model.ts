@@ -1,7 +1,7 @@
 import { CardioSession } from './cardio-session.model';
 import { WeightEntry } from './weight-entry.model';
 import { HealthReading } from './health-reading.model';
-import { MealEntry, SavedFood } from './diet.model';
+import { MealEntry, SavedFood, DailyTargets } from './diet.model';
 import {
   AISettings,
   AIToolSettings,
@@ -15,7 +15,7 @@ import { UserProfile, DEFAULT_USER_PROFILE } from './user-profile.model';
  * Stored as a single JSON object in LocalStorage.
  */
 export interface AppData {
-  /** Schema version for migration support. Current: 6 */
+  /** Schema version for migration support. Current: 7 */
   schemaVersion: number;
 
   /** All cardio workout sessions */
@@ -48,6 +48,13 @@ export interface AppData {
   /** AI tool flags + redaction toggles (Phase 3 V5, D-09). */
   aiToolSettings: AIToolSettings;
 
+  /**
+   * Optional persistent daily nutrition targets (Phase 2 V7, D-08). Omitted
+   * (undefined, never null) until the user sets targets; the diet-page
+   * %-of-target bars (plan 02-04) consume it.
+   */
+  dailyTargets?: DailyTargets;
+
   /** ISO 8601 timestamp of last modification */
   lastModified: string;
 }
@@ -57,12 +64,17 @@ export interface AppData {
  *
  * V6 (Phase 5, RESEARCH A3): the persisted `ChatBlock` union now admits the
  * web-search variants (`server_tool_use`, `web_search_tool_result`) and
- * `TextBlock.citations`. The V5→V6 transform is a no-op on existing fields
- * (the new shapes are additive/optional), but the version bump + backward-compat
- * fixture is the FOUND-07 discipline. NOTE: Phase 2's diet schema work must
- * now retarget V6→V7.
+ * `TextBlock.citations`. Additive/optional on existing fields.
+ *
+ * V7 (Phase 2, D-03/D-04/D-08): the diet model widens additively — `FoodUnit`
+ * grows to the full mass+volume `MeasuredUnit` union, `SavedFood` gains optional
+ * `densityGramsPerMl` (per-food weight↔volume bridge — never a global default)
+ * and `preferredUnits`, `MealItemSnapshot` gains optional resolved `unit`/
+ * `servingLabel`, and `AppData` gains optional `dailyTargets`. The V6→V7
+ * transform (plan 02-02) is additive: existing data loads unchanged, and a
+ * legacy `gramsPerTbsp` derives a `densityGramsPerMl` where absent.
  */
-export const CURRENT_SCHEMA_VERSION = 6;
+export const CURRENT_SCHEMA_VERSION = 7;
 
 /** LocalStorage key for app data */
 export const STORAGE_KEY = 'fitness_tracker_data';

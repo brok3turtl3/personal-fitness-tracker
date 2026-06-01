@@ -199,3 +199,29 @@ export interface LegacyAppDataV5 {
   aiToolSettings: AIToolSettings;
   lastModified: string;
 }
+
+/**
+ * V6 shape (Phase 5): structurally identical to V5 for every non-chat slice;
+ * the V5→V6 transform only widened the persisted `ChatBlock` union (additive),
+ * so the AppData-level shape is unchanged apart from `schemaVersion: 6`.
+ *
+ * The narrow pre-V7 diet fields still hold: `savedFoods` carries `gramsPerTbsp?`
+ * but NO `densityGramsPerMl`/`preferredUnits`, and there is NO `dailyTargets`.
+ * `migrateV6ToV7` widens these additively. (Plan 02-02 owns the dedicated V6/V7
+ * fixtures + malformed matrix; this interface lands here so the V7 chain hop —
+ * introduced in plan 02-01 to keep CURRENT_SCHEMA_VERSION=7 consistent — is typed.)
+ */
+export interface LegacyAppDataV6 {
+  schemaVersion: 6;
+  cardioSessions: CardioSession[];
+  weightEntries: WeightEntry[];
+  healthReadings: HealthReading[];
+  savedFoods: SavedFood[];
+  mealEntries: MealEntry[];
+  aiSettings?: AISettings;
+  chatConversations: LegacyChatConversationV5[];
+  memoryFiles: Record<string, string>;
+  userProfile: UserProfile;
+  aiToolSettings: AIToolSettings;
+  lastModified: string;
+}

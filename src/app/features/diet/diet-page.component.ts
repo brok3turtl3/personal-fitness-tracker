@@ -5,7 +5,7 @@ import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angula
 
 import { StorageService } from '../../services/storage.service';
 import { DietService, DietValidationError, scaleFoodTotals } from '../../services/diet.service';
-import { MealEntry, MealType, NutritionTotals, SavedFood } from '../../models/diet.model';
+import { FoodUnit, MealEntry, MealType, NutritionTotals, SavedFood, SavedFoodServing } from '../../models/diet.model';
 import { EmptyStateComponent } from '../../shared/empty-state.component';
 import { ErrorStateComponent } from '../../shared/error-state.component';
 
@@ -541,7 +541,7 @@ export class DietPageComponent implements OnInit {
 
   mealTypes: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 
-  mealServingOptions: Array<{ id: string; label: string; unit: 'g' | 'tbsp'; amount: number }> = [];
+  mealServingOptions: SavedFoodServing[] = [];
   pendingItems: Array<{ savedFoodId: string; servingId: string; quantity: number; label: string; preview: NutritionTotals }> = [];
   mealError: string | null = null;
   isSavingMeal = false;
@@ -679,7 +679,7 @@ export class DietPageComponent implements OnInit {
     const v = this.addFoodForm.value;
     const name = String(v.name || '').trim();
 
-    const baseUnit = String(v.baseUnit || 'g') as 'g' | 'tbsp';
+    const baseUnit = String(v.baseUnit || 'g') as FoodUnit;
     const gramsPerTbsp = v.gramsPerTbsp === null || v.gramsPerTbsp === undefined || v.gramsPerTbsp === ''
       ? undefined
       : Number(v.gramsPerTbsp);
@@ -731,7 +731,7 @@ export class DietPageComponent implements OnInit {
   onAddCustomServing(food: SavedFood): void {
     this.customServingError = null;
     const label = String(this.customServingForm.get('label')?.value || '').trim();
-    const unit = String(this.customServingForm.get('unit')?.value || 'g') as 'g' | 'tbsp';
+    const unit = String(this.customServingForm.get('unit')?.value || 'g') as FoodUnit;
     const amount = Number(this.customServingForm.get('amount')?.value);
 
     // If the serving unit is not the food base unit, ensure conversions are possible.
@@ -985,7 +985,7 @@ function emptyTotals(): NutritionTotals {
   };
 }
 
-function toBaseUnitsForPreview(food: SavedFood, unit: 'g' | 'tbsp', amount: number): number {
+function toBaseUnitsForPreview(food: SavedFood, unit: FoodUnit, amount: number): number {
   if (unit === food.baseUnit) return amount;
 
   const gpt = food.gramsPerTbsp;

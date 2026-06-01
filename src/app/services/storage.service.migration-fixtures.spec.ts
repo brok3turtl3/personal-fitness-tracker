@@ -186,7 +186,7 @@ describe('StorageService migrations (fixture-driven)', () => {
       await firstValueFrom(service.initialize());
       const data = await firstValueFrom(service.getData());
 
-      expect(data?.schemaVersion).toBe(6);
+      expect(data?.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
       // Cardio + weight carried forward unchanged. Compare via JSON round-trip
       // to bypass the strict-TS narrowing on JSON-imported fixtures (the
       // imported type widens enums like CardioType to plain `string`).
@@ -214,7 +214,7 @@ describe('StorageService migrations (fixture-driven)', () => {
       await firstValueFrom(service.initialize());
       const data = await firstValueFrom(service.getData());
 
-      expect(data?.schemaVersion).toBe(6);
+      expect(data?.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
       // No fields drop, blocks survive intact.
       expect(data?.chatConversations[0].messages[0].blocks).toEqual([
         { type: 'text', text: 'Hi' },
@@ -230,7 +230,7 @@ describe('StorageService migrations (fixture-driven)', () => {
       await firstValueFrom(service.initialize());
       const data = await firstValueFrom(service.getData());
 
-      expect(data?.schemaVersion).toBe(6);
+      expect(data?.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
       const msg = data!.chatConversations[0].messages[0];
       expect(msg.blocks.length).toBe(1);
       const block = msg.blocks[0] as TextBlock;
@@ -267,7 +267,7 @@ describe('StorageService migrations (fixture-driven)', () => {
       await firstValueFrom(service.initialize());
       const data = await firstValueFrom(service.getData());
 
-      expect(data?.schemaVersion).toBe(6);
+      expect(data?.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
       const block = data!.chatConversations[0].messages[0].blocks[0] as TextBlock;
       expect(block.type).toBe('text');
       // 123 (number) → '123' (string). NEVER a non-string block.text.
@@ -280,7 +280,7 @@ describe('StorageService migrations (fixture-driven)', () => {
       await firstValueFrom(service.initialize());
       const data = await firstValueFrom(service.getData());
 
-      expect(data?.schemaVersion).toBe(6);
+      expect(data?.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
       const msg = data!.chatConversations[0].messages[0];
       expect(msg.tokenEstimate).toBe(0);
       // Content 'Hello' lifted into a single text block.
@@ -337,12 +337,12 @@ describe('StorageService migrations (fixture-driven)', () => {
       };
     }
 
-    it('a V5 store with text-only chat blocks loads unchanged at V6 (blocks + memory + settings preserved)', async () => {
+    it('a V5 store with text-only chat blocks loads unchanged at the current version (blocks + memory + settings preserved)', async () => {
       localStorageMock[STORAGE_KEY] = JSON.stringify(makeV5Store());
       await firstValueFrom(service.initialize());
       const data = await firstValueFrom(service.getData());
 
-      expect(data?.schemaVersion).toBe(6);
+      expect(data?.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
       // Chat blocks preserved verbatim — no citations injected, no blocks dropped.
       expect(data?.chatConversations.length).toBe(1);
       const conv = data!.chatConversations[0];
@@ -387,24 +387,45 @@ describe('StorageService migrations (fixture-driven)', () => {
       await firstValueFrom(service.initialize());
       const data = await firstValueFrom(service.getData());
 
-      expect(data?.schemaVersion).toBe(6);
+      expect(data?.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
       expect(data?.mealEntries).toEqual([]);
       // Other fields still preserved.
       expect(data?.chatConversations.length).toBe(1);
     });
 
-    it('a V6 store is idempotent (already current — no re-transform)', async () => {
+    it('a V6 store migrates up to the current version (V6 is no longer terminal after the Phase 2 V7 bump)', async () => {
       const v6 = makeV5Store() as Record<string, unknown>;
       v6['schemaVersion'] = 6;
       localStorageMock[STORAGE_KEY] = JSON.stringify(v6);
       await firstValueFrom(service.initialize());
       const data = await firstValueFrom(service.getData());
 
-      expect(data?.schemaVersion).toBe(6);
+      expect(data?.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
       expect(data?.chatConversations[0].messages[0].blocks).toEqual([
         { type: 'text', text: 'What is progressive overload?' },
       ]);
-      // A V6 store at-version skips migration ⇒ no backup written.
+      // A V6 store is below-version ⇒ the V6→V7 hop runs and writes a backup
+      // keyed at the FROM-version (v6). (Plan 02-02 owns the in-depth V6/V7
+      // fixture coverage; this asserts the chain reaches V7 cleanly.)
+      const backupKeys = Object.keys(localStorageMock).filter(k =>
+        k.startsWith(BACKUP_PREFIX),
+      );
+      expect(backupKeys.length).toBe(1);
+      expect(backupKeys[0]).toMatch(/\.backup\.v6\./);
+    });
+
+    it('a store already at the current version is idempotent (no re-transform, no backup)', async () => {
+      const current = makeV5Store() as Record<string, unknown>;
+      current['schemaVersion'] = CURRENT_SCHEMA_VERSION;
+      localStorageMock[STORAGE_KEY] = JSON.stringify(current);
+      await firstValueFrom(service.initialize());
+      const data = await firstValueFrom(service.getData());
+
+      expect(data?.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+      expect(data?.chatConversations[0].messages[0].blocks).toEqual([
+        { type: 'text', text: 'What is progressive overload?' },
+      ]);
+      // At-version skips migration ⇒ no backup written.
       const backupKeys = Object.keys(localStorageMock).filter(k =>
         k.startsWith(BACKUP_PREFIX),
       );

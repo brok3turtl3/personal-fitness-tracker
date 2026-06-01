@@ -17,6 +17,7 @@ import {
   LegacyAppDataV3,
   LegacyAppDataV4,
   LegacyAppDataV5,
+  LegacyAppDataV6,
   LegacySavedFoodV2,
 } from './legacy-schemas';
 
@@ -619,11 +620,15 @@ export class StorageService {
       ? this.migrateV4ToV5(v4)
       : (data as LegacyAppDataV5);
 
-    const v6: AppData = (fromVersion < 6)
+    const v6: LegacyAppDataV6 = (fromVersion < 6)
       ? this.migrateV5ToV6(v5)
+      : (data as LegacyAppDataV6);
+
+    const v7: AppData = (fromVersion < 7)
+      ? this.migrateV6ToV7(v6)
       : (data as AppData);
 
-    return v6;
+    return v7;
   }
 
   /**
@@ -774,7 +779,7 @@ export class StorageService {
    * un-migrated V5 chat loads unchanged with a pre-migration backup written by
    * the surrounding `initialize()` flow (backward compat).
    */
-  private migrateV5ToV6(data: LegacyAppDataV5): AppData {
+  private migrateV5ToV6(data: LegacyAppDataV5): LegacyAppDataV6 {
     return {
       schemaVersion: 6,
       cardioSessions: data.cardioSessions ?? [],
@@ -791,6 +796,64 @@ export class StorageService {
       lastModified: data.lastModified,
     };
   }
+
+  /**
+   * Migration from version 6 to version 7 (Phase 2, D-03/D-04/D-08).
+   *
+   * Additive + deterministic. The diet model widens (full mass+volume unit
+   * union, optional per-food `densityGramsPerMl`/`preferredUnits`, widened
+   * `MealItemSnapshot`, optional `AppData.dailyTargets`). Every existing field
+   * is carried through unchanged; `mealEntries` are byte-stable (snapshots are
+   * immutable — D-12). For each saved food, a legacy positive `gramsPerTbsp`
+   * with no `densityGramsPerMl` derives one via the US-customary tbsp constant
+   * (14.78676478125 ml/tbsp) so existing g↔tbsp foods keep converting — WITHOUT
+   * removing `gramsPerTbsp` or its tbsp serving. `dailyTargets` is left
+   * UNDEFINED (never `null`). Defensive `?? []` mirrors the V5→V6 template.
+   *
+   * NOTE: this hop is introduced in plan 02-01 to keep CURRENT_SCHEMA_VERSION=7
+   * and the migration chain consistent (the model widening + version bump are
+   * 02-01's scope). Plan 02-02 owns the dedicated V6/V7 fixtures + the malformed
+   * V6 matrix that exercise this transform in depth.
+   */
+  private migrateV6ToV7(data: LegacyAppDataV6): AppData {
+    return {
+      schemaVersion: 7,
+      cardioSessions: data.cardioSessions ?? [],
+      weightEntries: data.weightEntries ?? [],
+      healthReadings: data.healthReadings ?? [],
+      savedFoods: (data.savedFoods ?? []).map(migrateSavedFoodV6ToV7),
+      mealEntries: data.mealEntries ?? [], // BYTE-STABLE — snapshots immutable (D-12)
+      aiSettings: data.aiSettings,
+      chatConversations: data.chatConversations ?? [],
+      memoryFiles: data.memoryFiles ?? {},
+      userProfile: data.userProfile,
+      aiToolSettings: data.aiToolSettings,
+      // dailyTargets: leave UNDEFINED — never store null (set by the user later).
+      lastModified: data.lastModified,
+    };
+  }
+}
+
+/** US-customary millilitres per tablespoon — the legacy density bridge (A2). */
+const ML_PER_TBSP = 14.78676478125;
+
+/**
+ * V6 → V7 saved-food widening. Additive: keeps `baseUnit`, `gramsPerTbsp`,
+ * `servings`, and the legacy `fdcId` runtime extra intact; derives
+ * `densityGramsPerMl` from a positive finite `gramsPerTbsp` only when absent.
+ */
+function migrateSavedFoodV6ToV7(food: SavedFood): SavedFood {
+  const gpt = food.gramsPerTbsp;
+  const next: SavedFood = { ...food };
+  if (
+    next.densityGramsPerMl === undefined &&
+    typeof gpt === 'number' &&
+    Number.isFinite(gpt) &&
+    gpt > 0
+  ) {
+    next.densityGramsPerMl = gpt / ML_PER_TBSP;
+  }
+  return next;
 }
 
 /**
