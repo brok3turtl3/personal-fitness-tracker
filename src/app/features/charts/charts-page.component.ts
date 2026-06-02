@@ -16,12 +16,14 @@ import {
   KetoneReading,
   READING_TYPES
 } from '../../models/health-reading.model';
+import { MealEntry } from '../../models/diet.model';
 import { WeightEntry } from '../../models/weight-entry.model';
 import { CardioService } from '../../services/cardio.service';
+import { DietService } from '../../services/diet.service';
 import { ReadingsService } from '../../services/readings.service';
 import { StorageService } from '../../services/storage.service';
 import { WeightService } from '../../services/weight.service';
-import { groupByDay, toDateKey, round2 } from '../../shared/chart-grouping';
+import { groupByDay, sumByDay, toDateKey, round2 } from '../../shared/chart-grouping';
 import { DateRangePreset, filterByRange, resolveDateRange } from '../../shared/date-range';
 import { EmptyStateComponent } from '../../shared/empty-state.component';
 import { ErrorStateComponent } from '../../shared/error-state.component';
@@ -130,6 +132,34 @@ import { ErrorStateComponent } from '../../shared/error-state.component';
               </select>
             </div>
           </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Diet metrics</label>
+              <div class="inline-controls" role="group" aria-label="Select diet metrics">
+                <label class="checkbox">
+                  <input type="checkbox" formControlName="dietShowCalories" (change)="onControlsChanged()" aria-label="Show diet calories">
+                  Calories
+                </label>
+                <label class="checkbox">
+                  <input type="checkbox" formControlName="dietShowProtein" (change)="onControlsChanged()" aria-label="Show protein">
+                  Protein
+                </label>
+                <label class="checkbox">
+                  <input type="checkbox" formControlName="dietShowFat" (change)="onControlsChanged()" aria-label="Show fat">
+                  Fat
+                </label>
+                <label class="checkbox">
+                  <input type="checkbox" formControlName="dietShowCarbs" (change)="onControlsChanged()" aria-label="Show carbs">
+                  Carbs
+                </label>
+                <label class="checkbox">
+                  <input type="checkbox" formControlName="dietShowNetCarbs" (change)="onControlsChanged()" aria-label="Show net carbs">
+                  Net carbs
+                </label>
+              </div>
+            </div>
+          </div>
         </form>
       </section>
 
@@ -171,6 +201,20 @@ import { ErrorStateComponent } from '../../shared/error-state.component';
           <app-empty-state
             title="No readings in this range"
             message="Try a wider range or add more entries."
+          ></app-empty-state>
+        }
+      </section>
+
+      <section class="chart-section" aria-label="Diet chart">
+        <h2>Diet</h2>
+        @if (dietChartData.labels?.length) {
+          <div class="chart-container">
+            <canvas baseChart [type]="'line'" [data]="dietChartData" [options]="dietOptions"></canvas>
+          </div>
+        } @else {
+          <app-empty-state
+            title="No diet data in this range"
+            message="Log some meals or widen the date range to see calories and macros over time."
           ></app-empty-state>
         }
       </section>
@@ -281,6 +325,7 @@ export class ChartsPageComponent implements OnInit {
   weightChartData: ChartData<'line'> = { labels: [], datasets: [] };
   cardioChartData: ChartData<'line'> = { labels: [], datasets: [] };
   readingsChartData: ChartData<'line'> = { labels: [], datasets: [] };
+  dietChartData: ChartData<'line'> = { labels: [], datasets: [] };
 
   lineOptions: ChartConfiguration<'line'>['options'] = {
     responsive: true,
@@ -300,9 +345,20 @@ export class ChartsPageComponent implements OnInit {
     }
   };
 
+  dietOptions: ChartConfiguration<'line'>['options'] = {
+    ...this.lineOptions,
+    scales: {
+      y: {
+        position: 'left',
+        title: { display: true, text: 'Calories (kcal)' }
+      }
+    }
+  };
+
   private cardioSessions: CardioSession[] = [];
   private weightEntries: WeightEntry[] = [];
   private healthReadings: HealthReading[] = [];
+  private mealEntries: MealEntry[] = [];
 
   constructor(
     private fb: FormBuilder,
@@ -310,7 +366,8 @@ export class ChartsPageComponent implements OnInit {
     private storageService: StorageService,
     private cardioService: CardioService,
     private weightService: WeightService,
-    private readingsService: ReadingsService
+    private readingsService: ReadingsService,
+    private dietService: DietService
   ) {
     this.controlsForm = this.fb.group({
       rangePreset: ['30d' as DateRangePreset, Validators.required],
@@ -318,7 +375,12 @@ export class ChartsPageComponent implements OnInit {
       customEnd: [''],
       cardioShowDistance: [false],
       cardioShowCalories: [false],
-      readingType: ['blood_pressure' as HealthReadingType, Validators.required]
+      readingType: ['blood_pressure' as HealthReadingType, Validators.required],
+      dietShowCalories: [false],
+      dietShowProtein: [false],
+      dietShowFat: [false],
+      dietShowCarbs: [false],
+      dietShowNetCarbs: [false]
     });
   }
 
@@ -370,14 +432,19 @@ export class ChartsPageComponent implements OnInit {
     forkJoin({
       cardio: this.cardioService.getSessions(),
       weight: this.weightService.getEntries(),
-      readings: this.readingsService.getReadings()
+      readings: this.readingsService.getReadings(),
+      // Fetch every meal once (full open range); buildDietChart re-applies the
+      // resolved date-range via filterByRange on each control change, mirroring
+      // the cardio/weight path so changing the range never re-queries storage.
+      diet: this.dietService.getMealsInRange(0, Date.now())
     })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: ({ cardio, weight, readings }) => {
+        next: ({ cardio, weight, readings, diet }) => {
           this.cardioSessions = cardio;
           this.weightEntries = weight;
           this.healthReadings = readings;
+          this.mealEntries = diet;
           this.rebuildCharts();
         },
         error: () => {
@@ -400,6 +467,7 @@ export class ChartsPageComponent implements OnInit {
     this.buildWeightChart(range);
     this.buildCardioChart(range);
     this.buildReadingsChart(range);
+    this.buildDietChart(range);
   }
 
   private buildWeightChart(range: { startMs?: number; endMs?: number }): void {
@@ -593,6 +661,133 @@ export class ChartsPageComponent implements OnInit {
     };
   }
 
+  private buildDietChart(range: { startMs?: number; endMs?: number }): void {
+    const showCalories = !!this.controlsForm.get('dietShowCalories')?.value;
+    const showProtein = !!this.controlsForm.get('dietShowProtein')?.value;
+    const showFat = !!this.controlsForm.get('dietShowFat')?.value;
+    const showCarbs = !!this.controlsForm.get('dietShowCarbs')?.value;
+    const showNetCarbs = !!this.controlsForm.get('dietShowNetCarbs')?.value;
+
+    // Range-filter consistently with the cardio/weight path (filterByRange),
+    // then SUM per LOCAL day via sumByDay keyed on dateTime (D-11). NEVER
+    // groupByDay — averaging would halve a multi-meal day (RESEARCH Pitfall 2).
+    const filtered = filterByRange(
+      this.mealEntries,
+      m => new Date(m.dateTime).getTime(),
+      range
+    );
+
+    const { labels, values } = sumByDay(
+      filtered,
+      m => m.dateTime,
+      m => [
+        m.totals.caloriesKcal,
+        m.totals.proteinG,
+        m.totals.fatG,
+        m.totals.carbsG,
+        m.totals.netCarbsG
+      ]
+    );
+
+    const displayLabels = labels.map(d => this.formatShortDate(d));
+
+    // Column indices match the extractor order above.
+    const calories = values.map(v => v[0]);
+    const protein = values.map(v => v[1]);
+    const fat = values.map(v => v[2]);
+    const carbs = values.map(v => v[3]);
+    const netCarbs = values.map(v => v[4]);
+
+    const datasets: ChartData<'line'>['datasets'] = [];
+
+    if (labels.length && showCalories) {
+      datasets.push({
+        data: calories,
+        label: 'Calories (kcal)',
+        borderColor: '#e67e22',
+        backgroundColor: 'rgba(230, 126, 34, 0.12)',
+        pointRadius: 2,
+        tension: 0.25,
+        yAxisID: 'y'
+      });
+    }
+
+    if (labels.length && showProtein) {
+      datasets.push({
+        data: protein,
+        label: 'Protein (g)',
+        borderColor: '#16a085',
+        backgroundColor: 'rgba(22, 160, 133, 0.12)',
+        pointRadius: 2,
+        tension: 0.25,
+        yAxisID: 'y1'
+      });
+    }
+
+    if (labels.length && showFat) {
+      datasets.push({
+        data: fat,
+        label: 'Fat (g)',
+        borderColor: '#f1c40f',
+        backgroundColor: 'rgba(241, 196, 15, 0.12)',
+        pointRadius: 2,
+        tension: 0.25,
+        yAxisID: 'y1'
+      });
+    }
+
+    if (labels.length && showCarbs) {
+      datasets.push({
+        data: carbs,
+        label: 'Carbs (g)',
+        borderColor: '#8e44ad',
+        backgroundColor: 'rgba(142, 68, 173, 0.12)',
+        pointRadius: 2,
+        tension: 0.25,
+        yAxisID: 'y1'
+      });
+    }
+
+    if (labels.length && showNetCarbs) {
+      datasets.push({
+        data: netCarbs,
+        label: 'Net carbs (g)',
+        borderColor: '#c0392b',
+        backgroundColor: 'rgba(192, 57, 43, 0.12)',
+        borderDash: [4, 4],
+        pointRadius: 2,
+        tension: 0.25,
+        yAxisID: 'y1'
+      });
+    }
+
+    const showMacros = showProtein || showFat || showCarbs || showNetCarbs;
+
+    this.dietOptions = {
+      ...this.lineOptions,
+      scales: {
+        y: {
+          position: 'left',
+          title: { display: true, text: 'Calories (kcal)' }
+        },
+        ...(showMacros
+          ? {
+              y1: {
+                position: 'right',
+                grid: { drawOnChartArea: false },
+                title: { display: true, text: 'Macros (g)' }
+              }
+            }
+          : {})
+      }
+    };
+
+    this.dietChartData = {
+      labels: datasets.length ? displayLabels : [],
+      datasets
+    };
+  }
+
   private parseLocalDateTime(value: unknown): Date | null {
     if (typeof value !== 'string' || value.trim() === '') return null;
     const d = new Date(value);
@@ -600,7 +795,16 @@ export class ChartsPageComponent implements OnInit {
   }
 
   private formatShortDate(isoString: string): string {
-    const d = new Date(isoString);
+    // A bare `YYYY-MM-DD` (the local-day KEY produced by toDateKey via
+    // sumByDay/groupByDay) must be parsed in LOCAL time, not UTC. `new
+    // Date('2026-03-08')` is spec'd to parse as UTC midnight, which then renders
+    // a day early in any UTC-negative timezone — the exact DST/TZ label drift
+    // DIET-08/D-11 forbids. Re-key bare date strings to local midnight; full ISO
+    // timestamps (with a time component) keep their original parsing.
+    const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoString);
+    const d = dateOnly
+      ? new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]))
+      : new Date(isoString);
     if (!Number.isFinite(d.getTime())) return '';
     return d.toLocaleDateString('en-US', {
       month: 'short',

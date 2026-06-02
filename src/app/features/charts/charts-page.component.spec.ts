@@ -23,12 +23,14 @@ import { CardioService } from '../../services/cardio.service';
 import { WeightService } from '../../services/weight.service';
 import { ReadingsService } from '../../services/readings.service';
 import { StorageService } from '../../services/storage.service';
+import { DietService } from '../../services/diet.service';
 import {
   BloodPressureReading,
   HealthReading,
 } from '../../models/health-reading.model';
 import { CardioSession } from '../../models/cardio-session.model';
 import { WeightEntry } from '../../models/weight-entry.model';
+import { MealEntry, NutritionTotals } from '../../models/diet.model';
 import { expectNoSeriousA11yViolations } from '../../shared/a11y-test-helpers';
 
 // ---------------------------------------------------------------------------
@@ -89,6 +91,39 @@ function createWeightEntry(overrides: Partial<WeightEntry> = {}): WeightEntry {
   };
 }
 
+function createTotals(overrides: Partial<NutritionTotals> = {}): NutritionTotals {
+  return {
+    caloriesKcal: 0,
+    proteinG: 0,
+    fatG: 0,
+    carbsG: 0,
+    fiberG: 0,
+    sugarG: 0,
+    sodiumMg: 0,
+    netCarbsG: 0,
+    ...overrides,
+  };
+}
+
+/**
+ * Build a minimal MealEntry whose `totals` carry the macro values under test.
+ * The diet chart only reads `dateTime` + `totals.*`, so `items` stays empty.
+ */
+function createMeal(
+  id: string,
+  dateTime: string,
+  totals: Partial<NutritionTotals>,
+): MealEntry {
+  return {
+    id,
+    dateTime,
+    items: [],
+    totals: createTotals(totals),
+    createdAt: dateTime,
+    updatedAt: dateTime,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Spies + TestBed configuration.
 // ---------------------------------------------------------------------------
@@ -98,6 +133,7 @@ interface ChartsSpies {
   weightService: jasmine.SpyObj<WeightService>;
   readingsService: jasmine.SpyObj<ReadingsService>;
   storageService: jasmine.SpyObj<StorageService>;
+  dietService: jasmine.SpyObj<DietService>;
   router: jasmine.SpyObj<Router>;
 }
 
@@ -105,6 +141,7 @@ function makeSpies(opts: {
   cardio?: CardioSession[];
   weight?: WeightEntry[];
   readings?: HealthReading[];
+  meals?: MealEntry[];
 } = {}): ChartsSpies {
   const cardioService = jasmine.createSpyObj<CardioService>('CardioService', [
     'getSessions', 'addSession', 'getSession', 'deleteSession',
@@ -127,10 +164,17 @@ function makeSpies(opts: {
   ]);
   storageService.initialize.and.returnValue(of(undefined));
 
+  const dietService = jasmine.createSpyObj<DietService>('DietService', [
+    'getMealsInRange',
+  ]);
+  // The component fetches the full open range once (0, Date.now()) and
+  // re-applies the date-range via filterByRange on each rebuild.
+  dietService.getMealsInRange.and.returnValue(of(opts.meals ?? []));
+
   const router = jasmine.createSpyObj<Router>('Router', ['navigate']);
   router.navigate.and.returnValue(Promise.resolve(true));
 
-  return { cardioService, weightService, readingsService, storageService, router };
+  return { cardioService, weightService, readingsService, storageService, dietService, router };
 }
 
 async function configureBed(spies: ChartsSpies): Promise<void> {
@@ -143,6 +187,7 @@ async function configureBed(spies: ChartsSpies): Promise<void> {
       { provide: WeightService, useValue: spies.weightService },
       { provide: ReadingsService, useValue: spies.readingsService },
       { provide: StorageService, useValue: spies.storageService },
+      { provide: DietService, useValue: spies.dietService },
       { provide: Router, useValue: spies.router },
     ],
   }).compileComponents();
@@ -264,5 +309,120 @@ describe('ChartsPageComponent (characterization)', () => {
     // Assert: structural a11y AND contrast. The Phase 1 D-13 contrast deferral is
     // LIFTED here (QUAL-08) — axe contrast checking is now enforced.
     await expectNoSeriousA11yViolations(fixture.nativeElement);
+  });
+
+  // -------------------------------------------------------------------------
+  // Diet series (02-05): calories + toggleable macros, SUM-per-local-day.
+  // -------------------------------------------------------------------------
+
+  it('should SUM (not average) two meals on the same local day for calories (DIET-08)', async () => {
+    // Arrange: two meals on the SAME local calendar day, within the 30d window.
+    const day = dateInPast(2);
+    const morning = new Date(day);
+    morning.setHours(8, 0, 0, 0);
+    const evening = new Date(day);
+    evening.setHours(19, 0, 0, 0);
+
+    const meals: MealEntry[] = [
+      createMeal('m-am', morning.toISOString(), { caloriesKcal: 400, proteinG: 30 }),
+      createMeal('m-pm', evening.toISOString(), { caloriesKcal: 600, proteinG: 20 }),
+    ];
+    const spies = makeSpies({ meals });
+    await configureBed(spies);
+
+    const fixture = TestBed.createComponent(ChartsPageComponent);
+    fixture.detectChanges();
+
+    // Enable the calories series (default off, mirroring cardio).
+    fixture.componentInstance.controlsForm.patchValue({ dietShowCalories: true });
+    fixture.componentInstance.onControlsChanged();
+    fixture.detectChanges();
+
+    const data = fixture.componentInstance.dietChartData;
+    // ONE label (one local day), calories = SUM (1000), not the average (500).
+    expect(data.labels?.length).toBe(1);
+    const caloriesSet = data.datasets.find(d => d.label === 'Calories (kcal)');
+    expect(caloriesSet).toBeTruthy();
+    expect((caloriesSet!.data as number[])[0]).toBe(1000);
+  });
+
+  it('should add/remove the protein dataset as dietShowProtein toggles', async () => {
+    const meals: MealEntry[] = [
+      createMeal('m-1', dateInPast(2).toISOString(), { caloriesKcal: 500, proteinG: 40 }),
+    ];
+    const spies = makeSpies({ meals });
+    await configureBed(spies);
+
+    const fixture = TestBed.createComponent(ChartsPageComponent);
+    fixture.detectChanges();
+
+    // Off by default → no protein dataset.
+    expect(
+      fixture.componentInstance.dietChartData.datasets.some(d => d.label === 'Protein (g)'),
+    ).toBeFalse();
+
+    // Toggle on → protein dataset present with the summed value.
+    fixture.componentInstance.controlsForm.patchValue({ dietShowProtein: true });
+    fixture.componentInstance.onControlsChanged();
+    fixture.detectChanges();
+    const proteinSet = fixture.componentInstance.dietChartData.datasets.find(
+      d => d.label === 'Protein (g)',
+    );
+    expect(proteinSet).toBeTruthy();
+    expect((proteinSet!.data as number[])[0]).toBe(40);
+
+    // Toggle off → protein dataset removed.
+    fixture.componentInstance.controlsForm.patchValue({ dietShowProtein: false });
+    fixture.componentInstance.onControlsChanged();
+    fixture.detectChanges();
+    expect(
+      fixture.componentInstance.dietChartData.datasets.some(d => d.label === 'Protein (g)'),
+    ).toBeFalse();
+  });
+
+  it('should bucket a 23:30-local meal on a spring-forward date to the correct local day (DIET-08, D-11)', async () => {
+    // 2026-03-08 is US spring-forward. A 23:30 LOCAL meal must key to 2026-03-08
+    // (local day), not roll to 03-09 via a UTC-based bucketer. Build the ISO from
+    // local components so the assertion is timezone-agnostic for the runner.
+    const local = new Date(2026, 2, 8, 23, 30, 0, 0); // month 2 = March
+    const meals: MealEntry[] = [
+      createMeal('m-dst', local.toISOString(), { caloriesKcal: 700 }),
+    ];
+    const spies = makeSpies({ meals });
+    await configureBed(spies);
+
+    const fixture = TestBed.createComponent(ChartsPageComponent);
+    fixture.detectChanges();
+
+    // Use the 'all' preset so the 2026-03-08 meal is in range regardless of "today".
+    fixture.componentInstance.controlsForm.patchValue({
+      rangePreset: 'all',
+      dietShowCalories: true,
+    });
+    fixture.componentInstance.onControlsChanged();
+    fixture.detectChanges();
+
+    const data = fixture.componentInstance.dietChartData;
+    expect(data.labels?.length).toBe(1);
+    // The formatted short-date label is derived from the local-day key 2026-03-08.
+    const expectedLabel = new Date(2026, 2, 8).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: '2-digit',
+    });
+    expect((data.labels as string[])[0]).toBe(expectedLabel);
+  });
+
+  it('should show the diet empty-state when no meals fall in range', async () => {
+    const spies = makeSpies({ meals: [] });
+    await configureBed(spies);
+
+    const fixture = TestBed.createComponent(ChartsPageComponent);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const dietSection = compiled.querySelector('section[aria-label="Diet chart"]');
+    expect(dietSection).toBeTruthy();
+    expect(dietSection!.querySelector('app-empty-state')).toBeTruthy();
   });
 });
