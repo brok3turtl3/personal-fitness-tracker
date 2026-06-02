@@ -53,6 +53,28 @@ describe('chart-grouping', () => {
       );
       expect(averages).toEqual([[15, 150]]);
     });
+
+    it('WR-02: does not throw or emit NaN for an empty/ragged extractor row', () => {
+      const dayA = new Date(2026, 4, 2, 8, 0, 0).toISOString();
+      const dayB = new Date(2026, 4, 2, 20, 0, 0).toISOString();
+      // First row is empty, later rows ragged/non-finite — must not crash and
+      // must coerce non-finite contributions to 0.
+      const empties = groupByDay(
+        [{ date: dayA, v: 1 }, { date: dayB, v: 2 }],
+        () => [],
+      );
+      expect(empties.labels).toEqual(['2026-05-02']);
+      expect(empties.averages).toEqual([[]]);
+
+      const ragged = groupByDay(
+        [{ date: dayA, v: 10 }, { date: dayB, v: 20 }],
+        // second item is "shorter" (vals[1] === undefined) -> coerced to 0
+        (r: { date: string; v: number }) => (r.v === 10 ? [r.v, r.v] : [r.v]),
+      );
+      // field 0: (10 + 20) / 2 = 15; field 1: (10 + 0) / 2 = 5 — no NaN.
+      expect(ragged.averages).toEqual([[15, 5]]);
+      expect(ragged.averages[0].every(Number.isFinite)).toBeTrue();
+    });
   });
 
   describe('sumByDay', () => {

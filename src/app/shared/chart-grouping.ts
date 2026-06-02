@@ -41,10 +41,10 @@ export function groupByDay<T extends { date: string }>(
 
   for (const key of sortedKeys) {
     const group = map.get(key)!;
-    const fieldCount = group[0].length;
+    const fieldCount = group[0]?.length ?? 0;
     const avg: number[] = [];
     for (let i = 0; i < fieldCount; i++) {
-      const sum = group.reduce((s, vals) => s + vals[i], 0);
+      const sum = group.reduce((s, vals) => s + (Number.isFinite(vals[i]) ? vals[i] : 0), 0);
       avg.push(sum / group.length);
     }
     labels.push(key);
@@ -86,10 +86,10 @@ export function sumByDay<T>(
 
   for (const key of sortedKeys) {
     const group = map.get(key)!;
-    const fieldCount = group[0].length;
+    const fieldCount = group[0]?.length ?? 0;
     const sums: number[] = [];
     for (let i = 0; i < fieldCount; i++) {
-      const sum = group.reduce((s, vals) => s + vals[i], 0);
+      const sum = group.reduce((s, vals) => s + (Number.isFinite(vals[i]) ? vals[i] : 0), 0);
       sums.push(round2(sum));
     }
     labels.push(key);
