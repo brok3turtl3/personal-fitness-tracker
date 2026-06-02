@@ -442,6 +442,39 @@ describe('DietPageComponent (characterization)', () => {
     // (gated on effectiveDensity, not the absent raw densityGramsPerMl).
     expect(cmp.servingUnitOptions(oil)).toContain('ml');
   });
+
+  it('WR-01: should block the save (not silently drop) when a serving-less pending item is mixed with a valid one', async () => {
+    // Arrange: a valid food + an already-staged serving-less pending item
+    // (as onQuickAdd stages: servingId: '').
+    const food = createValidSavedFood();
+    const spies = makeSpies({ savedFoods: [food], meals: [] });
+    await configureBed(spies);
+
+    const fixture = TestBed.createComponent(DietPageComponent);
+    fixture.detectChanges();
+    const cmp = fixture.componentInstance;
+
+    // One valid item via the normal flow...
+    cmp.selectFood(food);
+    cmp.mealItemForm.patchValue({ servingId: 'serv-1', quantity: 1 });
+    cmp.onAddMealItem();
+    // ...plus a serving-less quick-add-style pending item.
+    cmp.pendingItems = [
+      ...cmp.pendingItems,
+      { savedFoodId: food.id, servingId: '', quantity: 1, label: 'Quick add x1 g', preview: emptyTotals() },
+    ];
+    fixture.detectChanges();
+
+    // Act: attempt to save the meal.
+    cmp.onAddMeal();
+    fixture.detectChanges();
+
+    // Assert: save was BLOCKED with an error — addMeal never called, nothing dropped silently.
+    expect(spies.dietService.addMeal).not.toHaveBeenCalled();
+    expect(cmp.mealError).toBeTruthy();
+    expect(cmp.pendingItems.length).toBe(2);
+  });
+
   it('should have no serious or critical axe-core violations on initial load', async () => {
     // Arrange: render the steady-state happy path (a few foods + meals)
     // so axe sees the realistic surface.

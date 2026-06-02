@@ -1347,7 +1347,11 @@ export class DietPageComponent implements OnInit {
       .filter(i => i.servingId)
       .map(i => ({ savedFoodId: i.savedFoodId, servingId: i.servingId, quantity: i.quantity }));
 
-    if (items.length === 0) {
+    // WR-01: never silently discard a serving-less pending item. If ANY item
+    // lacks a serving, block the save with a clear message instead of letting
+    // the filter drop it (which would diverge live totals from the saved meal).
+    const droppedCount = this.pendingItems.length - items.length;
+    if (items.length === 0 || droppedCount > 0) {
       this.mealError = 'Pick a serving for each item before saving.';
       return;
     }
