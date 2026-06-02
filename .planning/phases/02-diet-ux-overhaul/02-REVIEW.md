@@ -29,7 +29,8 @@ findings:
   warning: 7
   info: 6
   total: 14
-status: issues_found
+status: resolved_in_scope
+resolution: "CR-01 + WR-01/02/04/07 fixed with regression tests (commits 656454f, ed5bb24, 890525c, f8cd638, 9d774d0); 842/842 green, build exit 0. WR-03 confirmed intended (live-preview semantics). WR-05/WR-06 + IN-01/03/05/06 deferred to todo 2026-06-02-diet-edit-form-density-desync-and-deferred-review-items.md. IN-02/IN-04 closed as a side effect of the CR-01 consolidation into units.ts."
 ---
 
 # Phase 2: Code Review Report
