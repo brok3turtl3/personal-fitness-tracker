@@ -35,6 +35,14 @@ const DIMENSION: Record<MeasuredUnit, Dimension> = {
   cup: 'volume',
 };
 
+/**
+ * US-customary millilitres per tablespoon — the SINGLE source of truth for the
+ * legacy `gramsPerTbsp → densityGramsPerMl` bridge. Mirrors `TO_CANONICAL.tbsp`
+ * and is re-exported so `diet.service.ts` / `storage.service.ts` derive density
+ * from one constant rather than hand-copied literals (was duplicated 3×).
+ */
+export const ML_PER_TBSP = 14.78676478125;
+
 /** Canonical units: grams for mass, millilitres for volume (US customary). */
 const TO_CANONICAL: Record<MeasuredUnit, number> = {
   g: 1,
@@ -42,7 +50,7 @@ const TO_CANONICAL: Record<MeasuredUnit, number> = {
   lb: 453.59237,
   ml: 1,
   tsp: 4.92892159375,
-  tbsp: 14.78676478125,
+  tbsp: ML_PER_TBSP,
   cup: 236.5882365,
 };
 
@@ -52,6 +60,53 @@ export class UnitConversionError extends Error {}
 /** True for the physical measured units; false for named-serving labels. */
 export function isMeasuredUnit(u: string): u is MeasuredUnit {
   return Object.prototype.hasOwnProperty.call(DIMENSION, u);
+}
+
+/** The authoritative dimension ('mass' | 'volume') of a measured unit. */
+export function dimensionOf(u: MeasuredUnit): Dimension {
+  return DIMENSION[u];
+}
+
+/**
+ * True when both measured units share a dimension (mass↔mass or volume↔volume),
+ * i.e. can convert WITHOUT a density. Single source of truth over `DIMENSION`;
+ * consumers (e.g. the diet page's serving-unit gating) must not re-partition the
+ * unit set themselves (CLAUDE.md: unit-domain logic lives here, not in the UI).
+ */
+export function sameDimension(a: MeasuredUnit, b: MeasuredUnit): boolean {
+  return DIMENSION[a] === DIMENSION[b];
+}
+
+/**
+ * Minimal structural shape for density resolution. Deliberately NOT the
+ * `SavedFood` model — `units.ts` stays model-free to avoid a circular import
+ * (diet.service.ts → units.ts), so callers pass just the two density-bearing
+ * fields.
+ */
+export interface DensityBearing {
+  densityGramsPerMl?: number;
+  gramsPerTbsp?: number;
+}
+
+/**
+ * Resolve a food's effective per-food density (g/ml) — the SINGLE source of
+ * truth shared by `DietService` and the diet-page component.
+ *
+ * Prefers an explicit positive-finite `densityGramsPerMl`; else derives one from
+ * a positive-finite legacy `gramsPerTbsp` via `ML_PER_TBSP` (mirrors the V6→V7
+ * migration so in-memory pre-migration data still converts); else `undefined`.
+ * NEVER returns a global default density (DIET-03 / D-04).
+ */
+export function effectiveDensity(food: DensityBearing): number | undefined {
+  const explicit = food.densityGramsPerMl;
+  if (explicit !== undefined && Number.isFinite(explicit) && explicit > 0) {
+    return explicit;
+  }
+  const gpt = food.gramsPerTbsp;
+  if (gpt !== undefined && Number.isFinite(gpt) && gpt > 0) {
+    return gpt / ML_PER_TBSP;
+  }
+  return undefined;
 }
 
 /** Defensive numeric idiom (diet.service.ts:438-440): non-finite → 0. */

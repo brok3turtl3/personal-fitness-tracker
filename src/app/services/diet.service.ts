@@ -16,6 +16,7 @@ import {
 } from '../models/diet.model';
 import {
   convertMeasured,
+  effectiveDensity,
   isMeasuredUnit,
   UnitConversionError
 } from './units';
@@ -597,28 +598,6 @@ function defaultServingsFor(baseUnit: FoodUnit, gramsPerTbsp?: number): SavedFoo
     servings.push({ id: generateId(), label: '100 g', unit: 'g', amount: 100 });
   }
   return servings;
-}
-
-/** ml per tablespoon — the canonical factor units.ts uses (for legacy derivation). */
-const ML_PER_TBSP = 14.78676478125;
-
-/**
- * Resolve a food's effective per-food density (g/ml).
- *
- * Prefers the explicit `densityGramsPerMl`; for legacy foods that only carry a
- * positive `gramsPerTbsp`, derive `density = gramsPerTbsp / ML_PER_TBSP` (mirrors
- * the V6→V7 migration so in-memory pre-migration data still converts). Returns
- * `undefined` when neither is usable — NEVER a global default (DIET-03 / D-04).
- */
-function effectiveDensity(food: SavedFood): number | undefined {
-  if (food.densityGramsPerMl !== undefined && Number.isFinite(food.densityGramsPerMl) && food.densityGramsPerMl > 0) {
-    return food.densityGramsPerMl;
-  }
-  const gpt = food.gramsPerTbsp;
-  if (gpt !== undefined && Number.isFinite(gpt) && gpt > 0) {
-    return gpt / ML_PER_TBSP;
-  }
-  return undefined;
 }
 
 /**

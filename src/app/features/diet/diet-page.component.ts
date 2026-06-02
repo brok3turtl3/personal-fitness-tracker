@@ -7,7 +7,7 @@ import { StorageService } from '../../services/storage.service';
 import { DietService, DietValidationError, scaleFoodTotals, sumTotals } from '../../services/diet.service';
 import { DailyTargets, FoodUnit, MealEntry, MealType, NutritionTotals, SavedFood, SavedFoodServing } from '../../models/diet.model';
 import { filterFoods, rankFoods, recentFoods } from '../../services/food-ranking';
-import { MeasuredUnit, isMeasuredUnit, toBaseUnits, UnitConversionError } from '../../services/units';
+import { MeasuredUnit, effectiveDensity, isMeasuredUnit, sameDimension, toBaseUnits, UnitConversionError } from '../../services/units';
 import { EmptyStateComponent } from '../../shared/empty-state.component';
 import { ErrorStateComponent } from '../../shared/error-state.component';
 
@@ -1096,7 +1096,11 @@ export class DietPageComponent implements OnInit {
   servingUnitOptions(food: SavedFood): MeasuredUnit[] {
     const base = food.baseUnit;
     if (!isMeasuredUnit(base)) return [base as MeasuredUnit];
-    if (food.densityGramsPerMl && Number.isFinite(food.densityGramsPerMl) && food.densityGramsPerMl > 0) {
+    // Gate cross-dimension units on the EFFECTIVE density (honors a legacy
+    // gramsPerTbsp-only food) so the picker offers exactly what the service can
+    // convert. `sameDimension` is the authoritative units.ts partition (no
+    // hardcoded mass set in the UI — CLAUDE.md: unit logic lives in the domain).
+    if (effectiveDensity(food) !== undefined) {
       return this.measuredUnits;
     }
     return this.measuredUnits.filter(u => sameDimension(u, base as MeasuredUnit));
@@ -1297,10 +1301,15 @@ export class DietPageComponent implements OnInit {
     if (!serving) return;
 
     const usedUnits = serving.amount * quantity;
+    // Resolve density via the SHARED effectiveDensity (honors legacy
+    // gramsPerTbsp) so the preview converts identically to DietService's persist
+    // path — preventing the preview from throwing on a legacy g-base food whose
+    // only density bridge is gramsPerTbsp (CR-01).
+    const density = effectiveDensity(food);
     let baseUnits = 0;
     try {
       baseUnits = isMeasuredUnit(serving.unit) && isMeasuredUnit(food.baseUnit)
-        ? toBaseUnits(serving.unit as MeasuredUnit, usedUnits, food.baseUnit as MeasuredUnit, food.densityGramsPerMl)
+        ? toBaseUnits(serving.unit as MeasuredUnit, usedUnits, food.baseUnit as MeasuredUnit, density)
         : usedUnits;
     } catch (e) {
       this.mealError = e instanceof UnitConversionError
@@ -1706,10 +1715,4 @@ function emptyTotals(): NutritionTotals {
     sodiumMg: 0,
     netCarbsG: 0
   };
-}
-
-const MASS_UNITS: ReadonlySet<string> = new Set(['g', 'oz', 'lb']);
-
-function sameDimension(a: MeasuredUnit, b: MeasuredUnit): boolean {
-  return MASS_UNITS.has(a) === MASS_UNITS.has(b);
 }

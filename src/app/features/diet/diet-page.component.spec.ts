@@ -401,6 +401,47 @@ describe('DietPageComponent (characterization)', () => {
     expect(rowText).not.toContain('999');
   });
 
+  it('CR-01: should preview (not throw) a tbsp serving on a legacy g-base food carrying only gramsPerTbsp, matching the service conversion', async () => {
+    // Arrange: a legacy g-base oil with NO explicit densityGramsPerMl, only the
+    // legacy gramsPerTbsp bridge, and a cross-dimension `tbsp` serving. Before
+    // CR-01 the preview passed `food.densityGramsPerMl` (undefined) straight to
+    // toBaseUnits → UnitConversionError → "needs a density" → add blocked.
+    const gramsPerTbsp = 13.5; // ~olive oil
+    const oil = createValidSavedFood({
+      id: 'oil-1',
+      name: 'Olive oil (legacy)',
+      baseUnit: 'g',
+      gramsPerTbsp,
+      densityGramsPerMl: undefined,
+      nutrientsPerUnit: { ...emptyTotals(), caloriesKcal: 8.84 }, // per gram
+      servings: [{ id: 'oil-tbsp', label: '1 tbsp', unit: 'tbsp', amount: 1 }],
+    });
+    const spies = makeSpies({ savedFoods: [oil], meals: [] });
+    await configureBed(spies);
+
+    const fixture = TestBed.createComponent(DietPageComponent);
+    fixture.detectChanges();
+    const cmp = fixture.componentInstance;
+
+    // Act: select the legacy food, choose its tbsp serving, add to the meal.
+    cmp.selectFood(oil);
+    cmp.mealItemForm.patchValue({ servingId: 'oil-tbsp', quantity: 1 });
+    cmp.onAddMealItem();
+    fixture.detectChanges();
+
+    // Assert: the add succeeded (no density error, item staged).
+    expect(cmp.mealError).toBeNull();
+    expect(cmp.pendingItems.length).toBe(1);
+
+    // The preview must match what DietService persists: 1 tbsp → gramsPerTbsp
+    // grams (derived density round-trips exactly through ML_PER_TBSP), so
+    // calories = gramsPerTbsp * 8.84.
+    expect(cmp.pendingItems[0].preview.caloriesKcal).toBeCloseTo(gramsPerTbsp * 8.84, 6);
+
+    // And the serving-unit picker offers cross-dimension units for this food
+    // (gated on effectiveDensity, not the absent raw densityGramsPerMl).
+    expect(cmp.servingUnitOptions(oil)).toContain('ml');
+  });
   it('should have no serious or critical axe-core violations on initial load', async () => {
     // Arrange: render the steady-state happy path (a few foods + meals)
     // so axe sees the realistic surface.
