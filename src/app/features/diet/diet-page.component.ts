@@ -1670,6 +1670,10 @@ export class DietPageComponent implements OnInit {
 
   formatMealTime(dateTimeIso: string): string {
     const d = new Date(dateTimeIso);
+    // WR-07: guard unparseable input (possible after a tolerated malformed
+    // migration) so the history list never renders the literal "Invalid Date",
+    // matching formatLocalDateTimeFromIso / charts-page formatShortDate.
+    if (!Number.isFinite(d.getTime())) return '—';
     return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   }
 }
