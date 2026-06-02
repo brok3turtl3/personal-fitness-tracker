@@ -419,5 +419,16 @@ describe('Validators', () => {
       expect(validateDailyTargets({ caloriesKcal: VALIDATION_LIMITS.CALORIES_MIN })).toEqual([]);
       expect(validateDailyTargets({ caloriesKcal: VALIDATION_LIMITS.CALORIES_MAX })).toEqual([]);
     });
+
+    it('WR-04: should reject a macro target above MACRO_TARGET_MAX', () => {
+      expect(validateDailyTargets({ proteinG: VALIDATION_LIMITS.MACRO_TARGET_MAX + 1 }).length).toBe(1);
+      expect(validateDailyTargets({ fatG: 10_000_000 }).length).toBe(1);
+      expect(validateDailyTargets({ carbsG: VALIDATION_LIMITS.MACRO_TARGET_MAX + 0.01 }).length).toBe(1);
+      expect(validateDailyTargets({ netCarbsG: VALIDATION_LIMITS.MACRO_TARGET_MAX + 5 }).length).toBe(1);
+    });
+
+    it('WR-04: should accept a macro target at the MACRO_TARGET_MAX boundary', () => {
+      expect(validateDailyTargets({ proteinG: VALIDATION_LIMITS.MACRO_TARGET_MAX })).toEqual([]);
+    });
   });
 });

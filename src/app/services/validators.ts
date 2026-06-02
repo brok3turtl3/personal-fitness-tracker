@@ -81,6 +81,11 @@ export const VALIDATION_LIMITS = {
   KETONE_MIN: 0.0,
   KETONE_MAX: 10.0,
   
+  // Diet — macro daily-target upper bound (grams). Calories reuse CALORIES_MAX;
+  // protein/fat/carbs/net-carbs are bounded here so no metric is left unbounded
+  // (WR-04). 2000 g is comfortably above any realistic daily macro target.
+  MACRO_TARGET_MAX: 2000,
+
   // Notes
   NOTES_MAX_LENGTH: 500
 } as const;
@@ -362,10 +367,18 @@ export function validateDailyTargets(t: DailyTargets | undefined): string[] {
 
   const errors: string[] = [];
 
-  const nonNegativeMetric = (value: number | undefined, label: string): void => {
+  // Macro targets (grams) are range-checked like every other metric (WR-04):
+  // finite, non-negative, and bounded by MACRO_TARGET_MAX.
+  const macroMetric = (value: number | undefined, label: string): void => {
     if (value === undefined) return;
-    if (!Number.isFinite(value) || value < 0) {
-      errors.push(`${label} target must be a non-negative number`);
+    if (
+      !Number.isFinite(value) ||
+      value < 0 ||
+      value > VALIDATION_LIMITS.MACRO_TARGET_MAX
+    ) {
+      errors.push(
+        `${label} target must be between 0 and ${VALIDATION_LIMITS.MACRO_TARGET_MAX} g`
+      );
     }
   };
 
@@ -382,10 +395,10 @@ export function validateDailyTargets(t: DailyTargets | undefined): string[] {
     }
   }
 
-  nonNegativeMetric(t.proteinG, 'Protein');
-  nonNegativeMetric(t.fatG, 'Fat');
-  nonNegativeMetric(t.carbsG, 'Carbs');
-  nonNegativeMetric(t.netCarbsG, 'Net carbs');
+  macroMetric(t.proteinG, 'Protein');
+  macroMetric(t.fatG, 'Fat');
+  macroMetric(t.carbsG, 'Carbs');
+  macroMetric(t.netCarbsG, 'Net carbs');
 
   return errors;
 }
