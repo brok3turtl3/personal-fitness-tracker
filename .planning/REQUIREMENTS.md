@@ -27,8 +27,8 @@ Requirements for the refinement milestone. Each maps to roadmap phases (filled i
 - [x] **DIET-04**: Meal-log surfaces search-as-you-type, recent foods, and auto-ranked favorites
 - [x] **DIET-05**: User can copy a meal from a previous day with one action
 - [x] **DIET-06**: Daily totals (kcal, protein, fat, carbs, net carbs) are scannable while logging; optional per-day macro/calorie targets show as %-of-target
-- [ ] **DIET-07**: Diet history is integrated into the charts page (calories + macros over time, with date-range filter)
-- [ ] **DIET-08**: Day boundaries use the user's local time consistently (no UTC drift across diet, charts, reports)
+- [x] **DIET-07**: Diet history is integrated into the charts page (calories + macros over time, with date-range filter)
+- [x] **DIET-08**: Day boundaries use the user's local time consistently (no UTC drift across diet, charts, reports)
 - [x] **DIET-09**: Editing a saved food does NOT retroactively change historical meal entries (nutrition + serving + unit are snapshotted at log time)
 - [x] **DIET-10**: Diet schema migration ships cleanly (`SavedFood.densityGramsPerMl?`, `preferredUnits?`, widened `baseUnit`) with backup, fixture tests, and malformed-input coverage — landed as V6→V7 (the schema base advanced to V6 in Phase 5; plans 02-01 + 02-02, 2026-06-01)
 
@@ -134,8 +134,8 @@ Mapped by the roadmapper.
 | DIET-04 | Phase 2 | Complete — meal-log food picker: search-as-you-type (filterFoods), Recent on focus (recentFoods), auto-ranked Frequent group (rankFoods), no manual starring (02-04, 2026-06-01) |
 | DIET-05 | Phase 2 | Complete — 'Repeat yesterday' + 'Copy from another day…' land editable pending items via DietService.copyMealItems re-derive (service 02-03; UI 02-04, 2026-06-01) |
 | DIET-06 | Phase 2 | Complete — live daily totals (incl. net carbs) recompute on every pending change; %-of-target bars with always-present text labels + destructive over-target state; inline targets editor (service 02-03; UI 02-04, 2026-06-01) |
-| DIET-07 | Phase 2 | Pending |
-| DIET-08 | Phase 2 | Pending |
+| DIET-07 | Phase 2 | Complete — diet calories + separately-toggleable protein/fat/carbs/net-carbs series on the EXISTING charts page, driven by the shared date-range filter + controlsForm checkboxes (D-10); locked palette + multi-axis y/y1 treatment (sumByDay from 02-01; getMealsInRange from 02-03; charts UI 02-05, 2026-06-01) |
+| DIET-08 | Phase 2 | Complete — diet day-bucketing SUMS per LOCAL day via sumByDay/toDateKey keyed on dateTime (never groupByDay); DST-tested (23:30-local spring-forward meal keys to the correct local day); formatShortDate fixed to render bare day-keys in local time, closing UTC label drift across diet/charts/reports (D-11; 02-05, 2026-06-01) |
 | DIET-09 | Phase 2 | Complete — history renders frozen snapshots (meal.totals / item.snapshot), never re-resolved from the live food; proven by deep-equal test (02-03) + snapshot-render DOM test (02-04, 2026-06-01) |
 | DIET-10 | Phase 2 | Complete (plans 02-01 + 02-02, 2026-06-01) |
 | CHAT-01 | Phase 3 | Complete |
