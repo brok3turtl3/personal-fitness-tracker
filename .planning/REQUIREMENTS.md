@@ -21,15 +21,15 @@ Requirements for the refinement milestone. Each maps to roadmap phases (filled i
 
 ### DIET — Diet UX overhaul
 
-- [ ] **DIET-01**: User can add a new food without leaving the meal-log flow (quick-add modal; no context switch)
+- [x] **DIET-01**: User can add a new food without leaving the meal-log flow (quick-add modal; no context switch)
 - [ ] **DIET-02**: Each saved food can define its own native units (e.g. "1 cup", "1 slice", "1 medium banana") with stored gram-equivalents
 - [ ] **DIET-03**: Unit conversion is correct across g / oz / cups / ml / tbsp using per-food density when needed (no global density assumption)
-- [ ] **DIET-04**: Meal-log surfaces search-as-you-type, recent foods, and auto-ranked favorites
-- [ ] **DIET-05**: User can copy a meal from a previous day with one action
-- [ ] **DIET-06**: Daily totals (kcal, protein, fat, carbs, net carbs) are scannable while logging; optional per-day macro/calorie targets show as %-of-target
+- [x] **DIET-04**: Meal-log surfaces search-as-you-type, recent foods, and auto-ranked favorites
+- [x] **DIET-05**: User can copy a meal from a previous day with one action
+- [x] **DIET-06**: Daily totals (kcal, protein, fat, carbs, net carbs) are scannable while logging; optional per-day macro/calorie targets show as %-of-target
 - [ ] **DIET-07**: Diet history is integrated into the charts page (calories + macros over time, with date-range filter)
 - [ ] **DIET-08**: Day boundaries use the user's local time consistently (no UTC drift across diet, charts, reports)
-- [ ] **DIET-09**: Editing a saved food does NOT retroactively change historical meal entries (nutrition + serving + unit are snapshotted at log time)
+- [x] **DIET-09**: Editing a saved food does NOT retroactively change historical meal entries (nutrition + serving + unit are snapshotted at log time)
 - [x] **DIET-10**: Diet schema migration ships cleanly (`SavedFood.densityGramsPerMl?`, `preferredUnits?`, widened `baseUnit`) with backup, fixture tests, and malformed-input coverage — landed as V6→V7 (the schema base advanced to V6 in Phase 5; plans 02-01 + 02-02, 2026-06-01)
 
 ### CHAT — AI chat depth upgrade
@@ -128,15 +128,15 @@ Mapped by the roadmapper.
 | FOUND-05 | Phase 1 | Complete (plans 01-05 + 01-08, 2026-05-02) |
 | FOUND-06 | Phase 1 | Complete |
 | FOUND-07 | Phase 1 | Complete (plans 01-04 + 01-09 + 01-10, 2026-05-02) |
-| DIET-01 | Phase 2 | In progress — service path ready (addSavedFood widened-unit + immediate addMeal, plan 02-03, 2026-06-01); quick-add modal UI pending (02-04) |
+| DIET-01 | Phase 2 | Complete — inline quick-add in the meal-log flow: a search miss expands a manual-macro inline form ('Add food & log it') that saves to the library AND stages a pending item, no modal/context-switch (service path 02-03; UI 02-04, 2026-06-01) |
 | DIET-02 | Phase 2 | Pending |
-| DIET-03 | Phase 2 | In progress — DietService.toBaseUnits delegates to units.ts with per-food density, no global default (plan 02-03, 2026-06-01); native-unit UI pending (02-04) |
-| DIET-04 | Phase 2 | Pending |
-| DIET-05 | Phase 2 | In progress — copyMealItems re-derive helper on DietService (plan 02-03, 2026-06-01); one-action copy UI pending (02-04) |
-| DIET-06 | Phase 2 | In progress — live net-carbs totals + DailyTargets get/set/clear storage on DietService (plan 02-03, 2026-06-01); %-of-target bars UI pending (02-04) |
+| DIET-03 | Phase 2 | In progress — DietService.toBaseUnits delegates to units.ts with per-food density, no global default (02-03); diet-page serving unit picker now density-gated + onAddMealItem catches UnitConversionError (02-04, 2026-06-01); full native-unit picker matures with DIET-02 |
+| DIET-04 | Phase 2 | Complete — meal-log food picker: search-as-you-type (filterFoods), Recent on focus (recentFoods), auto-ranked Frequent group (rankFoods), no manual starring (02-04, 2026-06-01) |
+| DIET-05 | Phase 2 | Complete — 'Repeat yesterday' + 'Copy from another day…' land editable pending items via DietService.copyMealItems re-derive (service 02-03; UI 02-04, 2026-06-01) |
+| DIET-06 | Phase 2 | Complete — live daily totals (incl. net carbs) recompute on every pending change; %-of-target bars with always-present text labels + destructive over-target state; inline targets editor (service 02-03; UI 02-04, 2026-06-01) |
 | DIET-07 | Phase 2 | Pending |
 | DIET-08 | Phase 2 | Pending |
-| DIET-09 | Phase 2 | In progress — snapshot immutability proven by deep-equal test; updateSavedFood never writes mealEntries (plan 02-03, 2026-06-01); end-to-end UI verification pending (02-04) |
+| DIET-09 | Phase 2 | Complete — history renders frozen snapshots (meal.totals / item.snapshot), never re-resolved from the live food; proven by deep-equal test (02-03) + snapshot-render DOM test (02-04, 2026-06-01) |
 | DIET-10 | Phase 2 | Complete (plans 02-01 + 02-02, 2026-06-01) |
 | CHAT-01 | Phase 3 | Complete |
 | CHAT-02 | Phase 4 | Complete |
