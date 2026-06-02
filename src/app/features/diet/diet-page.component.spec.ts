@@ -441,6 +441,14 @@ describe('DietPageComponent (characterization)', () => {
     // And the serving-unit picker offers cross-dimension units for this food
     // (gated on effectiveDensity, not the absent raw densityGramsPerMl).
     expect(cmp.servingUnitOptions(oil)).toContain('ml');
+
+    // CR-01 follow-up: the "No density set" note must NOT claim this food is
+    // inconvertible — it is convertible via the legacy gramsPerTbsp bridge, so
+    // selectedFoodConvertible is true and the note is suppressed.
+    cmp.selectedFood = oil;
+    expect(cmp.selectedFoodConvertible).toBe(true);
+    cmp.selectedFood = createValidSavedFood({ densityGramsPerMl: undefined, gramsPerTbsp: undefined });
+    expect(cmp.selectedFoodConvertible).toBe(false);
   });
 
   it('WR-01: should block the save (not silently drop) when a serving-less pending item is mixed with a valid one', async () => {

@@ -511,7 +511,7 @@ interface TargetBar {
                           <option [value]="s.id">{{ s.label }} ({{ s.amount }} {{ s.unit }})</option>
                         }
                       </select>
-                      @if (selectedFood && !selectedFood.densityGramsPerMl) {
+                      @if (selectedFood && !selectedFoodConvertible) {
                         <div class="muted">No density set — you can log this food in weight or volume units, but not convert between them.</div>
                       }
                     </div>
@@ -911,6 +911,16 @@ export class DietPageComponent implements OnInit {
   recentPicks: SavedFood[] = [];
   frequentPicks: SavedFood[] = [];
   selectedFood: SavedFood | null = null;
+  /**
+   * True when the selected food can convert across weight↔volume — gated on the
+   * SHARED `effectiveDensity` (honors a legacy `gramsPerTbsp`-derived density), so
+   * the "No density set" note matches what `servingUnitOptions()` actually offers
+   * (CR-01 follow-up: the note previously read raw `densityGramsPerMl` and lied for
+   * legacy gramsPerTbsp-only foods).
+   */
+  get selectedFoodConvertible(): boolean {
+    return !!this.selectedFood && effectiveDensity(this.selectedFood) !== undefined;
+  }
   showQuickAdd = false;
   quickAddError: string | null = null;
   isQuickAdding = false;
