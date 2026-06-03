@@ -1,9 +1,9 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
+milestone: v2.0.0
+milestone_name: Refinement
 status: milestone_complete
-last_updated: "2026-06-03T11:18:44.000Z"
+last_updated: "2026-06-03T11:30:00.000Z"
 progress:
   total_phases: 5
   completed_phases: 5
@@ -24,7 +24,25 @@ progress:
 
 **Milestone:** Refinement (v2) — diet UX overhaul + AI chat depth + full quality pass on the existing Angular 18 + Electron app at v1.2.3.
 
-**Current Focus:** **v2 Refinement milestone COMPLETE** (2026-06-03) — all 5 phases done. Phase 2 (Diet UX Overhaul) was the last remaining phase: 5/5 plans, verifier 5/5 criteria, code review fixes shipped, human UAT approved 2026-06-03. Next: `/gsd-complete-milestone` to archive v2, or `/gsd-new-milestone` to start the next cycle.
+**Current Focus:** **v2.0.0 "Refinement" milestone ARCHIVED** (2026-06-03). All 5 phases / 37 plans / 42 requirements shipped. Tagged `v2.0.0`; package.json bumped to 2.0.0. Milestone roadmap + requirements archived to `.planning/milestones/`; MILESTONES.md + RETROSPECTIVE.md written; REQUIREMENTS.md retired (fresh one created by next milestone). **Next: `/gsd-new-milestone` to scope the next cycle.**
+
+---
+
+## Deferred Items
+
+Items acknowledged and deferred at milestone close on 2026-06-03 (9 total). None affect shipped v2.0.0 functionality; they carry into the next milestone's backlog.
+
+| Category | Item | Status |
+|----------|------|--------|
+| debug | dev-seed-approval-no-persist-and-unpaired-tooluse | diagnosed (fixed in Phase 4 code; session not formally closed) |
+| debug | dev-seed-pending-pill-not-rendering | diagnosed (fixed in Phase 4 code; session not formally closed) |
+| todo | 2026-05-31-clarify-meal-note-redaction-granularity-for-ai-context | open (product question) |
+| todo | 2026-05-31-complete-phase-4-visual-uat-in-browser | open (browser-only UAT) |
+| todo | 2026-05-31-surface-block-action-errors-to-the-user-in-chat-page | open (info — console-only today) |
+| todo | 2026-06-02-diet-edit-form-density-desync-and-deferred-review-items | open (diet edit-form density desync + 6 deferred CR polish items) |
+| uat | 04-HUMAN-UAT.md | partial (2 open browser scenarios) |
+| uat | 03-HUMAN-UAT.md | unknown (0 open scenarios) |
+| uat | 02-HUMAN-UAT.md | passed (recorded for completeness) |
 
 ---
 

@@ -27,31 +27,26 @@ A trustworthy personal health record paired with a knowledgeable AI coach that c
 - ✓ Electron desktop shell — Windows (NSIS) + macOS (DMG) builds via `electron-builder`
 - ✓ Strict TypeScript + strict Angular templates across the codebase
 
+<!-- Refinement milestone (v2.0.0) — shipped 2026-06-03. -->
+
+- ✓ Diet UX overhaul — inline quick-add, per-food density units (no global default), named servings, search + Recent/Frequent, copy-a-meal, live %-of-target totals, diet series in charts, snapshot immutability, DST-safe local-day math — v2.0.0
+- ✓ Agentic AI coach — read-only `query_*` tools + `while(stop_reason==='tool_use')` loop bounded by `maxAgentTurns`, real `messages.countTokens`, ephemeral system-prompt caching, slim ~500-token context header — v2.0.0
+- ✓ Persistent AI memory — official `memory_20250818` tool over `AppData.memoryFiles` with `/memories` path validation; editable structured `UserProfile` with confirm-before-write — v2.0.0
+- ✓ Evidence-graded output — per-claim confidence badges (color+icon), data-vs-research attribution, tool-use transparency, API-structured-only citation links — v2.0.0
+- ✓ Research grounding — opt-in `web_search_20250305` server tool, inline https-only footnotes + Sources list, `webSearchMaxUses` cost cap, adversarial un-grounded-citation test — v2.0.0
+- ✓ Quality/security/a11y bar — CRUD parity (edit cardio/weight/readings), quota detection, multi-tab safety, CSP egress lock, 401 rotation, axe-core + manual a11y pass, Stryker mutation floor, zero `any` in production paths — v2.0.0
+- ✓ Refactor-safe foundation — characterization tests, shared utilities, subscription hygiene (Pattern 2 Form A), typed backup-before-migrate schema discipline (V0→V7) with recovery banner — v2.0.0
+
 ### Active
 
-<!-- Refinement milestone (v2). Hypotheses until shipped and validated. -->
+<!-- Next milestone not yet scoped. Candidates carried from the future-work backlog; refine via /gsd-new-milestone. -->
 
-**Diet tracking — full review and UX overhaul**
+_v2.0.0 Refinement is complete. The next milestone is not yet defined — run `/gsd-new-milestone` to scope it. Leading candidates (from the tracked future-work backlog):_
 
-- [ ] Smooth flow for adding new foods to the saved-foods library
-- [ ] Multiple unit types handled cleanly (g, oz, cups, servings, etc.) with sensible conversion or per-food unit definition
-- [ ] Frictionless meal logging (search, portion, copy/repeat meals)
-- [ ] Accurate daily totals (calories, macros, net carbs) with clear, scannable display
-- [ ] Diet history integrated cleanly into charts and trends
-
-**AI chat — depth upgrade**
-
-- [x] AI has access to the user's full data and history via read-only `query_*` tools + agentic loop — Validated in Phase 4
-- [ ] Persistent memory across sessions (goals, preferences, prior context)
-- [ ] Research-grounded coaching that draws on both traditional and cutting-edge sources
-- [x] Source attribution + per-claim confidence labelling (data vs research; strong…animal-only…speculative, low-confidence color+icon) + tool-use transparency + citation-link guard — Validated in Phase 4
-
-**Full quality pass**
-
-- [ ] Test coverage tightening (unit + integration where it pays off)
-- [ ] Refactor smells, dead code removal, type tightening
-- [ ] Accessibility audit (semantic HTML, labels, keyboard nav, contrast)
-- [ ] Cross-app UX consistency review (forms, validation, empty states, error states)
+- [ ] **Additional tracking domains** — sleep, mood, steps, hydration, supplements (TRACK-01..05)
+- [ ] **First-class goals system** — goals model separate from chat memory, adherence/streak tracking, milestone notifications (GOALS-01..03)
+- [ ] **Data import/export** — Apple Health import, CSV import/export, backup/restore round-trip (IO-01..03)
+- [ ] **Deferred v2 polish** — Phase-4 visual UAT closure, 6 Phase-2 code-review items + diet edit-form density desync, chat-page block-action error surfacing, meal-note redaction granularity (see STATE.md → Deferred Items)
 
 ### Out of Scope
 
@@ -67,13 +62,15 @@ A trustworthy personal health record paired with a knowledgeable AI coach that c
 
 ## Context
 
-- **Brownfield Angular 18 app, version 1.2.3.** Codebase already mapped — see `.planning/codebase/` (ARCHITECTURE, STACK, STRUCTURE, CONVENTIONS, INTEGRATIONS, TESTING, CONCERNS).
-- **Single sophisticated user** (the developer), running daily-driver. Refinement is triggered by lived friction + a desire to lay a solid foundation before adding new tracking domains.
-- **Diet tracking is the known weak spot** — adding new foods is rough, unit handling is awkward, daily display can be cleaner. This is the first thing users (i.e. the dev) hit friction on.
-- **AI chat is wired up but shallow** — `fitness-context.service.ts` builds a single snapshot for the system prompt; `chat.service.ts` calls Anthropic via `anthropic-api.service.ts`. Goal is to evolve from "snapshot chatbot" to "coach that knows everything and grounds its advice."
-- **Schema versioning is active** — any data-shape change for goals/memory/preferences needs a new migration step (V5+).
-- **Existing test surface:** 12 `.spec.ts` files covering services, validators, app component, and shared utilities. Coverage depth unknown — quality pass will measure first.
-- **API key + telemetry posture:** API key stored locally in `AppData.aiSettings`; no telemetry; only outbound traffic is the user-initiated chat request to `api.anthropic.com/v1/messages`.
+- **Shipped v2.0.0 "Refinement" on 2026-06-03** — 5 phases, 37 plans, 259 commits, +53,974 / −1,811 LOC over ~32 days. App version bumped 1.2.3 → 2.0.0. Full Karma suite 842/842 green; production build exit 0; every phase passed `gsd-verifier` (Phase 5 PASS 5/5).
+- **Brownfield Angular 18 app.** Codebase mapped — see `.planning/codebase/` (ARCHITECTURE, STACK, STRUCTURE, CONVENTIONS, INTEGRATIONS, TESTING, CONCERNS). The pre-v2 map predates the AI build-out; treat source as authoritative.
+- **Single sophisticated user** (the developer), running daily-driver. v2 was triggered by lived diet-logging friction + a desire to lay a solid foundation before adding new tracking domains.
+- **Diet tracking — resolved in v2.** Was the known weak spot (rough new-food entry, awkward units, cramped daily display); now inline quick-add, per-food density units, search/Recent/Frequent, copy-a-meal, and live %-of-target totals.
+- **AI chat — deepened in v2.** Evolved from a single-snapshot chatbot to an agentic coach: `chat.service.ts` runs a bounded tool-use loop over six read-only `query_*` tools, persistent `memory_20250818` store, and opt-in web search; `fitness-context.service.ts` now emits a slim cacheable header instead of stuffing full data. `anthropic-api.service.ts` is the sole SDK importer (D-17 chokepoint).
+- **Schema at V7.** Migrations active and disciplined (typed legacy interfaces + backup-before-migrate + recovery banner); v2 added V4→V5→V6→V7. Any future data-shape change adds the next sequential step.
+- **Test surface grew substantially.** From 12 `.spec.ts` files to a coverage-enforced suite (842 specs), plus Puppeteer + axe-core e2e scaffolds and a Stryker mutation floor on a critical service.
+- **Known deferred debt:** 9 items carried out of v2 (see STATE.md → Deferred Items) — none affect shipped functionality.
+- **API key + telemetry posture:** API key stored locally in `AppData.aiSettings`; no telemetry; CSP locks outbound `connect-src` to `https://api.anthropic.com` (plus opt-in web search routed through the same API).
 
 ## Constraints
 
@@ -89,11 +86,13 @@ A trustworthy personal health record paired with a knowledgeable AI coach that c
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| AI coach has no clinical guardrails; uses source attribution + confidence labels instead | User is sophisticated and values epistemic honesty over watered-down disclaimers; low-evidence claims (e.g. animal-only) must be flagged clearly | — Pending |
-| Milestone scope = diet UX overhaul + AI chat depth + full quality pass | Diet is the daily friction point; chat is the leverage point; quality pass lays foundation for future tracking domains | — Pending |
-| Future milestones (post-refinement): additional tracking domains, goals system, import/export | Don't sprawl this milestone; prove refinement first | — Pending |
+| AI coach has no clinical guardrails; uses source attribution + confidence labels instead | User is sophisticated and values epistemic honesty over watered-down disclaimers; low-evidence claims (e.g. animal-only) must be flagged clearly | ✓ Good — shipped v2.0.0; confidence badges (color+icon) + data-vs-research attribution landed |
+| Milestone scope = diet UX overhaul + AI chat depth + full quality pass | Diet is the daily friction point; chat is the leverage point; quality pass lays foundation for future tracking domains | ✓ Good — all 42 requirements delivered in v2.0.0 |
+| Future milestones (post-refinement): additional tracking domains, goals system, import/export | Don't sprawl this milestone; prove refinement first | — Pending — carried to PROJECT Active as next-milestone candidates |
 | LocalStorage + single-user + Electron shell stay as defaults | These are the defining shape of the product; negotiable only on a strong, specific reason | ✓ Good |
-| Schema migrations remain the mechanism for data shape changes | Already in place V0→V4; new memory/goals/preferences fields will land via V5+ | ✓ Good |
+| Schema migrations remain the mechanism for data shape changes | Already in place V0→V4; new memory/goals/preferences fields will land via V5+ | ✓ Good — V4→V5→V6→V7 shipped on the typed backup-before-migrate harness with zero data-loss incidents |
+| Anthropic-native tool use over RAG/embeddings; single SDK-boundary chokepoint (D-17) | Bounded structured data for one user beats a vector DB; confining `@anthropic-ai/sdk` to one service keeps models/parsers SDK-agnostic and testable | ✓ Good — carried the entire AI build-out (Phases 3–5) |
+| Only API-structured citations render as links; free-generated citations never link | Bounds 14–95% LLM citation-fabrication risk | ✓ Good — allow-list guard + adversarial regression test |
 
 ## Evolution
 
@@ -113,4 +112,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-06-03 after Phase 2 (Diet UX Overhaul) completion — **v2 Refinement milestone COMPLETE (5/5 phases).** Diet logging friction removed: inline quick-add, multi-unit foods with per-food density (no global default), named servings, search + Recent/Frequent, copy-a-meal, live daily totals with %-of-target bars, diet series in charts, snapshot immutability, DST-safe local-day math, V6→V7 migration. Verifier PASS 5/5; human UAT approved. DIET-01..10 all complete. Outstanding: 3 Phase-4 visual UAT items (04-HUMAN-UAT.md) and 6 deferred Phase-2 code-review polish items (todo 2026-06-02-diet-edit-form-density-desync...). Next: /gsd-complete-milestone to archive v2.*
+*Last updated: 2026-06-03 after **v2.0.0 "Refinement" milestone COMPLETE** (5/5 phases, 37 plans, 42/42 requirements). Shipped: diet UX overhaul, agentic AI coach with persistent memory + opt-in web-search grounding + evidence-graded output, and a full quality/security/a11y sweep — all on a refactor-safe Phase-1 foundation. Tagged v2.0.0; package.json bumped to 2.0.0. 9 known items deferred (see STATE.md → Deferred Items). Next: `/gsd-new-milestone` to scope the next cycle.*
