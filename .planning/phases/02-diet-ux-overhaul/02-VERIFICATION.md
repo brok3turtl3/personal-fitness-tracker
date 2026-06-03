@@ -1,8 +1,9 @@
 ---
 phase: 02-diet-ux-overhaul
 verified: 2026-06-01T00:00:00Z
-status: human_needed
-score: 5/5 must-haves verified (all success criteria pass automated checks)
+status: passed
+score: 5/5 must-haves verified (all success criteria pass automated checks); human UAT approved by user 2026-06-03
+score_note: "Initial verdict was human_needed (DIET-02 browser smoke + a note-gating defect). The note defect was fixed in code (commit b7c8676); the user ran the dev server and approved all UAT items 2026-06-03 — see 02-HUMAN-UAT.md (status: passed)."
 overrides_applied: 0
 orchestrator_resolution: "Item 1 ('No density set' note gating) was a code defect, not a human-test item — FIXED by the orchestrator in commit b7c8676: added a selectedFoodConvertible getter delegating to effectiveDensity and gated the note on it; regression assertions added to the CR-01 spec. 842/842 green, tsc clean. Only the DIET-02 named-serving browser smoke remains for human confirmation."
 human_verification:

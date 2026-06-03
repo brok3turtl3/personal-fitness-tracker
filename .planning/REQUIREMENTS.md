@@ -22,7 +22,7 @@ Requirements for the refinement milestone. Each maps to roadmap phases (filled i
 ### DIET — Diet UX overhaul
 
 - [x] **DIET-01**: User can add a new food without leaving the meal-log flow (quick-add modal; no context switch)
-- [ ] **DIET-02**: Each saved food can define its own native units (e.g. "1 cup", "1 slice", "1 medium banana") with stored gram-equivalents
+- [x] **DIET-02**: Each saved food can define its own native units (e.g. "1 cup", "1 slice", "1 medium banana") with stored gram-equivalents — `SavedFoodServing {label, unit, amount}` model + `addCustomServing` + diet-page custom-serving UI; widened unit set (g/oz/lb/ml/tsp/tbsp/cup); human UAT confirmed end-to-end (plans 02-01/02-03/02-04, approved 2026-06-03)
 - [x] **DIET-03**: Unit conversion is correct across g / oz / cups / ml / tbsp using per-food density when needed (no global density assumption) — single-source `effectiveDensity`/`convertMeasured` in `units.ts`, no global default; verified + CR-01 density-divergence fixed (plans 02-01 + 02-03 + 02-04, code review fix, 2026-06-01)
 - [x] **DIET-04**: Meal-log surfaces search-as-you-type, recent foods, and auto-ranked favorites
 - [x] **DIET-05**: User can copy a meal from a previous day with one action
@@ -129,7 +129,7 @@ Mapped by the roadmapper.
 | FOUND-06 | Phase 1 | Complete |
 | FOUND-07 | Phase 1 | Complete (plans 01-04 + 01-09 + 01-10, 2026-05-02) |
 | DIET-01 | Phase 2 | Complete — inline quick-add in the meal-log flow: a search miss expands a manual-macro inline form ('Add food & log it') that saves to the library AND stages a pending item, no modal/context-switch (service path 02-03; UI 02-04, 2026-06-01) |
-| DIET-02 | Phase 2 | Pending |
+| DIET-02 | Phase 2 | Complete — named servings with stored gram-equivalents (model + addCustomServing + diet-page UI); human UAT confirmed (plans 02-01/02-03/02-04, 2026-06-03) |
 | DIET-03 | Phase 2 | Complete — single-source `effectiveDensity`/`convertMeasured` in units.ts (no global default); DietService + diet-page both delegate; CR-01 preview-vs-persist divergence fixed; gsd-verifier confirmed no global density leak (plans 02-01/02-03/02-04 + code-review fix, 2026-06-01) |
 | DIET-04 | Phase 2 | Complete — meal-log food picker: search-as-you-type (filterFoods), Recent on focus (recentFoods), auto-ranked Frequent group (rankFoods), no manual starring (02-04, 2026-06-01) |
 | DIET-05 | Phase 2 | Complete — 'Repeat yesterday' + 'Copy from another day…' land editable pending items via DietService.copyMealItems re-derive (service 02-03; UI 02-04, 2026-06-01) |

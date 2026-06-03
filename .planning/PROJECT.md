@@ -113,4 +113,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-31 after Phase 4 (Agentic Loop + Citation UI) completion — agentic coach reads real data via `query_*` tools, bounded multi-turn loop, per-claim confidence + source attribution, tool-use disclosures, citation-link guard, slim cached context. 3 visual UAT items pending (04-HUMAN-UAT.md).*
+*Last updated: 2026-06-03 after Phase 2 (Diet UX Overhaul) completion — **v2 Refinement milestone COMPLETE (5/5 phases).** Diet logging friction removed: inline quick-add, multi-unit foods with per-food density (no global default), named servings, search + Recent/Frequent, copy-a-meal, live daily totals with %-of-target bars, diet series in charts, snapshot immutability, DST-safe local-day math, V6→V7 migration. Verifier PASS 5/5; human UAT approved. DIET-01..10 all complete. Outstanding: 3 Phase-4 visual UAT items (04-HUMAN-UAT.md) and 6 deferred Phase-2 code-review polish items (todo 2026-06-02-diet-edit-form-density-desync...). Next: /gsd-complete-milestone to archive v2.*
