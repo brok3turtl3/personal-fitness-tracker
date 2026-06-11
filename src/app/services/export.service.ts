@@ -2,7 +2,9 @@ import { Injectable } from '@angular/core';
 import { Observable, map } from 'rxjs';
 import { WeightService } from './weight.service';
 import { ReadingsService } from './readings.service';
+import { CardioService } from './cardio.service';
 import { WeightEntry } from '../models/weight-entry.model';
+import { CardioSession } from '../models/cardio-session.model';
 import {
   HealthReading,
   BloodPressureReading,
@@ -29,6 +31,19 @@ const READING_COLUMNS = [
   'diastolic',
   'glucoseMmol',
   'ketoneMmol',
+  'notes',
+  'createdAt',
+  'updatedAt'
+] as const;
+
+/** Column order for the cardio sessions CSV export. */
+const CARDIO_COLUMNS = [
+  'id',
+  'date',
+  'type',
+  'durationMinutes',
+  'distanceKm',
+  'caloriesBurned',
   'notes',
   'createdAt',
   'updatedAt'
@@ -76,7 +91,8 @@ function buildCsvRow(values: (string | number | undefined | null)[]): string {
 export class ExportService {
   constructor(
     private weightService: WeightService,
-    private readingsService: ReadingsService
+    private readingsService: ReadingsService,
+    private cardioService: CardioService
   ) {}
 
   /**
@@ -132,6 +148,31 @@ export class ExportService {
   }
 
   /**
+   * Build a CSV string for the given cardio sessions.
+   * Optional measurements (distance, calories) are left blank when absent.
+   * Pure and synchronous — safe to unit test without the DOM.
+   */
+  buildCardioCsv(sessions: CardioSession[]): string {
+    const header = buildCsvRow([...CARDIO_COLUMNS]);
+
+    const rows = sessions.map(session =>
+      buildCsvRow([
+        session.id,
+        session.date,
+        session.type,
+        session.durationMinutes,
+        session.distanceKm,
+        session.caloriesBurned,
+        session.notes,
+        session.createdAt,
+        session.updatedAt
+      ])
+    );
+
+    return [header, ...rows].join('\r\n');
+  }
+
+  /**
    * Get the weight entries CSV as a string (newest first, matching the app).
    */
   getWeightCsv(): Observable<string> {
@@ -150,6 +191,15 @@ export class ExportService {
   }
 
   /**
+   * Get the cardio sessions CSV as a string (newest first, matching the app).
+   */
+  getCardioCsv(): Observable<string> {
+    return this.cardioService.getSessions().pipe(
+      map(sessions => this.buildCardioCsv(sessions))
+    );
+  }
+
+  /**
    * Build the weight CSV and trigger a browser download.
    */
   exportWeightCsv(): Observable<void> {
@@ -164,6 +214,15 @@ export class ExportService {
   exportReadingsCsv(): Observable<void> {
     return this.getReadingsCsv().pipe(
       map(csv => this.triggerDownload('health-readings.csv', csv))
+    );
+  }
+
+  /**
+   * Build the cardio sessions CSV and trigger a browser download.
+   */
+  exportCardioCsv(): Observable<void> {
+    return this.getCardioCsv().pipe(
+      map(csv => this.triggerDownload('cardio-sessions.csv', csv))
     );
   }
 

@@ -3,7 +3,9 @@ import { of } from 'rxjs';
 import { ExportService, escapeCsvField } from './export.service';
 import { WeightService } from './weight.service';
 import { ReadingsService } from './readings.service';
+import { CardioService } from './cardio.service';
 import { WeightEntry } from '../models/weight-entry.model';
+import { CardioSession } from '../models/cardio-session.model';
 import {
   BloodPressureReading,
   BloodGlucoseReading,
@@ -15,6 +17,7 @@ describe('ExportService', () => {
   let service: ExportService;
   let weightServiceSpy: jasmine.SpyObj<WeightService>;
   let readingsServiceSpy: jasmine.SpyObj<ReadingsService>;
+  let cardioServiceSpy: jasmine.SpyObj<CardioService>;
 
   const createWeightEntry = (overrides: Partial<WeightEntry> = {}): WeightEntry => ({
     id: 'w-1',
@@ -36,17 +39,32 @@ describe('ExportService', () => {
     ...overrides
   });
 
+  const createCardioSession = (overrides: Partial<CardioSession> = {}): CardioSession => ({
+    id: 'c-1',
+    date: '2025-01-27T06:00:00.000Z',
+    type: 'running',
+    durationMinutes: 30,
+    distanceKm: 5.2,
+    caloriesBurned: 320,
+    createdAt: '2025-01-27T06:00:00.000Z',
+    updatedAt: '2025-01-27T06:00:00.000Z',
+    ...overrides
+  });
+
   beforeEach(() => {
     weightServiceSpy = jasmine.createSpyObj('WeightService', ['getEntries']);
     readingsServiceSpy = jasmine.createSpyObj('ReadingsService', ['getReadings']);
+    cardioServiceSpy = jasmine.createSpyObj('CardioService', ['getSessions']);
     weightServiceSpy.getEntries.and.returnValue(of([]));
     readingsServiceSpy.getReadings.and.returnValue(of([]));
+    cardioServiceSpy.getSessions.and.returnValue(of([]));
 
     TestBed.configureTestingModule({
       providers: [
         ExportService,
         { provide: WeightService, useValue: weightServiceSpy },
-        { provide: ReadingsService, useValue: readingsServiceSpy }
+        { provide: ReadingsService, useValue: readingsServiceSpy },
+        { provide: CardioService, useValue: cardioServiceSpy }
       ]
     });
 
@@ -201,7 +219,59 @@ describe('ExportService', () => {
     });
   });
 
-  describe('getWeightCsv / getReadingsCsv', () => {
+  describe('buildCardioCsv', () => {
+    it('should emit only the header row for empty data', () => {
+      const csv = service.buildCardioCsv([]);
+      expect(csv).toBe(
+        'id,date,type,durationMinutes,distanceKm,caloriesBurned,notes,createdAt,updatedAt'
+      );
+    });
+
+    it('should produce correct values for a representative session', () => {
+      const csv = service.buildCardioCsv([
+        createCardioSession({ notes: 'Morning run' })
+      ]);
+      const lines = csv.split('\r\n');
+      expect(lines.length).toBe(2);
+      expect(lines[0]).toBe(
+        'id,date,type,durationMinutes,distanceKm,caloriesBurned,notes,createdAt,updatedAt'
+      );
+      expect(lines[1]).toBe(
+        'c-1,2025-01-27T06:00:00.000Z,running,30,5.2,320,Morning run,2025-01-27T06:00:00.000Z,2025-01-27T06:00:00.000Z'
+      );
+    });
+
+    it('should leave optional distance and calories blank when omitted', () => {
+      const csv = service.buildCardioCsv([
+        createCardioSession({ distanceKm: undefined, caloriesBurned: undefined })
+      ]);
+      const lines = csv.split('\r\n');
+      // distanceKm and caloriesBurned are columns 5 and 6 → empty between commas
+      expect(lines[1]).toBe(
+        'c-1,2025-01-27T06:00:00.000Z,running,30,,,,2025-01-27T06:00:00.000Z,2025-01-27T06:00:00.000Z'
+      );
+    });
+
+    it('should escape notes containing commas, quotes and newlines', () => {
+      const csv = service.buildCardioCsv([
+        createCardioSession({ notes: 'hard "intervals", then\ncooldown' })
+      ]);
+      expect(csv).toContain('"hard ""intervals"", then\ncooldown"');
+    });
+
+    it('should emit one record per session', () => {
+      const csv = service.buildCardioCsv([
+        createCardioSession({ id: 'c-1' }),
+        createCardioSession({ id: 'c-2', type: 'cycling' })
+      ]);
+      const lines = csv.split('\r\n');
+      expect(lines.length).toBe(3);
+      expect(lines[1].startsWith('c-1,')).toBeTrue();
+      expect(lines[2].startsWith('c-2,2025-01-27T06:00:00.000Z,cycling,')).toBeTrue();
+    });
+  });
+
+  describe('getWeightCsv / getReadingsCsv / getCardioCsv', () => {
     it('should pull weight entries through WeightService', (done) => {
       weightServiceSpy.getEntries.and.returnValue(of([createWeightEntry()]));
       service.getWeightCsv().subscribe(csv => {
@@ -215,6 +285,15 @@ describe('ExportService', () => {
       readingsServiceSpy.getReadings.and.returnValue(of([createBpReading()]));
       service.getReadingsCsv().subscribe(csv => {
         expect(readingsServiceSpy.getReadings).toHaveBeenCalled();
+        expect(csv.split('\r\n').length).toBe(2);
+        done();
+      });
+    });
+
+    it('should pull cardio sessions through CardioService', (done) => {
+      cardioServiceSpy.getSessions.and.returnValue(of([createCardioSession()]));
+      service.getCardioCsv().subscribe(csv => {
+        expect(cardioServiceSpy.getSessions).toHaveBeenCalled();
         expect(csv.split('\r\n').length).toBe(2);
         done();
       });

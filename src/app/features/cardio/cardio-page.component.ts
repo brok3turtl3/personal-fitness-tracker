@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { CardioService, CardioValidationError } from '../../services/cardio.service';
+import { ExportService } from '../../services/export.service';
 import { StorageService } from '../../services/storage.service';
 import { CardioSession, CreateCardioSession, CARDIO_TYPES } from '../../models/cardio-session.model';
 import { VALIDATION_LIMITS } from '../../services/validators';
@@ -176,8 +177,20 @@ import { VALIDATION_LIMITS } from '../../services/validators';
 
       <!-- Sessions History -->
       <section class="history-section" aria-label="Cardio session history">
-        <h2>History</h2>
-        
+        <div class="history-item-main">
+          <h2>History</h2>
+          <button
+            type="button"
+            class="btn btn-secondary btn-sm"
+            (click)="onExport()"
+            [disabled]="sessions.length === 0 || isExporting"
+            [attr.aria-busy]="isExporting"
+            aria-label="Export cardio sessions as CSV"
+          >
+            Export CSV
+          </button>
+        </div>
+
         @if (sessions.length === 0) {
           <div class="empty-state">
             <p>No cardio sessions yet. Add your first session above!</p>
@@ -314,7 +327,7 @@ import { VALIDATION_LIMITS } from '../../services/validators';
     .history-section h2 {
       font-size: 1.25rem;
       color: #2c3e50;
-      margin-bottom: 1rem;
+      margin: 0 0 1rem;
     }
 
     .history-list {
@@ -389,11 +402,13 @@ export class CardioPageComponent implements OnInit {
   limits = VALIDATION_LIMITS;
   isSubmitting = false;
   isDeleting = false;
+  isExporting = false;
   submitError: string | null = null;
 
   constructor(
     private fb: FormBuilder,
     private cardioService: CardioService,
+    private exportService: ExportService,
     private storageService: StorageService
   ) {
     this.sessionForm = this.fb.group({
@@ -428,6 +443,18 @@ export class CardioPageComponent implements OnInit {
     this.cardioService.getSessions().subscribe({
       next: (sessions) => this.sessions = sessions,
       error: (err) => console.error('Failed to load sessions:', err)
+    });
+  }
+
+  onExport(): void {
+    this.isExporting = true;
+    this.exportService.exportCardioCsv().subscribe({
+      next: () => this.isExporting = false,
+      error: (err) => {
+        this.isExporting = false;
+        this.submitError = 'Failed to export sessions. Please try again.';
+        console.error('Failed to export cardio sessions:', err);
+      }
     });
   }
 
