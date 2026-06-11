@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ReadingsService, ReadingsValidationError } from '../../services/readings.service';
+import { ExportService } from '../../services/export.service';
 import { StorageService } from '../../services/storage.service';
 import { 
   HealthReading, 
@@ -210,8 +211,20 @@ import { VALIDATION_LIMITS } from '../../services/validators';
 
       <!-- Readings History -->
       <section class="history-section" aria-label="Health readings history">
-        <h2>History</h2>
-        
+        <div class="history-item-main">
+          <h2>History</h2>
+          <button
+            type="button"
+            class="btn btn-secondary btn-sm"
+            (click)="onExport()"
+            [disabled]="readings.length === 0 || isExporting"
+            [attr.aria-busy]="isExporting"
+            aria-label="Export health readings as CSV"
+          >
+            Export CSV
+          </button>
+        </div>
+
         @if (readings.length === 0) {
           <div class="empty-state">
             <p>No health readings yet. Add your first reading above!</p>
@@ -342,7 +355,7 @@ import { VALIDATION_LIMITS } from '../../services/validators';
     .history-section h2 {
       font-size: 1.25rem;
       color: #2c3e50;
-      margin-bottom: 1rem;
+      margin: 0 0 1rem;
     }
 
     .history-list {
@@ -433,11 +446,13 @@ export class ReadingsPageComponent implements OnInit {
   selectedType: HealthReadingType | '' = '';
   isSubmitting = false;
   isDeleting = false;
+  isExporting = false;
   submitError: string | null = null;
 
   constructor(
     private fb: FormBuilder,
     private readingsService: ReadingsService,
+    private exportService: ExportService,
     private storageService: StorageService
   ) {
     this.readingForm = this.fb.group({
@@ -466,6 +481,18 @@ export class ReadingsPageComponent implements OnInit {
     this.readingsService.getReadings().subscribe({
       next: (readings) => this.readings = readings,
       error: (err) => console.error('Failed to load readings:', err)
+    });
+  }
+
+  onExport(): void {
+    this.isExporting = true;
+    this.exportService.exportReadingsCsv().subscribe({
+      next: () => this.isExporting = false,
+      error: (err) => {
+        this.isExporting = false;
+        this.submitError = 'Failed to export readings. Please try again.';
+        console.error('Failed to export health readings:', err);
+      }
     });
   }
 

@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { WeightService, WeightValidationError } from '../../services/weight.service';
+import { ExportService } from '../../services/export.service';
 import { StorageService } from '../../services/storage.service';
 import { WeightEntry, CreateWeightEntry } from '../../models/weight-entry.model';
 import { VALIDATION_LIMITS } from '../../services/validators';
@@ -107,8 +108,20 @@ import { VALIDATION_LIMITS } from '../../services/validators';
 
       <!-- Entries History -->
       <section class="history-section" aria-label="Weight entry history">
-        <h2>History</h2>
-        
+        <div class="history-item-main">
+          <h2>History</h2>
+          <button
+            type="button"
+            class="btn btn-secondary btn-sm"
+            (click)="onExport()"
+            [disabled]="entries.length === 0 || isExporting"
+            [attr.aria-busy]="isExporting"
+            aria-label="Export weight entries as CSV"
+          >
+            Export CSV
+          </button>
+        </div>
+
         @if (entries.length === 0) {
           <div class="empty-state">
             <p>No weight entries yet. Add your first entry above!</p>
@@ -234,7 +247,7 @@ import { VALIDATION_LIMITS } from '../../services/validators';
     .history-section h2 {
       font-size: 1.25rem;
       color: #2c3e50;
-      margin-bottom: 1rem;
+      margin: 0 0 1rem;
     }
 
     .history-list {
@@ -292,11 +305,13 @@ export class WeightPageComponent implements OnInit {
   limits = VALIDATION_LIMITS;
   isSubmitting = false;
   isDeleting = false;
+  isExporting = false;
   submitError: string | null = null;
 
   constructor(
     private fb: FormBuilder,
     private weightService: WeightService,
+    private exportService: ExportService,
     private storageService: StorageService
   ) {
     this.entryForm = this.fb.group({
@@ -322,6 +337,18 @@ export class WeightPageComponent implements OnInit {
     this.weightService.getEntries().subscribe({
       next: (entries) => this.entries = entries,
       error: (err) => console.error('Failed to load entries:', err)
+    });
+  }
+
+  onExport(): void {
+    this.isExporting = true;
+    this.exportService.exportWeightCsv().subscribe({
+      next: () => this.isExporting = false,
+      error: (err) => {
+        this.isExporting = false;
+        this.submitError = 'Failed to export entries. Please try again.';
+        console.error('Failed to export weight entries:', err);
+      }
     });
   }
 
